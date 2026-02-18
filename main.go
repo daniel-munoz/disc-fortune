@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const version = "1.0.0"
+
 type arrayFlags []string
 
 func (a *arrayFlags) String() string { return strings.Join(*a, ", ") }
@@ -22,11 +24,17 @@ func fatal(format string, args ...any) {
 }
 
 func main() {
+	versionFlag := flag.Bool("version", false, "Print version and exit")
 	syncFlag := flag.Bool("sync", false, "Sync collection from Discogs")
 	listFoldersFlag := flag.Bool("list-folders", false, "List available Discogs folders (use with --sync)")
 	var folderFlags arrayFlags
 	flag.Var(&folderFlags, "folder", "Sync only specific folder(s) by name (repeatable, use with --sync)")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("disc-fortune %s\n", version)
+		return
+	}
 
 	if *syncFlag {
 		runSync(folderFlags, *listFoldersFlag)
