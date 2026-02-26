@@ -169,7 +169,14 @@ func runSync(folderNames []string, listFolders bool) {
 		fatal("Error saving collection: %v", err)
 	}
 
-	fmt.Printf("Synced %d albums\n", len(albums))
+	withMetadata := 0
+	for _, album := range albums {
+		if album.Year != 0 || album.Label != "" || len(album.Genres) > 0 {
+			withMetadata++
+		}
+	}
+
+	fmt.Printf("Synced %d albums (%d with full metadata)\n", len(albums), withMetadata)
 }
 
 // printFolders lists the user's Discogs collection folders.
