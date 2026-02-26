@@ -8,9 +8,17 @@ import (
 )
 
 func TestAlbumKey(t *testing.T) {
-	a := Album{Artist: "Slowdive", Title: "Souvlaki"}
-	want := "Slowdive - Souvlaki"
-	if got := a.Key(); got != want {
+	album := Album{
+		Artist:  "Miles Davis",
+		Title:   "Kind of Blue",
+		Year:    1959,
+		Label:   "Columbia",
+		CatNo:   "CL 1355",
+		Genres:  []string{"Jazz"},
+		Formats: []string{"Vinyl", "12\""},
+	}
+	want := "Miles Davis - Kind of Blue"
+	if got := album.Key(); got != want {
 		t.Errorf("Key() = %q, want %q", got, want)
 	}
 }
