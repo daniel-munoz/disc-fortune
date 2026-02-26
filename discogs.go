@@ -111,10 +111,26 @@ type releaseArtist struct {
 	Name string `json:"name"`
 }
 
+// releaseLabel represents a label in a Discogs release.
+type releaseLabel struct {
+	Name  string `json:"name"`
+	CatNo string `json:"catno"`
+}
+
+// releaseFormat represents a format in a Discogs release.
+type releaseFormat struct {
+	Name         string   `json:"name"`
+	Descriptions []string `json:"descriptions"`
+}
+
 // releaseInfo represents the basic_information of a collection release.
 type releaseInfo struct {
 	Title   string          `json:"title"`
 	Artists []releaseArtist `json:"artists"`
+	Year    int             `json:"year"`
+	Labels  []releaseLabel  `json:"labels"`
+	Genres  []string        `json:"genres"`
+	Formats []releaseFormat `json:"formats"`
 }
 
 // collectionRelease represents a release in a collection folder.
@@ -154,9 +170,28 @@ func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]
 			if len(r.BasicInformation.Artists) > 0 {
 				artist = r.BasicInformation.Artists[0].Name
 			}
+
+			label := ""
+			catno := ""
+			if len(r.BasicInformation.Labels) > 0 {
+				label = r.BasicInformation.Labels[0].Name
+				catno = r.BasicInformation.Labels[0].CatNo
+			}
+
+			var formats []string
+			for _, f := range r.BasicInformation.Formats {
+				formats = append(formats, f.Name)
+				formats = append(formats, f.Descriptions...)
+			}
+
 			albums = append(albums, Album{
-				Artist: artist,
-				Title:  r.BasicInformation.Title,
+				Artist:  artist,
+				Title:   r.BasicInformation.Title,
+				Year:    r.BasicInformation.Year,
+				Label:   label,
+				CatNo:   catno,
+				Genres:  r.BasicInformation.Genres,
+				Formats: formats,
 			})
 		}
 
