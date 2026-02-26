@@ -167,6 +167,58 @@ func TestGetCollectionReleasesNoArtist(t *testing.T) {
 	}
 }
 
+func TestGetCollectionReleasesWithMetadata(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
+		resp := collectionPage{
+			Pagination: struct{ Pages int `json:"pages"` }{Pages: 1},
+			Releases: []collectionRelease{{
+				BasicInformation: releaseInfo{
+					Title:   "Kind of Blue",
+					Artists: []releaseArtist{{Name: "Miles Davis"}},
+					Year:    1959,
+					Labels:  []releaseLabel{{Name: "Columbia", CatNo: "CL 1355"}},
+					Genres:  []string{"Jazz", "Bebop"},
+					Formats: []releaseFormat{{Name: "Vinyl", Descriptions: []string{"12\""}}},
+				},
+			}},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	client, srv := newTestClient(mux)
+	defer srv.Close()
+
+	origBase := discogsBaseURL
+	setBaseURL(srv.URL)
+	defer setBaseURL(origBase)
+
+	albums, err := client.getCollectionReleases("testuser", 0)
+	if err != nil {
+		t.Fatalf("getCollectionReleases failed: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("got %d albums, want 1", len(albums))
+	}
+
+	album := albums[0]
+	if album.Year != 1959 {
+		t.Errorf("Year = %d, want 1959", album.Year)
+	}
+	if album.Label != "Columbia" {
+		t.Errorf("Label = %q, want Columbia", album.Label)
+	}
+	if album.CatNo != "CL 1355" {
+		t.Errorf("CatNo = %q, want CL 1355", album.CatNo)
+	}
+	if len(album.Genres) != 2 || album.Genres[0] != "Jazz" {
+		t.Errorf("Genres = %v, want [Jazz Bebop]", album.Genres)
+	}
+	if len(album.Formats) != 2 || album.Formats[0] != "Vinyl" {
+		t.Errorf("Formats = %v, want [Vinyl 12\"]", album.Formats)
+	}
+}
+
 func TestGetAPIError(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth/identity", func(w http.ResponseWriter, r *http.Request) {

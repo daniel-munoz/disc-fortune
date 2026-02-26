@@ -13,10 +13,15 @@ const (
 	collectionFilePerms = 0644
 )
 
-// Album represents a single record with artist and title.
+// Album represents a single record with metadata.
 type Album struct {
-	Artist string `json:"artist"`
-	Title  string `json:"title"`
+	Artist  string   `json:"artist"`
+	Title   string   `json:"title"`
+	Year    int      `json:"year,omitempty"`
+	Label   string   `json:"label,omitempty"`
+	CatNo   string   `json:"catno,omitempty"`
+	Genres  []string `json:"genres,omitempty"`
+	Formats []string `json:"formats,omitempty"`
 }
 
 // Key returns a deduplication key for the album.
