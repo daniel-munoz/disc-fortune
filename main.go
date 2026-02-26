@@ -31,7 +31,7 @@ func main() {
 	flag.Var(&folderFlags, "folder", "Sync only specific folder(s) by name (repeatable, use with --sync)")
 
 	// New flags
-	historyFlag := flag.Int("history", 0, "Show pick history (default 10, 0 shows all)")
+	historyFlag := flag.Int("history", -1, "Show pick history (default 10, 0 shows all)")
 	favoritesFlag := flag.Bool("favorites", false, "Pick randomly from favorites only")
 	favoriteLast := flag.Bool("favorite-last", false, "Add last pick to favorites")
 	unfavoriteLast := flag.Bool("unfavorite-last", false, "Remove last pick from favorites")
@@ -48,7 +48,7 @@ func main() {
 		return
 	}
 
-	if *historyFlag != 0 || flag.Lookup("history").Value.String() != "" {
+	if *historyFlag >= 0 {
 		runHistory(*historyFlag)
 		return
 	}
