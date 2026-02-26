@@ -29,10 +29,37 @@ func main() {
 	listFoldersFlag := flag.Bool("list-folders", false, "List available Discogs folders (use with --sync)")
 	var folderFlags arrayFlags
 	flag.Var(&folderFlags, "folder", "Sync only specific folder(s) by name (repeatable, use with --sync)")
+
+	// New flags
+	historyFlag := flag.Int("history", 0, "Show pick history (default 10, 0 shows all)")
+	favoritesFlag := flag.Bool("favorites", false, "Pick randomly from favorites only")
+	favoriteLast := flag.Bool("favorite-last", false, "Add last pick to favorites")
+	unfavoriteLast := flag.Bool("unfavorite-last", false, "Remove last pick from favorites")
+
+	yearFlag := flag.String("year", "", "Filter by year or year range (e.g., 1975 or 1970-1980)")
+	genreFlag := flag.String("genre", "", "Filter by genre (case-insensitive substring match)")
+	labelFlag := flag.String("label", "", "Filter by label (case-insensitive substring match)")
+	formatFlag := flag.String("format", "", "Filter by format (case-insensitive substring match)")
+
 	flag.Parse()
 
 	if *versionFlag {
 		fmt.Printf("disc-fortune %s\n", version)
+		return
+	}
+
+	if *historyFlag != 0 || flag.Lookup("history").Value.String() != "" {
+		runHistory(*historyFlag)
+		return
+	}
+
+	if *favoriteLast {
+		runFavoriteLast()
+		return
+	}
+
+	if *unfavoriteLast {
+		runUnfavoriteLast()
 		return
 	}
 
@@ -48,24 +75,67 @@ func main() {
 		fatal("Error: --folder requires --sync")
 	}
 
-	runFortune()
+	// Validate year filter
+	if err := ParseYearFilter(*yearFlag); err != nil {
+		fatal("Error: %v", err)
+	}
+
+	// Build filter
+	filter := Filter{
+		Year:   *yearFlag,
+		Genre:  *genreFlag,
+		Label:  *labelFlag,
+		Format: *formatFlag,
+	}
+
+	runFortune(*favoritesFlag, filter)
 }
 
-func runFortune() {
-	albums, err := loadCollection()
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("No collection found. Run `disc-fortune --sync` to fetch your Discogs collection.")
+func runFortune(favoritesOnly bool, filter Filter) {
+	var albums []Album
+	var err error
+
+	if favoritesOnly {
+		albums, err = loadFavorites(favoritesPath())
+		if err != nil {
+			fatal("Error loading favorites: %v", err)
+		}
+		if len(albums) == 0 {
+			fmt.Println("No favorites yet. Use --favorite-last after a pick you like.")
 			os.Exit(0)
 		}
-		fatal("Error loading collection: %v", err)
+	} else {
+		albums, err = loadCollection()
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("No collection found. Run `disc-fortune --sync` to fetch your Discogs collection.")
+				os.Exit(0)
+			}
+			fatal("Error loading collection: %v", err)
+		}
+		if len(albums) == 0 {
+			fmt.Println("Collection is empty. Run `disc-fortune --sync` to fetch your Discogs collection.")
+			os.Exit(0)
+		}
 	}
+
+	// Apply filters
+	albums = filter.Apply(albums)
 	if len(albums) == 0 {
-		fmt.Println("Collection is empty. Run `disc-fortune --sync` to fetch your Discogs collection.")
+		fmt.Println("No albums match the specified filters")
 		os.Exit(0)
 	}
+
 	album := randomAlbum(albums)
-	fmt.Printf("%s - %s\n", album.Artist, album.Title)
+
+	// Add to history
+	if err := addToHistory(historyPath(), album); err != nil {
+		fatal("Error saving history: %v", err)
+	}
+
+	// Format and print
+	useColor := isTTY(os.Stdout)
+	fmt.Println(formatAlbum(album, useColor))
 }
 
 // runSync orchestrates syncing the collection from Discogs.
@@ -167,4 +237,62 @@ func resolveFolderNames(names []string, folders []folder) ([]int, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func runHistory(limit int) {
+	entries, err := loadHistory(historyPath())
+	if err != nil {
+		fatal("Error loading history: %v", err)
+	}
+
+	if limit == 0 {
+		limit = 10
+	}
+
+	useColor := isTTY(os.Stdout)
+	fmt.Print(formatHistory(entries, limit, useColor))
+}
+
+func runFavoriteLast() {
+	entries, err := loadHistory(historyPath())
+	if err != nil {
+		fatal("Error loading history: %v", err)
+	}
+	if len(entries) == 0 {
+		fatal("No history to favorite")
+	}
+
+	lastAlbum := entries[len(entries)-1].Album
+	err = addFavorite(favoritesPath(), lastAlbum)
+	if err != nil {
+		if err.Error() == "already in favorites" {
+			fmt.Println("Already in favorites")
+			return
+		}
+		fatal("Error adding favorite: %v", err)
+	}
+
+	fmt.Printf("Added to favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
+}
+
+func runUnfavoriteLast() {
+	entries, err := loadHistory(historyPath())
+	if err != nil {
+		fatal("Error loading history: %v", err)
+	}
+	if len(entries) == 0 {
+		fatal("No history to unfavorite")
+	}
+
+	lastAlbum := entries[len(entries)-1].Album
+	err = removeFavorite(favoritesPath(), lastAlbum)
+	if err != nil {
+		if err.Error() == "not in favorites" {
+			fmt.Println("Last pick was not in favorites")
+			return
+		}
+		fatal("Error removing favorite: %v", err)
+	}
+
+	fmt.Printf("Removed from favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
 }
