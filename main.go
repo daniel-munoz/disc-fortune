@@ -31,7 +31,7 @@ func main() {
 	flag.Var(&folderFlags, "folder", "Sync only specific folder(s) by name (repeatable, use with --sync)")
 
 	// New flags
-	historyFlag := flag.Int("history", -1, "Show pick history (default 10, 0 shows all)")
+	historyFlag := flag.String("history", "", "Show pick history (e.g., --history 10 for last 10, --history 0 for all)")
 	favoritesFlag := flag.Bool("favorites", false, "Pick randomly from favorites only")
 	favoriteLast := flag.Bool("favorite-last", false, "Add last pick to favorites")
 	unfavoriteLast := flag.Bool("unfavorite-last", false, "Remove last pick from favorites")
@@ -48,7 +48,14 @@ func main() {
 		return
 	}
 
-	if *historyFlag >= 0 {
+	// Check if --history was explicitly used (flag will be set even if empty)
+	historySet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "history" {
+			historySet = true
+		}
+	})
+	if historySet {
 		runHistory(*historyFlag)
 		return
 	}
@@ -246,14 +253,22 @@ func resolveFolderNames(names []string, folders []folder) ([]int, error) {
 	return ids, nil
 }
 
-func runHistory(limit int) {
+func runHistory(limitStr string) {
 	entries, err := loadHistory(historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
 	}
 
-	if limit == 0 {
-		limit = 10
+	// Parse limit: empty string or no value = 10, "0" = all, otherwise use the number
+	limit := 10
+	if limitStr != "" {
+		parsed, err := fmt.Sscanf(limitStr, "%d", &limit)
+		if err != nil || parsed != 1 {
+			fatal("Error: --history requires a number (e.g., --history 20)")
+		}
+		if limit == 0 {
+			limit = len(entries) // 0 means show all
+		}
 	}
 
 	useColor := isTTY(os.Stdout)
