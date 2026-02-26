@@ -94,7 +94,7 @@ func formatTimestamp(ts time.Time) string {
 // formatHistory formats history entries for display.
 func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
 	if len(entries) == 0 {
-		return "No history yet"
+		return "No history yet\n"
 	}
 
 	if limit <= 0 || limit > len(entries) {

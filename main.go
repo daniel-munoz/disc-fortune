@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -262,12 +264,14 @@ func runHistory(limitStr string) {
 	// Parse limit: empty string or no value = 10, "0" = all, otherwise use the number
 	limit := 10
 	if limitStr != "" {
-		parsed, err := fmt.Sscanf(limitStr, "%d", &limit)
-		if err != nil || parsed != 1 {
+		parsedLimit, err := strconv.Atoi(strings.TrimSpace(limitStr))
+		if err != nil {
 			fatal("Error: --history requires a number (e.g., --history 20)")
 		}
-		if limit == 0 {
+		if parsedLimit == 0 {
 			limit = len(entries) // 0 means show all
+		} else {
+			limit = parsedLimit
 		}
 	}
 
@@ -287,7 +291,7 @@ func runFavoriteLast() {
 	lastAlbum := entries[len(entries)-1].Album
 	err = addFavorite(favoritesPath(), lastAlbum)
 	if err != nil {
-		if err.Error() == "already in favorites" {
+		if errors.Is(err, ErrAlreadyInFavorites) {
 			fmt.Println("Already in favorites")
 			return
 		}
@@ -309,7 +313,7 @@ func runUnfavoriteLast() {
 	lastAlbum := entries[len(entries)-1].Album
 	err = removeFavorite(favoritesPath(), lastAlbum)
 	if err != nil {
-		if err.Error() == "not in favorites" {
+		if errors.Is(err, ErrNotInFavorites) {
 			fmt.Println("Last pick was not in favorites")
 			return
 		}

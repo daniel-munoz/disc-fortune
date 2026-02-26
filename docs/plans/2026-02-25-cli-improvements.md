@@ -1,7 +1,5 @@
 # CLI Improvements Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Add metadata-rich output, filtering, history tracking, and favorites management to disc-fortune.
 
 **Architecture:** Expand Album struct with metadata, add history/favorites JSON files alongside collection.json, implement in-memory filtering, add ANSI color output with TTY detection.
@@ -1498,8 +1496,6 @@ git tag v2.0.0
 
 ## Implementation Notes
 
-- Use @superpowers:test-driven-development throughout
-- Use @superpowers:systematic-debugging if tests fail
-- Use @superpowers:verification-before-completion before final commit
+- Follow test-driven development: write tests first, verify they fail, implement, verify they pass
 - Commit frequently (after each passing test)
 - Run full test suite before final verification

@@ -2,9 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+)
+
+var (
+	// ErrAlreadyInFavorites is returned when trying to add an album that's already favorited.
+	ErrAlreadyInFavorites = errors.New("already in favorites")
+	// ErrNotInFavorites is returned when trying to remove an album that's not favorited.
+	ErrNotInFavorites = errors.New("not in favorites")
 )
 
 func favoritesPath() string {
@@ -50,7 +58,7 @@ func addFavorite(path string, album Album) error {
 	key := album.Key()
 	for _, fav := range favorites {
 		if fav.Key() == key {
-			return fmt.Errorf("already in favorites")
+			return ErrAlreadyInFavorites
 		}
 	}
 
@@ -77,7 +85,7 @@ func removeFavorite(path string, album Album) error {
 	}
 
 	if !found {
-		return fmt.Errorf("not in favorites")
+		return ErrNotInFavorites
 	}
 
 	return saveFavorites(path, filtered)

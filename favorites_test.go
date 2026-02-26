@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -35,11 +36,8 @@ func TestAddFavoriteDuplicate(t *testing.T) {
 	addFavorite(favPath, album)
 	err := addFavorite(favPath, album)
 
-	if err == nil {
-		t.Fatal("expected error for duplicate favorite, got nil")
-	}
-	if err.Error() != "already in favorites" {
-		t.Errorf("error = %q, want 'already in favorites'", err.Error())
+	if !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Errorf("error = %v, want ErrAlreadyInFavorites", err)
 	}
 }
 

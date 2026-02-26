@@ -95,7 +95,7 @@ Miles Davis - Kind of Blue
 
 ### History Display
 
-`--history` (or `--history <N>`) shows numbered list, most recent first:
+`--history <N>` shows numbered list, most recent first (where N is the number of picks to show):
 
 ```
 History (last 10 picks):
@@ -118,7 +118,7 @@ Auto-disable color output when stdout is not a TTY (piped/redirected) to maintai
 
 - Every `disc-fortune` pick (without `--history` flag) appends to `history.json`
 - History entry: `{album: Album, timestamp: "RFC3339"}`
-- `--history` displays last 10 by default, accepts optional number argument
+- `--history N` displays last N picks (e.g., `--history 10` for last 10, `--history 0` for all)
 - No size limit initially (can add rotation later if needed)
 
 ### Favorites Workflow

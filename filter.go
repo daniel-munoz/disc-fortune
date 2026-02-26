@@ -69,7 +69,7 @@ func (f Filter) matchesYear(year int) bool {
 	}
 
 	// Single year
-	targetYear, err := strconv.Atoi(f.Year)
+	targetYear, err := strconv.Atoi(strings.TrimSpace(f.Year))
 	if err != nil {
 		return false
 	}
@@ -117,7 +117,7 @@ func ParseYearFilter(yearStr string) error {
 		return nil
 	}
 
-	_, err := strconv.Atoi(yearStr)
+	_, err := strconv.Atoi(strings.TrimSpace(yearStr))
 	if err != nil {
 		return fmt.Errorf("invalid year format. Use --year 1975 or --year 1970-1980")
 	}
