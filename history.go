@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -57,4 +58,76 @@ func addToHistory(path string, album Album) error {
 		Timestamp: time.Now(),
 	})
 	return saveHistory(path, entries)
+}
+
+// formatTimestamp formats a timestamp as relative time or date.
+func formatTimestamp(ts time.Time) string {
+	now := time.Now()
+	diff := now.Sub(ts)
+
+	switch {
+	case diff < time.Hour:
+		mins := int(diff.Minutes())
+		if mins < 1 {
+			return "just now"
+		}
+		if mins == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", mins)
+	case diff < 24*time.Hour:
+		hours := int(diff.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	case diff < 48*time.Hour:
+		return "yesterday"
+	case diff < 7*24*time.Hour:
+		days := int(diff.Hours() / 24)
+		return fmt.Sprintf("%d days ago", days)
+	default:
+		return ts.Format("2006-01-02")
+	}
+}
+
+// formatHistory formats history entries for display.
+func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
+	if len(entries) == 0 {
+		return "No history yet"
+	}
+
+	if limit <= 0 || limit > len(entries) {
+		limit = len(entries)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("History (last %d picks):\n", limit))
+
+	// Reverse order (most recent first)
+	for i := len(entries) - 1; i >= len(entries)-limit; i-- {
+		entry := entries[i]
+		idx := len(entries) - i
+
+		sb.WriteString(fmt.Sprintf("  %d. %s: ", idx, formatTimestamp(entry.Timestamp)))
+
+		if useColor {
+			sb.WriteString(colorBoldCyan)
+		}
+		sb.WriteString(entry.Album.Artist)
+		if useColor {
+			sb.WriteString(colorReset)
+		}
+		sb.WriteString(" - ")
+		if useColor {
+			sb.WriteString(colorBoldWhite)
+		}
+		sb.WriteString(entry.Album.Title)
+		if useColor {
+			sb.WriteString(colorReset)
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
 }
