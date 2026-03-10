@@ -37,6 +37,7 @@ func main() {
 	favoritesFlag := flag.Bool("favorites", false, "Pick randomly from favorites only")
 	favoriteLast := flag.Bool("favorite-last", false, "Add last pick to favorites")
 	unfavoriteLast := flag.Bool("unfavorite-last", false, "Remove last pick from favorites")
+	listFlag := flag.Bool("list", false, "List all matching albums instead of picking one")
 
 	yearFlag := flag.String("year", "", "Filter by year or year range (e.g., 1975 or 1970-1980)")
 	genreFlag := flag.String("genre", "", "Filter by genre (case-insensitive substring match)")
@@ -72,6 +73,20 @@ func main() {
 		return
 	}
 
+	if *listFlag {
+		if err := ParseYearFilter(*yearFlag); err != nil {
+			fatal("Error: %v", err)
+		}
+		filter := Filter{
+			Year:   *yearFlag,
+			Genre:  *genreFlag,
+			Label:  *labelFlag,
+			Format: *formatFlag,
+		}
+		runList(*favoritesFlag, filter)
+		return
+	}
+
 	if *syncFlag {
 		runSync(folderFlags, *listFoldersFlag)
 		return
@@ -98,6 +113,56 @@ func main() {
 	}
 
 	runFortune(*favoritesFlag, filter)
+}
+
+// formatList formats a slice of albums for list display.
+// Albums are separated by blank lines; a count summary is appended.
+func formatList(albums []Album, useColor bool) string {
+	if len(albums) == 0 {
+		return "No albums match the specified filters\n"
+	}
+	var sb strings.Builder
+	for i, album := range albums {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(formatAlbum(album, useColor))
+	}
+	sb.WriteString(fmt.Sprintf("\n\n%d albums\n", len(albums)))
+	return sb.String()
+}
+
+func runList(favoritesOnly bool, filter Filter) {
+	var albums []Album
+	var err error
+
+	if favoritesOnly {
+		albums, err = loadFavorites(favoritesPath())
+		if err != nil {
+			fatal("Error loading favorites: %v", err)
+		}
+		if len(albums) == 0 {
+			fmt.Println("No favorites yet. Use --favorite-last after a pick you like.")
+			os.Exit(0)
+		}
+	} else {
+		albums, err = loadCollection()
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("No collection found. Run `disc-fortune --sync` to fetch your Discogs collection.")
+				os.Exit(0)
+			}
+			fatal("Error loading collection: %v", err)
+		}
+		if len(albums) == 0 {
+			fmt.Println("Collection is empty. Run `disc-fortune --sync` to fetch your Discogs collection.")
+			os.Exit(0)
+		}
+	}
+
+	albums = filter.Apply(albums)
+	useColor := isTTY(os.Stdout)
+	fmt.Print(formatList(albums, useColor))
 }
 
 func runFortune(favoritesOnly bool, filter Filter) {
