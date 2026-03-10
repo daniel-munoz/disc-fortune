@@ -57,6 +57,12 @@ disc-fortune --favorites --year 1970-1980
 
 # Remove last pick from favorites
 disc-fortune --unfavorite-last
+
+# List all albums matching filters
+disc-fortune --list
+disc-fortune --list --favorites
+disc-fortune --list --genre jazz --year 1970-1980
+disc-fortune --list --format 12\"
 ```
 
 ## Features
@@ -65,6 +71,7 @@ disc-fortune --unfavorite-last
 - **Flexible filtering** - Filter by year, genre, label, or format
 - **Pick history** - Track all your picks with timestamps
 - **Favorites** - Mark albums you love and pick randomly from that subset
+- **List mode** - Browse all albums (or filtered subsets) without picking one
 - **Offline operation** - All data stored locally after initial sync
 
 ## Data
