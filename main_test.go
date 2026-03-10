@@ -126,3 +126,13 @@ func TestRunListSeparator(t *testing.T) {
 		t.Errorf("expected blank line separator between entries: %q", out)
 	}
 }
+
+func TestRunListSingular(t *testing.T) {
+	out := formatList([]Album{{Artist: "A", Title: "X"}}, false)
+	if !strings.Contains(out, "1 album") {
+		t.Errorf("expected singular 'album', got: %q", out)
+	}
+	if strings.Contains(out, "1 albums") {
+		t.Errorf("unexpected plural '1 albums': %q", out)
+	}
+}

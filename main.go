@@ -128,7 +128,11 @@ func formatList(albums []Album, useColor bool) string {
 		}
 		sb.WriteString(formatAlbum(album, useColor))
 	}
-	sb.WriteString(fmt.Sprintf("\n\n%d albums\n", len(albums)))
+	noun := "albums"
+	if len(albums) == 1 {
+		noun = "album"
+	}
+	sb.WriteString(fmt.Sprintf("\n\n%d %s\n", len(albums), noun))
 	return sb.String()
 }
 
