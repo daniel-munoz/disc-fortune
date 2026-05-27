@@ -8,6 +8,7 @@ import (
 
 // Filter represents album filtering criteria.
 type Filter struct {
+	Query  string
 	Year   string
 	Genre  string
 	Label  string
@@ -16,7 +17,7 @@ type Filter struct {
 
 // Apply filters albums based on criteria.
 func (f Filter) Apply(albums []Album) []Album {
-	if f.Year == "" && f.Genre == "" && f.Label == "" && f.Format == "" {
+	if f.Query == "" && f.Year == "" && f.Genre == "" && f.Label == "" && f.Format == "" {
 		return albums
 	}
 
@@ -30,6 +31,9 @@ func (f Filter) Apply(albums []Album) []Album {
 }
 
 func (f Filter) matches(album Album) bool {
+	if f.Query != "" && !f.matchesQuery(album) {
+		return false
+	}
 	if f.Year != "" && !f.matchesYear(album.Year) {
 		return false
 	}
@@ -43,6 +47,10 @@ func (f Filter) matches(album Album) bool {
 		return false
 	}
 	return true
+}
+
+func (f Filter) matchesQuery(album Album) bool {
+	return f.matchesString(album.Key(), f.Query)
 }
 
 func (f Filter) matchesYear(year int) bool {
