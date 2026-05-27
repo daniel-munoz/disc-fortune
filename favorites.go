@@ -90,3 +90,43 @@ func removeFavorite(path string, album Album) error {
 
 	return saveFavorites(path, filtered)
 }
+
+// FavoriteStatus represents the outcome of attempting to favorite an album by query.
+type FavoriteStatus int
+
+const (
+	FavoriteAdded FavoriteStatus = iota
+	FavoriteAlreadyFav
+	FavoriteNoMatch
+	FavoriteMultiMatch
+)
+
+// FavoriteOutcome holds the result of favoriteByQuery.
+type FavoriteOutcome struct {
+	Status  FavoriteStatus
+	Album   Album   // populated when Status is FavoriteAdded or FavoriteAlreadyFav
+	Matches []Album // populated when Status is FavoriteMultiMatch
+}
+
+// favoriteByQuery is the testable core of --favorite. It applies the query+filter
+// to the provided collection and, if exactly one album matches, adds it to the
+// favorites file at favPath. The caller is responsible for loading the collection,
+// printing output, and choosing exit codes.
+func favoriteByQuery(collection []Album, query string, filter Filter, favPath string) (FavoriteOutcome, error) {
+	filter.Query = query
+	matches := filter.Apply(collection)
+	switch len(matches) {
+	case 0:
+		return FavoriteOutcome{Status: FavoriteNoMatch}, nil
+	case 1:
+		if err := addFavorite(favPath, matches[0]); err != nil {
+			if errors.Is(err, ErrAlreadyInFavorites) {
+				return FavoriteOutcome{Status: FavoriteAlreadyFav, Album: matches[0]}, nil
+			}
+			return FavoriteOutcome{}, err
+		}
+		return FavoriteOutcome{Status: FavoriteAdded, Album: matches[0]}, nil
+	default:
+		return FavoriteOutcome{Status: FavoriteMultiMatch, Matches: matches}, nil
+	}
+}
