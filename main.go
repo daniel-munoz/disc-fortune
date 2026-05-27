@@ -37,6 +37,7 @@ func main() {
 	favoritesFlag := flag.Bool("favorites", false, "Pick randomly from favorites only")
 	favoriteLast := flag.Bool("favorite-last", false, "Add last pick to favorites")
 	unfavoriteLast := flag.Bool("unfavorite-last", false, "Remove last pick from favorites")
+	favoriteFlag := flag.String("favorite", "", "Add a specific album to favorites by query (e.g., --favorite \"kind of blue\")")
 	listFlag := flag.Bool("list", false, "List all matching albums instead of picking one")
 
 	yearFlag := flag.String("year", "", "Filter by year or year range (e.g., 1975 or 1970-1980)")
@@ -60,6 +61,37 @@ func main() {
 	})
 	if historySet {
 		runHistory(*historyFlag)
+		return
+	}
+
+	// Check if --favorite was explicitly used (so we can reject --favorite "" with a clear error)
+	favoriteSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "favorite" {
+			favoriteSet = true
+		}
+	})
+
+	if favoriteSet {
+		if *favoriteLast {
+			fatal("Error: --favorite and --favorite-last are mutually exclusive")
+		}
+		if *favoritesFlag {
+			fatal("Error: --favorites is for picking from favorites, not adding")
+		}
+		if strings.TrimSpace(*favoriteFlag) == "" {
+			fatal("Error: --favorite requires a query")
+		}
+		if err := ParseYearFilter(*yearFlag); err != nil {
+			fatal("Error: %v", err)
+		}
+		filter := Filter{
+			Year:   *yearFlag,
+			Genre:  *genreFlag,
+			Label:  *labelFlag,
+			Format: *formatFlag,
+		}
+		runFavorite(*favoriteFlag, filter)
 		return
 	}
 
@@ -390,4 +422,38 @@ func runUnfavoriteLast() {
 	}
 
 	fmt.Printf("Removed from favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
+}
+
+func runFavorite(query string, filter Filter) {
+	albums, err := loadCollection()
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("No collection found. Run `disc-fortune --sync` to fetch your Discogs collection.")
+			os.Exit(0)
+		}
+		fatal("Error loading collection: %v", err)
+	}
+	if len(albums) == 0 {
+		fmt.Println("Collection is empty. Run `disc-fortune --sync` to fetch your Discogs collection.")
+		os.Exit(0)
+	}
+
+	outcome, err := favoriteByQuery(albums, query, filter, favoritesPath())
+	if err != nil {
+		fatal("Error adding favorite: %v", err)
+	}
+
+	switch outcome.Status {
+	case FavoriteAdded:
+		fmt.Printf("Added to favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
+	case FavoriteAlreadyFav:
+		fmt.Println("Already in favorites")
+	case FavoriteNoMatch:
+		fatal("No albums match query %q", query)
+	case FavoriteMultiMatch:
+		useColor := isTTY(os.Stdout)
+		fmt.Print(formatList(outcome.Matches, useColor))
+		fmt.Println("Be more specific or add filters.")
+		os.Exit(1)
+	}
 }
