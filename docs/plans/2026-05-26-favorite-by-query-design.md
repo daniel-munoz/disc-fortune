@@ -90,9 +90,9 @@ if f.Query == "" && f.Year == "" && f.Genre == "" && f.Label == "" && f.Format =
 - Dispatch order in `main()`:
   1. `--version`
   2. `--history`
-  3. `--favorite-last`
-  4. `--unfavorite-last`
-  5. **`--favorite` (new)** — conflict-check against `--favorite-last` and `--favorites` first
+  3. **`--favorite` (new)** — placed before `--favorite-last` so the conflict check against `--favorite-last` and `--favorites` fires before either of those dispatches and returns
+  4. `--favorite-last`
+  5. `--unfavorite-last`
   6. `--list`
   7. `--sync`
   8. Default: `runFortune`
@@ -106,9 +106,12 @@ if f.Query == "" && f.Year == "" && f.Genre == "" && f.Label == "" && f.Format =
      - `>1` → `fmt.Print(formatList(matches, useColor))` followed by `Be more specific or add filters.`, exit 1
      - `1` → `addFavorite(favoritesPath(), matches[0])`, handle `ErrAlreadyInFavorites`, print the success line
 
+### `favorites.go`
+
+A testable seam, `favoriteByQuery(collection, query, filter, favPath) (FavoriteOutcome, error)`, encapsulates the branch-on-match-count logic so the orchestration can be unit-tested without filesystem mocking. It returns a `FavoriteOutcome` whose `Status` is one of `FavoriteAdded`, `FavoriteAlreadyFav`, `FavoriteNoMatch`, or `FavoriteMultiMatch`. `runFavorite` becomes a thin I/O wrapper that loads the collection and dispatches on the returned status. Existing `addFavorite` and `ErrAlreadyInFavorites` are reused inside the seam.
+
 ### No changes required
 
-- `favorites.go` — `addFavorite` and `ErrAlreadyInFavorites` cover the new path as-is
 - `collection.go` — `loadCollection` is reused
 - `discogs.go`, `history.go`, `color.go` — untouched
 
