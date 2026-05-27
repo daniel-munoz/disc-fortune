@@ -103,7 +103,10 @@ func TestFavoriteByQuery_NoMatch(t *testing.T) {
 	if outcome.Status != FavoriteNoMatch {
 		t.Errorf("Status = %v, want FavoriteNoMatch", outcome.Status)
 	}
-	favs, _ := loadFavorites(favPath)
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
 	if len(favs) != 0 {
 		t.Errorf("favorites should be empty after no match, got %d", len(favs))
 	}
@@ -128,7 +131,10 @@ func TestFavoriteByQuery_MultiMatch(t *testing.T) {
 	if len(outcome.Matches) != 2 {
 		t.Errorf("got %d matches, want 2", len(outcome.Matches))
 	}
-	favs, _ := loadFavorites(favPath)
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
 	if len(favs) != 0 {
 		t.Errorf("favorites should be empty after multi-match, got %d", len(favs))
 	}
@@ -154,7 +160,10 @@ func TestFavoriteByQuery_AlreadyFavorited(t *testing.T) {
 	if outcome.Album.Title != "Kind of Blue" {
 		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
 	}
-	favs, _ := loadFavorites(favPath)
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
 	if len(favs) != 1 {
 		t.Errorf("got %d favorites, want 1 (still only one)", len(favs))
 	}

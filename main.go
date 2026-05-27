@@ -79,7 +79,8 @@ func main() {
 		if *favoritesFlag {
 			fatal("Error: --favorites is for picking from favorites, not adding")
 		}
-		if strings.TrimSpace(*favoriteFlag) == "" {
+		query := strings.TrimSpace(*favoriteFlag)
+		if query == "" {
 			fatal("Error: --favorite requires a query")
 		}
 		if err := ParseYearFilter(*yearFlag); err != nil {
@@ -91,7 +92,7 @@ func main() {
 			Label:  *labelFlag,
 			Format: *formatFlag,
 		}
-		runFavorite(*favoriteFlag, filter)
+		runFavorite(query, filter)
 		return
 	}
 
