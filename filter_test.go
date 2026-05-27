@@ -66,3 +66,103 @@ func TestFilterCombined(t *testing.T) {
 		t.Errorf("Artist = %q, want A", filtered[0].Artist)
 	}
 }
+
+func TestFilterByQueryArtist(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "John Coltrane", Title: "Giant Steps"},
+		{Artist: "Bill Evans", Title: "Sunday at the Village Vanguard"},
+	}
+
+	f := Filter{Query: "miles"}
+	filtered := f.Apply(albums)
+	if len(filtered) != 1 {
+		t.Fatalf("got %d albums, want 1", len(filtered))
+	}
+	if filtered[0].Artist != "Miles Davis" {
+		t.Errorf("Artist = %q, want Miles Davis", filtered[0].Artist)
+	}
+}
+
+func TestFilterByQueryTitle(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "John Coltrane", Title: "Giant Steps"},
+	}
+
+	f := Filter{Query: "giant"}
+	filtered := f.Apply(albums)
+	if len(filtered) != 1 {
+		t.Fatalf("got %d albums, want 1", len(filtered))
+	}
+	if filtered[0].Title != "Giant Steps" {
+		t.Errorf("Title = %q, want Giant Steps", filtered[0].Title)
+	}
+}
+
+func TestFilterByQueryCaseInsensitive(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+
+	f := Filter{Query: "MILES"}
+	filtered := f.Apply(albums)
+	if len(filtered) != 1 {
+		t.Errorf("got %d albums, want 1 (case-insensitive)", len(filtered))
+	}
+}
+
+func TestFilterByQueryEmptyIsNoOp(t *testing.T) {
+	albums := []Album{
+		{Artist: "A", Title: "1"},
+		{Artist: "B", Title: "2"},
+	}
+
+	f := Filter{Query: ""}
+	filtered := f.Apply(albums)
+	if len(filtered) != 2 {
+		t.Errorf("got %d albums, want 2 (empty query should not filter)", len(filtered))
+	}
+}
+
+func TestFilterByQueryNoMatch(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+
+	f := Filter{Query: "nonexistent"}
+	filtered := f.Apply(albums)
+	if len(filtered) != 0 {
+		t.Errorf("got %d albums, want 0", len(filtered))
+	}
+}
+
+func TestFilterByQueryMultipleMatches(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "Miles Davis", Title: "Bitches Brew"},
+		{Artist: "John Coltrane", Title: "Giant Steps"},
+	}
+
+	f := Filter{Query: "miles"}
+	filtered := f.Apply(albums)
+	if len(filtered) != 2 {
+		t.Errorf("got %d albums, want 2", len(filtered))
+	}
+}
+
+func TestFilterQueryComposesWithYear(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959},
+		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
+	}
+
+	f := Filter{Query: "miles", Year: "1959"}
+	filtered := f.Apply(albums)
+	if len(filtered) != 1 {
+		t.Fatalf("got %d albums, want 1", len(filtered))
+	}
+	if filtered[0].Title != "Kind of Blue" {
+		t.Errorf("Title = %q, want Kind of Blue", filtered[0].Title)
+	}
+}
