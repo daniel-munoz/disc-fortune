@@ -4,9 +4,9 @@
 
 **Goal:** Add a `--favorite "query"` flag that adds a specific album to favorites by case-insensitive substring match against `Artist - Title`, composable with existing filter flags. Preserve `--favorite-last`.
 
-**Architecture:** Extend the existing `Filter` struct with a `Query` field that matches against `Artist - Title`. A new `runFavorite` orchestrator loads the collection, applies the filter (query + existing filters), and branches on the number of matches: zero → error, one → add to favorites, many → list candidates. No new files; pure stdlib.
+**Architecture:** Extend the existing `Filter` struct with a `Query` field. Introduce a testable seam — `favoriteByQuery(collection, query, filter, favPath) (FavoriteOutcome, error)` — that holds the branch-on-match-count logic and the single side effect (writing to favorites). A thin `runFavorite` wrapper in `main.go` loads the collection, calls the seam, and translates the outcome into output + exit codes. No new files; pure stdlib.
 
-**Tech Stack:** Go stdlib (`flag`, `errors`, `fmt`, `os`, `strings`)
+**Tech Stack:** Go stdlib (`flag`, `errors`, `fmt`, `os`, `path/filepath`, `strings`)
 
 **Spec:** `docs/plans/2026-05-26-favorite-by-query-design.md`
 
@@ -210,10 +210,210 @@ git commit -m "feat: add Query field to Filter for artist+title substring matchi
 
 ---
 
-## Task 2: Add `--favorite` flag, dispatch, and `runFavorite` to `main.go`
+## Task 2: Add testable seam `favoriteByQuery` in `favorites.go` (tests first)
 
 **Files:**
-- Modify: `main.go` (add flag declaration, dispatch, new function)
+- Modify: `favorites_test.go` (add tests)
+- Modify: `favorites.go` (add types + function)
+
+- [ ] **Step 1: Write failing tests for `favoriteByQuery`**
+
+Append to `favorites_test.go`:
+
+```go
+func TestFavoriteByQuery_SingleMatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	favPath := filepath.Join(tmpDir, "favorites.json")
+	collection := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "John Coltrane", Title: "Giant Steps"},
+	}
+
+	outcome, err := favoriteByQuery(collection, "kind of", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("favoriteByQuery: %v", err)
+	}
+	if outcome.Status != FavoriteAdded {
+		t.Errorf("Status = %v, want FavoriteAdded", outcome.Status)
+	}
+	if outcome.Album.Title != "Kind of Blue" {
+		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
+	}
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 1 || favs[0].Title != "Kind of Blue" {
+		t.Errorf("favorites = %+v, want one Kind of Blue", favs)
+	}
+}
+
+func TestFavoriteByQuery_NoMatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	favPath := filepath.Join(tmpDir, "favorites.json")
+	collection := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+
+	outcome, err := favoriteByQuery(collection, "zzzz", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("favoriteByQuery: %v", err)
+	}
+	if outcome.Status != FavoriteNoMatch {
+		t.Errorf("Status = %v, want FavoriteNoMatch", outcome.Status)
+	}
+	favs, _ := loadFavorites(favPath)
+	if len(favs) != 0 {
+		t.Errorf("favorites should be empty after no match, got %d", len(favs))
+	}
+}
+
+func TestFavoriteByQuery_MultiMatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	favPath := filepath.Join(tmpDir, "favorites.json")
+	collection := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "Miles Davis", Title: "Bitches Brew"},
+		{Artist: "John Coltrane", Title: "Giant Steps"},
+	}
+
+	outcome, err := favoriteByQuery(collection, "miles", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("favoriteByQuery: %v", err)
+	}
+	if outcome.Status != FavoriteMultiMatch {
+		t.Errorf("Status = %v, want FavoriteMultiMatch", outcome.Status)
+	}
+	if len(outcome.Matches) != 2 {
+		t.Errorf("got %d matches, want 2", len(outcome.Matches))
+	}
+	favs, _ := loadFavorites(favPath)
+	if len(favs) != 0 {
+		t.Errorf("favorites should be empty after multi-match, got %d", len(favs))
+	}
+}
+
+func TestFavoriteByQuery_AlreadyFavorited(t *testing.T) {
+	tmpDir := t.TempDir()
+	favPath := filepath.Join(tmpDir, "favorites.json")
+	collection := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+
+	// First add succeeds
+	if _, err := favoriteByQuery(collection, "kind of", Filter{}, favPath); err != nil {
+		t.Fatalf("first favoriteByQuery: %v", err)
+	}
+	// Second add returns FavoriteAlreadyFav, favorites stays at 1
+	outcome, err := favoriteByQuery(collection, "kind of", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("second favoriteByQuery: %v", err)
+	}
+	if outcome.Status != FavoriteAlreadyFav {
+		t.Errorf("Status = %v, want FavoriteAlreadyFav", outcome.Status)
+	}
+	if outcome.Album.Title != "Kind of Blue" {
+		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
+	}
+	favs, _ := loadFavorites(favPath)
+	if len(favs) != 1 {
+		t.Errorf("got %d favorites, want 1 (still only one)", len(favs))
+	}
+}
+
+func TestFavoriteByQuery_ComposesWithFilter(t *testing.T) {
+	tmpDir := t.TempDir()
+	favPath := filepath.Join(tmpDir, "favorites.json")
+	collection := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959},
+		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
+	}
+
+	// "miles" alone matches both; "miles" + year 1959 narrows to one
+	outcome, err := favoriteByQuery(collection, "miles", Filter{Year: "1959"}, favPath)
+	if err != nil {
+		t.Fatalf("favoriteByQuery: %v", err)
+	}
+	if outcome.Status != FavoriteAdded {
+		t.Errorf("Status = %v, want FavoriteAdded", outcome.Status)
+	}
+	if outcome.Album.Title != "Kind of Blue" {
+		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
+	}
+}
+```
+
+- [ ] **Step 2: Run tests and confirm they fail**
+
+Run: `go test ./... -run TestFavoriteByQuery -v`
+Expected: compilation error — `favoriteByQuery`, `FavoriteAdded`, `FavoriteNoMatch`, `FavoriteMultiMatch`, `FavoriteAlreadyFav`, `FavoriteOutcome` are undefined.
+
+- [ ] **Step 3: Add `FavoriteStatus`, `FavoriteOutcome`, and `favoriteByQuery` to `favorites.go`**
+
+Append to `favorites.go`:
+
+```go
+// FavoriteStatus represents the outcome of attempting to favorite an album by query.
+type FavoriteStatus int
+
+const (
+	FavoriteAdded FavoriteStatus = iota
+	FavoriteAlreadyFav
+	FavoriteNoMatch
+	FavoriteMultiMatch
+)
+
+// FavoriteOutcome holds the result of favoriteByQuery.
+type FavoriteOutcome struct {
+	Status  FavoriteStatus
+	Album   Album   // populated when Status is FavoriteAdded or FavoriteAlreadyFav
+	Matches []Album // populated when Status is FavoriteMultiMatch
+}
+
+// favoriteByQuery is the testable core of --favorite. It applies the query+filter
+// to the provided collection and, if exactly one album matches, adds it to the
+// favorites file at favPath. The caller is responsible for loading the collection,
+// printing output, and choosing exit codes.
+func favoriteByQuery(collection []Album, query string, filter Filter, favPath string) (FavoriteOutcome, error) {
+	filter.Query = query
+	matches := filter.Apply(collection)
+	switch len(matches) {
+	case 0:
+		return FavoriteOutcome{Status: FavoriteNoMatch}, nil
+	case 1:
+		if err := addFavorite(favPath, matches[0]); err != nil {
+			if errors.Is(err, ErrAlreadyInFavorites) {
+				return FavoriteOutcome{Status: FavoriteAlreadyFav, Album: matches[0]}, nil
+			}
+			return FavoriteOutcome{}, err
+		}
+		return FavoriteOutcome{Status: FavoriteAdded, Album: matches[0]}, nil
+	default:
+		return FavoriteOutcome{Status: FavoriteMultiMatch, Matches: matches}, nil
+	}
+}
+```
+
+The `errors` package is already imported in `favorites.go` (line 5).
+
+- [ ] **Step 4: Run all tests and confirm they pass**
+
+Run: `go test ./... -v`
+Expected: all tests pass — the new `TestFavoriteByQuery_*` tests plus all pre-existing tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add favorites.go favorites_test.go
+git commit -m "feat: add favoriteByQuery seam with FavoriteOutcome result type"
+```
+
+---
+
+## Task 3: Wire `--favorite` flag and `runFavorite` into `main.go`
+
+**Files:**
+- Modify: `main.go` (add flag declaration, dispatch, new wrapper function)
 
 - [ ] **Step 1: Add the `--favorite` flag declaration**
 
@@ -270,7 +470,7 @@ if favoriteSet {
 
 This mirrors the structure of the existing `--list` dispatch (lines 76-88).
 
-- [ ] **Step 4: Add the `runFavorite` function**
+- [ ] **Step 4: Add the `runFavorite` wrapper**
 
 In `main.go`, add this function after `runUnfavoriteLast` (the current last function in the file):
 
@@ -289,32 +489,28 @@ func runFavorite(query string, filter Filter) {
 		os.Exit(0)
 	}
 
-	filter.Query = query
-	matches := filter.Apply(albums)
+	outcome, err := favoriteByQuery(albums, query, filter, favoritesPath())
+	if err != nil {
+		fatal("Error adding favorite: %v", err)
+	}
 
-	switch len(matches) {
-	case 0:
+	switch outcome.Status {
+	case FavoriteAdded:
+		fmt.Printf("Added to favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
+	case FavoriteAlreadyFav:
+		fmt.Println("Already in favorites")
+	case FavoriteNoMatch:
 		fatal("No albums match query %q", query)
-	case 1:
-		err := addFavorite(favoritesPath(), matches[0])
-		if err != nil {
-			if errors.Is(err, ErrAlreadyInFavorites) {
-				fmt.Println("Already in favorites")
-				return
-			}
-			fatal("Error adding favorite: %v", err)
-		}
-		fmt.Printf("Added to favorites: %s - %s\n", matches[0].Artist, matches[0].Title)
-	default:
+	case FavoriteMultiMatch:
 		useColor := isTTY(os.Stdout)
-		fmt.Print(formatList(matches, useColor))
+		fmt.Print(formatList(outcome.Matches, useColor))
 		fmt.Println("Be more specific or add filters.")
 		os.Exit(1)
 	}
 }
 ```
 
-Note: `errors`, `fmt`, `os`, and `strings` are already imported in `main.go` (lines 3-10). No new imports needed.
+`errors`, `fmt`, `os`, and `strings` are already imported in `main.go` (lines 3-10). No new imports needed.
 
 - [ ] **Step 5: Verify the project builds**
 
@@ -324,11 +520,11 @@ Expected: clean build, no errors.
 - [ ] **Step 6: Run all tests**
 
 Run: `go test ./... -v`
-Expected: all tests pass.
+Expected: all tests pass — Filter.Query tests, favoriteByQuery tests, and pre-existing tests.
 
-- [ ] **Step 7: Manual smoke test**
+- [ ] **Step 7: Manual smoke test for CLI-level conflict cases and end-to-end behavior**
 
-Run a smoke check against a synced collection (skip if no `DISCOGS_TOKEN`/collection is available, but at least verify error paths):
+Run a smoke check against a synced collection. The conflict cases and exit codes are best verified via the actual binary, since they live in the dispatch layer (not the testable seam).
 
 ```sh
 # Single match path (substitute a query you know matches exactly one album)
@@ -366,19 +562,19 @@ For each command, verify the output matches the spec (`docs/plans/2026-05-26-fav
 
 ```bash
 git add main.go
-git commit -m "feat: add --favorite flag to add a specific album to favorites by query"
+git commit -m "feat: add --favorite flag wired to runFavorite + favoriteByQuery"
 ```
 
 ---
 
-## Task 3: Update README
+## Task 4: Update README
 
 **Files:**
 - Modify: `README.md`
 
 - [ ] **Step 1: Add `--favorite` examples to the Usage section**
 
-In `README.md`, locate the favorites-related examples (currently lines 49-59). Insert the new `--favorite` examples between the `--favorite-last` block and the `--favorites` block, keeping the file's existing tone and code-block style:
+In `README.md`, locate the favorites-related examples (currently lines 49-59). Insert the new `--favorite` examples between the `--favorite-last` block and the `--favorites` block, keeping the file's existing tone and code-block style.
 
 Replace the block (currently `README.md:49-59`):
 
@@ -421,7 +617,7 @@ disc-fortune --unfavorite-last
 
 - [ ] **Step 2: Update the Features list to mention query-based favoriting**
 
-In `README.md`, locate the Features section (currently around lines 68-75). Modify the `**Favorites**` bullet to mention the new ability:
+In `README.md`, locate the Features section (currently around lines 68-75). Modify the `**Favorites**` bullet:
 
 Replace:
 
@@ -435,9 +631,9 @@ with:
 - **Favorites** - Mark albums you love (by last pick or by query) and pick randomly from that subset
 ```
 
-- [ ] **Step 3: Verify the README renders sensibly**
+- [ ] **Step 3: Verify the README reads sensibly**
 
-Run: `cat README.md` (or open it) and confirm the new examples sit between `--favorite-last` and `--favorites`, and the Features bullet reads naturally.
+Open `README.md` and confirm the new examples sit between `--favorite-last` and `--favorites`, and the Features bullet reads naturally.
 
 - [ ] **Step 4: Commit**
 
@@ -453,20 +649,22 @@ git commit -m "docs: document --favorite flag in README"
 - [ ] **Step 1: Run the full test suite**
 
 Run: `go test ./... -v`
-Expected: all tests pass, including the new `TestFilterByQuery*` tests.
+Expected: all tests pass — `TestFilterByQuery*`, `TestFavoriteByQuery_*`, and all pre-existing tests.
 
 - [ ] **Step 2: Build cleanly**
 
 Run: `go build -o /tmp/disc-fortune .`
 Expected: no errors, no warnings.
 
-- [ ] **Step 3: Confirm git log shows three focused commits**
+- [ ] **Step 3: Confirm git log shows four focused commits**
 
-Run: `git log --oneline -5`
+Run: `git log --oneline -6`
 Expected (in order from most recent):
 ```
 <sha> docs: document --favorite flag in README
-<sha> feat: add --favorite flag to add a specific album to favorites by query
+<sha> feat: add --favorite flag wired to runFavorite + favoriteByQuery
+<sha> feat: add favoriteByQuery seam with FavoriteOutcome result type
 <sha> feat: add Query field to Filter for artist+title substring matching
+<sha> docs: add implementation plan for --favorite by query
 <sha> docs: add design for --favorite by query
 ```
