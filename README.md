@@ -49,6 +49,13 @@ disc-fortune --history 0      # all picks
 # Mark the last pick as a favorite
 disc-fortune --favorite-last
 
+# Favorite a specific album by query (case-insensitive substring of "Artist - Title")
+disc-fortune --favorite "kind of blue"
+
+# Favorite by query, narrowed with filters when the query alone is ambiguous
+disc-fortune --favorite "miles" --year 1959
+disc-fortune --favorite "coltrane" --genre jazz
+
 # Pick randomly from favorites only
 disc-fortune --favorites
 
@@ -70,7 +77,7 @@ disc-fortune --list --format 12\"
 - **Metadata-rich display** - Shows year, label, catalog number, and genres with color-coded output
 - **Flexible filtering** - Filter by year, genre, label, or format
 - **Pick history** - Track all your picks with timestamps
-- **Favorites** - Mark albums you love and pick randomly from that subset
+- **Favorites** - Mark albums you love (by last pick or by query) and pick randomly from that subset
 - **List mode** - Browse all albums (or filtered subsets) without picking one
 - **Offline operation** - All data stored locally after initial sync
 
