@@ -110,7 +110,8 @@ could not.**
 | No favorites yet (`--favorites`) | 0 | 1 |
 | `pick` — no albums match | 0 | 1 |
 | `list` — no albums match | 0 | 1 |
-| `favorite`/`unfavorite` — no match | 1 | 1 |
+| `favorite` — no match | 1 | 1 |
+| `unfavorite` — no match | 1 | 0 |
 | `favorite`/`unfavorite` — multiple matches | 1 | 1 |
 | Already in favorites / not in favorites | 0 | 0 |
 | Usage error | 1 | 1 |
@@ -118,6 +119,21 @@ could not.**
 
 The already-favorited and not-in-favorites cases stay 0 deliberately: the requested end
 state holds, so they are idempotent successes rather than failures.
+
+`unfavorite` with no match is 0 for the same reason, and this is a change from v1. Removal
+is idempotent in a way addition is not: `favorite "query"` must resolve one specific album
+to add, so no match means it cannot do its job, while `unfavorite`'s job is to ensure an
+album is not favorited — a no-match means that already holds. This matches `rm -f`, HTTP
+`DELETE`, and `kubectl delete --ignore-not-found`. It also makes the query form agree with
+the bare form, which already exits 0 when the last pick was never favorited.
+
+The tradeoff, accepted knowingly: because `unfavorite` searches only the favorites list, a
+typo is indistinguishable from an already-removed album and now exits 0 silently.
+Distinguishing them would require a fallback search of the collection, which adds a load on
+the miss path and behaves incoherently when no collection file exists. The message carries
+the signal instead: `No favorites match "QUERY" - nothing to remove.`
+
+Multiple matches remain 1 for both verbs: the command cannot choose on the user's behalf.
 
 `list` returning 1 on an empty result follows `grep`'s precedent. The tradeoff is that
 `disc-fortune list --genre jazz` under `set -e` halts when nothing matches.
