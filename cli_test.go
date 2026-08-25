@@ -1,6 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"flag"
+	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -394,5 +399,97 @@ func TestHelpForOneCommand(t *testing.T) {
 func TestHelpUnknownTopic(t *testing.T) {
 	if _, err := helpText("frobnicate"); err == nil {
 		t.Fatal("expected error for unknown help topic")
+	}
+}
+
+// The flag package treats -h/--help as flag.ErrHelp rather than an ordinary
+// parse failure. These confirm each parser's %w wrapping preserves that so
+// errors.Is(err, flag.ErrHelp) still works through the "<command>: " prefix,
+// which is what lets handleParseErr tell a help request apart from a usage
+// error.
+
+func TestParseSelectionHelpFlagIsErrHelp(t *testing.T) {
+	if _, err := parseSelection("pick", []string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseSelection(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+func TestParseFavoriteHelpFlagIsErrHelp(t *testing.T) {
+	if _, err := parseFavorite("favorite", []string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseFavorite(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+func TestParseHistoryHelpFlagIsErrHelp(t *testing.T) {
+	if _, err := parseHistory([]string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseHistory(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+func TestParseSyncHelpFlagIsErrHelp(t *testing.T) {
+	if _, err := parseSync([]string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseSync(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+func TestParseNoArgsHelpFlagIsErrHelp(t *testing.T) {
+	if err := parseNoArgs("folders", []string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseNoArgs(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected and returns what it wrote.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	fn()
+	w.Close()
+	os.Stdout = orig
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("io.Copy: %v", err)
+	}
+	return buf.String()
+}
+
+func TestHandleParseErrPrintsUsageOnHelpAndDoesNotExit(t *testing.T) {
+	var handled bool
+	out := captureStdout(t, func() {
+		handled = handleParseErr("sync", flag.ErrHelp)
+	})
+	if !handled {
+		t.Error("handleParseErr(flag.ErrHelp) = false, want true")
+	}
+	if !strings.Contains(out, "--folder") {
+		t.Errorf("output missing sync usage text: %q", out)
+	}
+}
+
+func TestHandleParseErrWrappedHelpFlag(t *testing.T) {
+	// Reproduces disc-fortune sync --help: parseSync wraps flag.ErrHelp with
+	// "sync: %w", and handleParseErr must still recognize it via errors.Is
+	// rather than a direct == comparison, and must not fall through to fatal.
+	_, err := parseSync([]string{"--help"})
+	var handled bool
+	out := captureStdout(t, func() {
+		handled = handleParseErr("sync", err)
+	})
+	if !handled {
+		t.Error("handleParseErr(wrapped flag.ErrHelp) = false, want true")
+	}
+	if !strings.Contains(out, "Usage: disc-fortune sync") {
+		t.Errorf("output missing sync usage text: %q", out)
+	}
+}
+
+func TestHandleParseErrNilIsNotHandled(t *testing.T) {
+	if handleParseErr("pick", nil) {
+		t.Error("handleParseErr(nil) = true, want false")
 	}
 }

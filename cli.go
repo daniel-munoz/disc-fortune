@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -215,6 +217,36 @@ func parseNoArgs(name string, args []string) error {
 	return nil
 }
 
+// handleParseErr reports a command's parse/validation failure and tells the
+// caller whether it already handled it (in which case run should return
+// immediately instead of proceeding with a zero-value config).
+//
+// The flag package treats -h/--help as flag.ErrHelp rather than a real
+// failure, so `disc-fortune <command> --help` must not be treated the same
+// as a bad flag: it prints the command's usage and exits 0, the same as top
+// level -h. Any other error is a genuine usage error; command.usage's doc
+// comment promises that text is "shown ... on usage error", so it is printed
+// there too, alongside the message, before exiting 1.
+func handleParseErr(name string, err error) bool {
+	if err == nil {
+		return false
+	}
+	c := lookup(name)
+	if errors.Is(err, flag.ErrHelp) {
+		if c != nil {
+			fmt.Println(c.usage)
+		}
+		return true
+	}
+	fmt.Fprintln(os.Stderr, err)
+	if c != nil {
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, c.usage)
+	}
+	os.Exit(1)
+	return true
+}
+
 // lookup returns the named command, or nil.
 func lookup(name string) *command {
 	for i := range commands {
@@ -290,8 +322,8 @@ Flags:
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseSelection("pick", args)
-				if err != nil {
-					fatal("%v", err)
+				if handleParseErr("pick", err) {
+					return
 				}
 				runPick(cfg)
 			},
@@ -308,8 +340,8 @@ Flags:
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseSelection("list", args)
-				if err != nil {
-					fatal("%v", err)
+				if handleParseErr("list", err) {
+					return
 				}
 				runList(cfg)
 			},
@@ -328,8 +360,8 @@ Flags:
 Run ` + "`disc-fortune folders`" + ` to see available folder names.`,
 			run: func(args []string) {
 				cfg, err := parseSync(args)
-				if err != nil {
-					fatal("%v", err)
+				if handleParseErr("sync", err) {
+					return
 				}
 				runSync(cfg)
 			},
@@ -342,8 +374,8 @@ Run ` + "`disc-fortune folders`" + ` to see available folder names.`,
 Lists the folder names in your Discogs collection, for use with
 ` + "`disc-fortune sync --folder`" + `. Requires DISCOGS_TOKEN to be set.`,
 			run: func(args []string) {
-				if err := parseNoArgs("folders", args); err != nil {
-					fatal("%v", err)
+				if handleParseErr("folders", parseNoArgs("folders", args)) {
+					return
 				}
 				runFolders()
 			},
@@ -356,8 +388,8 @@ Lists the folder names in your Discogs collection, for use with
 Shows the last N picks. N defaults to 10; 0 shows all of them.`,
 			run: func(args []string) {
 				cfg, err := parseHistory(args)
-				if err != nil {
-					fatal("%v", err)
+				if handleParseErr("history", err) {
+					return
 				}
 				runHistory(cfg)
 			},
@@ -376,8 +408,8 @@ Flags (only valid alongside a QUERY):
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseFavorite("favorite", args)
-				if err != nil {
-					fatal("%v", err)
+				if handleParseErr("favorite", err) {
+					return
 				}
 				runFavorite(cfg)
 			},
@@ -395,8 +427,8 @@ Flags (only valid alongside a QUERY):
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseFavorite("unfavorite", args)
-				if err != nil {
-					fatal("%v", err)
+				if handleParseErr("unfavorite", err) {
+					return
 				}
 				runUnfavorite(cfg)
 			},
@@ -406,8 +438,8 @@ Flags (only valid alongside a QUERY):
 			summary: "Print the version",
 			usage:   "Usage: disc-fortune version\n\nPrints the disc-fortune version and exits.",
 			run: func(args []string) {
-				if err := parseNoArgs("version", args); err != nil {
-					fatal("%v", err)
+				if handleParseErr("version", parseNoArgs("version", args)) {
+					return
 				}
 				fmt.Printf("disc-fortune %s\n", version)
 			},

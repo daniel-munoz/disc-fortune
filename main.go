@@ -149,7 +149,20 @@ func runUnfavorite(cfg favoriteConfig) {
 		return
 	}
 
-	favorites := loadFavoritesOrExit()
+	// Unlike the read-only commands, unfavorite does not treat an empty or
+	// absent favorites file as a failure: removing something from a favorites
+	// list that has nothing in it (or nothing matching) is a no-op, not an
+	// error. Load directly rather than through loadFavoritesOrExit so that
+	// case reaches UnfavoriteNoMatch instead of fatal-ing.
+	favorites, err := loadFavoritesChecked(favoritesPath())
+	if err != nil && !errors.Is(err, errNoFavorites) {
+		fatal("Error loading favorites: %v", err)
+	}
+	if errors.Is(err, errNoFavorites) {
+		fmt.Printf("No favorites match %q - nothing to remove.\n", cfg.query)
+		return
+	}
+
 	outcome, err := unfavoriteByQuery(favorites, cfg.query, cfg.filter, favoritesPath())
 	if err != nil {
 		fatal("Error removing favorite: %v", err)
