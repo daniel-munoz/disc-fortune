@@ -170,3 +170,19 @@ func unfavoriteByQuery(favorites []Album, query string, filter Filter, favPath s
 		return UnfavoriteOutcome{Status: UnfavoriteMultiMatch, Matches: matches}, nil
 	}
 }
+
+// errNoFavorites means the favorites list is empty or absent.
+var errNoFavorites = errors.New("no favorites")
+
+// loadFavoritesChecked loads favorites and reports an empty list as
+// errNoFavorites, so callers can print guidance without repeating the check.
+func loadFavoritesChecked(path string) ([]Album, error) {
+	favorites, err := loadFavorites(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(favorites) == 0 {
+		return nil, errNoFavorites
+	}
+	return favorites, nil
+}
