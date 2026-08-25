@@ -130,3 +130,43 @@ func favoriteByQuery(collection []Album, query string, filter Filter, favPath st
 		return FavoriteOutcome{Status: FavoriteMultiMatch, Matches: matches}, nil
 	}
 }
+
+// UnfavoriteStatus represents the outcome of attempting to unfavorite an album by query.
+type UnfavoriteStatus int
+
+const (
+	UnfavoriteRemoved UnfavoriteStatus = iota
+	UnfavoriteNoMatch
+	UnfavoriteMultiMatch
+)
+
+// UnfavoriteOutcome holds the result of unfavoriteByQuery.
+type UnfavoriteOutcome struct {
+	Status  UnfavoriteStatus
+	Album   Album   // populated when Status is UnfavoriteRemoved
+	Matches []Album // populated when Status is UnfavoriteMultiMatch
+}
+
+// unfavoriteByQuery is the testable core of `unfavorite QUERY`. It applies the
+// query+filter to the favorites list — not the collection, since favorites is
+// the set being removed from — and removes the album when exactly one matches.
+// An album that is already absent is reported as UnfavoriteNoMatch rather than
+// an error: removal is idempotent.
+func unfavoriteByQuery(favorites []Album, query string, filter Filter, favPath string) (UnfavoriteOutcome, error) {
+	filter.Query = query
+	matches := filter.Apply(favorites)
+	switch len(matches) {
+	case 0:
+		return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
+	case 1:
+		if err := removeFavorite(favPath, matches[0]); err != nil {
+			if errors.Is(err, ErrNotInFavorites) {
+				return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
+			}
+			return UnfavoriteOutcome{}, err
+		}
+		return UnfavoriteOutcome{Status: UnfavoriteRemoved, Album: matches[0]}, nil
+	default:
+		return UnfavoriteOutcome{Status: UnfavoriteMultiMatch, Matches: matches}, nil
+	}
+}

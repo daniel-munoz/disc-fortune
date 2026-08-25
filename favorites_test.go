@@ -188,3 +188,125 @@ func TestFavoriteByQuery_ComposesWithFilter(t *testing.T) {
 		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
 	}
 }
+
+func TestUnfavoriteByQuerySingleMatch(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+	album := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	if err := addFavorite(favPath, album); err != nil {
+		t.Fatalf("addFavorite: %v", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+
+	outcome, err := unfavoriteByQuery(favs, "kind of blue", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("unfavoriteByQuery: %v", err)
+	}
+	if outcome.Status != UnfavoriteRemoved {
+		t.Fatalf("Status = %v, want UnfavoriteRemoved", outcome.Status)
+	}
+	if outcome.Album.Title != "Kind of Blue" {
+		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
+	}
+
+	after, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(after) != 0 {
+		t.Errorf("got %d favorites after removal, want 0", len(after))
+	}
+}
+
+func TestUnfavoriteByQueryNoMatch(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+	album := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	if err := addFavorite(favPath, album); err != nil {
+		t.Fatalf("addFavorite: %v", err)
+	}
+	favs, _ := loadFavorites(favPath)
+
+	outcome, err := unfavoriteByQuery(favs, "nonexistent", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("unfavoriteByQuery: %v", err)
+	}
+	if outcome.Status != UnfavoriteNoMatch {
+		t.Fatalf("Status = %v, want UnfavoriteNoMatch", outcome.Status)
+	}
+
+	after, _ := loadFavorites(favPath)
+	if len(after) != 1 {
+		t.Errorf("got %d favorites, want 1 (unchanged)", len(after))
+	}
+}
+
+func TestUnfavoriteByQueryMultiMatch(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+	for _, a := range []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "Miles Davis", Title: "Bitches Brew"},
+	} {
+		if err := addFavorite(favPath, a); err != nil {
+			t.Fatalf("addFavorite: %v", err)
+		}
+	}
+	favs, _ := loadFavorites(favPath)
+
+	outcome, err := unfavoriteByQuery(favs, "miles", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("unfavoriteByQuery: %v", err)
+	}
+	if outcome.Status != UnfavoriteMultiMatch {
+		t.Fatalf("Status = %v, want UnfavoriteMultiMatch", outcome.Status)
+	}
+	if len(outcome.Matches) != 2 {
+		t.Errorf("got %d matches, want 2", len(outcome.Matches))
+	}
+
+	after, _ := loadFavorites(favPath)
+	if len(after) != 2 {
+		t.Errorf("got %d favorites, want 2 (unchanged)", len(after))
+	}
+}
+
+func TestUnfavoriteByQueryNarrowedByFilter(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+	for _, a := range []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959},
+		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
+	} {
+		if err := addFavorite(favPath, a); err != nil {
+			t.Fatalf("addFavorite: %v", err)
+		}
+	}
+	favs, _ := loadFavorites(favPath)
+
+	outcome, err := unfavoriteByQuery(favs, "miles", Filter{Year: "1959"}, favPath)
+	if err != nil {
+		t.Fatalf("unfavoriteByQuery: %v", err)
+	}
+	if outcome.Status != UnfavoriteRemoved {
+		t.Fatalf("Status = %v, want UnfavoriteRemoved", outcome.Status)
+	}
+	if outcome.Album.Title != "Kind of Blue" {
+		t.Errorf("removed %q, want Kind of Blue", outcome.Album.Title)
+	}
+}
+
+// An album present in the caller's slice but already gone from the file is a
+// no-match, not an error: removal is idempotent.
+func TestUnfavoriteByQueryAlreadyRemovedIsNoMatch(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+	stale := []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
+
+	outcome, err := unfavoriteByQuery(stale, "kind of blue", Filter{}, favPath)
+	if err != nil {
+		t.Fatalf("unfavoriteByQuery: %v", err)
+	}
+	if outcome.Status != UnfavoriteNoMatch {
+		t.Fatalf("Status = %v, want UnfavoriteNoMatch", outcome.Status)
+	}
+}
