@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -75,4 +76,28 @@ func saveCollectionTo(path string, albums []Album) error {
 
 func randomAlbum(albums []Album) Album {
 	return albums[rand.IntN(len(albums))]
+}
+
+var (
+	// errNoCollection means no collection file exists yet.
+	errNoCollection = errors.New("no collection")
+	// errEmptyCollection means the collection file exists but holds no albums.
+	errEmptyCollection = errors.New("collection is empty")
+)
+
+// loadCollectionChecked loads the collection and distinguishes the two
+// "nothing to work with" states from genuine load failures, so callers can
+// print the right guidance without repeating the checks.
+func loadCollectionChecked(path string) ([]Album, error) {
+	albums, err := loadCollectionFrom(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, errNoCollection
+		}
+		return nil, err
+	}
+	if len(albums) == 0 {
+		return nil, errEmptyCollection
+	}
+	return albums, nil
 }

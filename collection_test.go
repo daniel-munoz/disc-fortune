@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,5 +108,38 @@ func TestRandomAlbum(t *testing.T) {
 	}
 	if len(seen) < 2 {
 		t.Errorf("expected multiple different albums over 100 picks, got %d unique", len(seen))
+	}
+}
+
+func TestLoadCollectionCheckedMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "collection.json")
+	_, err := loadCollectionChecked(path)
+	if !errors.Is(err, errNoCollection) {
+		t.Errorf("err = %v, want errNoCollection", err)
+	}
+}
+
+func TestLoadCollectionCheckedEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "collection.json")
+	if err := saveCollectionTo(path, []Album{}); err != nil {
+		t.Fatalf("saveCollectionTo: %v", err)
+	}
+	_, err := loadCollectionChecked(path)
+	if !errors.Is(err, errEmptyCollection) {
+		t.Errorf("err = %v, want errEmptyCollection", err)
+	}
+}
+
+func TestLoadCollectionCheckedPopulated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "collection.json")
+	if err := saveCollectionTo(path, []Album{{Artist: "Ride", Title: "Nowhere"}}); err != nil {
+		t.Fatalf("saveCollectionTo: %v", err)
+	}
+	albums, err := loadCollectionChecked(path)
+	if err != nil {
+		t.Fatalf("loadCollectionChecked: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Errorf("got %d albums, want 1", len(albums))
 	}
 }

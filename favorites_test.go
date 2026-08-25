@@ -310,3 +310,25 @@ func TestUnfavoriteByQueryAlreadyRemovedIsNoMatch(t *testing.T) {
 		t.Fatalf("Status = %v, want UnfavoriteNoMatch", outcome.Status)
 	}
 }
+
+func TestLoadFavoritesCheckedEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "favorites.json")
+	_, err := loadFavoritesChecked(path)
+	if !errors.Is(err, errNoFavorites) {
+		t.Errorf("err = %v, want errNoFavorites", err)
+	}
+}
+
+func TestLoadFavoritesCheckedPopulated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "favorites.json")
+	if err := addFavorite(path, Album{Artist: "Ride", Title: "Nowhere"}); err != nil {
+		t.Fatalf("addFavorite: %v", err)
+	}
+	favs, err := loadFavoritesChecked(path)
+	if err != nil {
+		t.Fatalf("loadFavoritesChecked: %v", err)
+	}
+	if len(favs) != 1 {
+		t.Errorf("got %d favorites, want 1", len(favs))
+	}
+}
