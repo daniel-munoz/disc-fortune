@@ -115,6 +115,39 @@ func runHelper(t *testing.T, home string, args ...string) (exitCode int, output 
 	return -1, string(out)
 }
 
+// runHelperSplit is runHelper but captures stdout and stderr separately,
+// for tests that need to confirm a message landed on the right stream (not
+// just that it appeared somewhere in the combined output).
+func runHelperSplit(t *testing.T, home string, args ...string) (exitCode int, stdout, stderr string) {
+	t.Helper()
+
+	helperArgs := append([]string{"-test.run=^TestHelperProcess$", "--"}, args...)
+	cmd := exec.Command(os.Args[0], helperArgs...)
+
+	var env []string
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "HOME=") {
+			continue
+		}
+		env = append(env, e)
+	}
+	cmd.Env = append(env, "HOME="+home, "DISC_FORTUNE_HELPER=1")
+
+	var outBuf, errBuf strings.Builder
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+	if err == nil {
+		return 0, outBuf.String(), errBuf.String()
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), outBuf.String(), errBuf.String()
+	}
+	t.Fatalf("running helper process: %v\nstdout:\n%s\nstderr:\n%s", err, outBuf.String(), errBuf.String())
+	return -1, outBuf.String(), errBuf.String()
+}
+
 // fixturePaths returns where the collection/favorites/history files live
 // under a HOME directory, matching configDir()'s layout.
 func fixturePaths(home string) (collection, favorites, history string) {
@@ -288,4 +321,88 @@ func TestExitCodes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFailureDiagnosticsGoToStderr pins finding #2 from the final review:
+// once a command exits 1, its explanation must be readable on stderr (and
+// absent from stdout), so `album=$(disc-fortune)` never captures error text
+// as if it were a real result and `2>/dev/null` actually silences it.
+func TestFailureDiagnosticsGoToStderr(t *testing.T) {
+	miles := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	beatles := Album{Artist: "The Beatles", Title: "Revolver", Year: 1966}
+	who := Album{Artist: "The Who", Title: "Tommy", Year: 1969}
+
+	t.Run("pick: no albums match", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		got, stdout, stderr := runHelperSplit(t, home, "pick", "--year", "1899")
+		if got != 1 {
+			t.Fatalf("exit code = %d, want 1", got)
+		}
+		if stdout != "" {
+			t.Errorf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, "No albums match the specified filters") {
+			t.Errorf("stderr = %q, want the no-match message", stderr)
+		}
+	})
+
+	t.Run("list: no albums match", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		got, stdout, stderr := runHelperSplit(t, home, "list", "--year", "1899")
+		if got != 1 {
+			t.Fatalf("exit code = %d, want 1", got)
+		}
+		if stdout != "" {
+			t.Errorf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, "No albums match the specified filters") {
+			t.Errorf("stderr = %q, want the no-match message", stderr)
+		}
+	})
+
+	t.Run("favorite: multiple matches keeps the list on stdout but moves the trailer to stderr", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{beatles, who})
+
+		got, stdout, stderr := runHelperSplit(t, home, "favorite", "the")
+		if got != 1 {
+			t.Fatalf("exit code = %d, want 1", got)
+		}
+		if !strings.Contains(stdout, "The Beatles") || !strings.Contains(stdout, "The Who") {
+			t.Errorf("stdout = %q, want the disambiguation list", stdout)
+		}
+		if strings.Contains(stdout, "Be more specific") {
+			t.Errorf("stdout = %q, want the trailer moved off stdout", stdout)
+		}
+		if !strings.Contains(stderr, "Be more specific or add filters.") {
+			t.Errorf("stderr = %q, want the trailer", stderr)
+		}
+	})
+
+	t.Run("unfavorite: multiple matches keeps the list on stdout but moves the trailer to stderr", func(t *testing.T) {
+		home := t.TempDir()
+		_, favorites, _ := fixturePaths(home)
+		mustSaveFavorites(t, favorites, []Album{beatles, who})
+
+		got, stdout, stderr := runHelperSplit(t, home, "unfavorite", "the")
+		if got != 1 {
+			t.Fatalf("exit code = %d, want 1", got)
+		}
+		if !strings.Contains(stdout, "The Beatles") || !strings.Contains(stdout, "The Who") {
+			t.Errorf("stdout = %q, want the disambiguation list", stdout)
+		}
+		if strings.Contains(stdout, "Be more specific") {
+			t.Errorf("stdout = %q, want the trailer moved off stdout", stdout)
+		}
+		if !strings.Contains(stderr, "Be more specific or add filters.") {
+			t.Errorf("stderr = %q, want the trailer", stderr)
+		}
+	})
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -254,8 +255,20 @@ func TestParseHistoryNonNumeric(t *testing.T) {
 }
 
 func TestParseHistoryNegative(t *testing.T) {
-	if _, err := parseHistory([]string{"-5"}); err == nil {
-		t.Fatal("expected error for negative count")
+	// "-5" alone never reaches the n < 0 branch: the flag package tries to
+	// parse it as a flag first and fails with "flag provided but not
+	// defined: -5". Document that behavior explicitly rather than letting an
+	// assertion on err != nil accidentally pass for the wrong reason.
+	if _, err := parseHistory([]string{"-5"}); err == nil ||
+		strings.Contains(err.Error(), "cannot be negative") {
+		t.Fatalf("parseHistory(-5) = %v, want a flag-parsing error, not the negative-count branch", err)
+	}
+
+	// "--" forces everything after it to be treated as positional, which is
+	// what actually reaches the n < 0 branch at cli.go's parseHistory.
+	if _, err := parseHistory([]string{"--", "-5"}); err == nil ||
+		!strings.Contains(err.Error(), "cannot be negative") {
+		t.Fatalf("parseHistory(-- -5) = %v, want a negative-count error", err)
 	}
 }
 
@@ -340,6 +353,52 @@ func TestResolveVersionFlagIsSignpost(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "disc-fortune version") {
 			t.Errorf("resolve(%q) error = %q, want it to name `disc-fortune version`", arg, err)
+		}
+	}
+}
+
+func TestResolveV1FlagSignposts(t *testing.T) {
+	tests := []struct {
+		arg    string
+		target string
+	}{
+		{"--sync", "disc-fortune sync"},
+		{"--list", "disc-fortune list"},
+		{"--list-folders", "disc-fortune folders"},
+		{"--history", "disc-fortune history"},
+		{"--favorite-last", "disc-fortune favorite"},
+		{"--unfavorite-last", "disc-fortune unfavorite"},
+		{"--favorite", "disc-fortune favorite QUERY"},
+	}
+	for _, tc := range tests {
+		_, _, err := resolve([]string{tc.arg})
+		if err == nil {
+			t.Fatalf("resolve(%q): expected a signpost error pointing at `%s`", tc.arg, tc.target)
+		}
+		want := fmt.Sprintf("%s is now `%s` (see RELEASE_NOTES_v2.0.0.md)", tc.arg, tc.target)
+		if err.Error() != want {
+			t.Errorf("resolve(%q) error = %q, want %q", tc.arg, err.Error(), want)
+		}
+	}
+}
+
+// TestResolveFilterFlagsStillReachPick guards the critical detail in the v1
+// signpost map: filter flags that still work verbatim under implicit pick
+// must NOT be signposted, or working v2 invocations would break.
+func TestResolveFilterFlagsStillReachPick(t *testing.T) {
+	for _, args := range [][]string{
+		{"--favorites"},
+		{"--year", "1975"},
+		{"--genre", "jazz"},
+		{"--label", "blue-note"},
+		{"--format", "12\""},
+	} {
+		cmd, _, err := resolve(args)
+		if err != nil {
+			t.Fatalf("resolve(%v): unexpected error: %v", args, err)
+		}
+		if cmd.name != "pick" {
+			t.Errorf("resolve(%v) = %q, want pick", args, cmd.name)
 		}
 	}
 }
@@ -435,6 +494,55 @@ func TestParseSyncHelpFlagIsErrHelp(t *testing.T) {
 func TestParseNoArgsHelpFlagIsErrHelp(t *testing.T) {
 	if err := parseNoArgs("folders", []string{"--help"}); !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("parseNoArgs(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+func TestParseHelpHelpFlagIsErrHelp(t *testing.T) {
+	if _, err := parseHelp([]string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseHelp(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+	if _, err := parseHelp([]string{"-h"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("parseHelp(-h) error = %v, want errors.Is(_, flag.ErrHelp)", err)
+	}
+}
+
+func TestParseHelpTopic(t *testing.T) {
+	topic, err := parseHelp([]string{"sync"})
+	if err != nil {
+		t.Fatalf("parseHelp(sync): %v", err)
+	}
+	if topic != "sync" {
+		t.Errorf("topic = %q, want sync", topic)
+	}
+}
+
+func TestParseHelpTooManyArguments(t *testing.T) {
+	if _, err := parseHelp([]string{"sync", "list"}); err == nil {
+		t.Fatal("expected error for too many arguments")
+	}
+}
+
+// TestHelpHelpFlagExitsZero reproduces `disc-fortune help --help`, which
+// previously fell through help's hand-rolled arg handling straight to
+// `help: unknown command "--help"` and exit 1. It must instead be treated
+// like -h/--help on any other command: print usage and hand back control
+// without exiting.
+func TestHelpHelpFlagExitsZero(t *testing.T) {
+	for _, arg := range []string{"-h", "--help", "-help"} {
+		topic, err := parseHelp([]string{arg})
+		var handled bool
+		out := captureStdout(t, func() {
+			handled = handleParseErr("help", err)
+		})
+		if !handled {
+			t.Errorf("handleParseErr(help, parseHelp(%q)) = false, want true (handled, exit 0)", arg)
+		}
+		if topic != "" {
+			t.Errorf("parseHelp(%q) topic = %q, want empty", arg, topic)
+		}
+		if !strings.Contains(out, "Usage: disc-fortune help") {
+			t.Errorf("output missing help usage text: %q", out)
+		}
 	}
 }
 

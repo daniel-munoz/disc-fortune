@@ -82,8 +82,7 @@ func formatList(albums []Album, useColor bool) string {
 func runPick(cfg selection) {
 	albums := selectAlbums(cfg)
 	if len(albums) == 0 {
-		fmt.Println("No albums match the specified filters")
-		os.Exit(1)
+		fatal("No albums match the specified filters")
 	}
 
 	album := randomAlbum(albums)
@@ -97,10 +96,12 @@ func runPick(cfg selection) {
 
 func runList(cfg selection) {
 	albums := selectAlbums(cfg)
-	fmt.Print(formatList(albums, isTTY(os.Stdout)))
+	out := formatList(albums, isTTY(os.Stdout))
 	if len(albums) == 0 {
+		fmt.Fprint(os.Stderr, out)
 		os.Exit(1)
 	}
+	fmt.Print(out)
 }
 
 func runHistory(cfg historyConfig) {
@@ -138,7 +139,7 @@ func runFavorite(cfg favoriteConfig) {
 		fatal("No albums match query %q", cfg.query)
 	case FavoriteMultiMatch:
 		fmt.Print(formatList(outcome.Matches, isTTY(os.Stdout)))
-		fmt.Println("Be more specific or add filters.")
+		fmt.Fprintln(os.Stderr, "Be more specific or add filters.")
 		os.Exit(1)
 	}
 }
@@ -176,7 +177,7 @@ func runUnfavorite(cfg favoriteConfig) {
 		fmt.Printf("No favorites match %q - nothing to remove.\n", cfg.query)
 	case UnfavoriteMultiMatch:
 		fmt.Print(formatList(outcome.Matches, isTTY(os.Stdout)))
-		fmt.Println("Be more specific or add filters.")
+		fmt.Fprintln(os.Stderr, "Be more specific or add filters.")
 		os.Exit(1)
 	}
 }

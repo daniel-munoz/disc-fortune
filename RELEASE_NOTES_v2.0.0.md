@@ -12,7 +12,7 @@ the most common invocation is unchanged, but every other v1 flag has moved.
 | `disc-fortune --year 1975 --genre jazz` | `disc-fortune --year 1975 --genre jazz` (unchanged) |
 | `disc-fortune --list` | `disc-fortune list` |
 | `disc-fortune --list --favorites` | `disc-fortune list --favorites` |
-| `disc-fortune --favorites` | `disc-fortune pick --favorites` |
+| `disc-fortune --favorites` | `disc-fortune --favorites` (unchanged) |
 | `disc-fortune --sync` | `disc-fortune sync` |
 | `disc-fortune --sync --folder "Vinyl 12\""` | `disc-fortune sync --folder "Vinyl 12\""` |
 | `disc-fortune --sync --list-folders` | `disc-fortune folders` |
