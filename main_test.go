@@ -224,6 +224,20 @@ func TestExitCodes(t *testing.T) {
 			want: 0,
 		},
 		{
+			name: "unfavorite: no match, favorites populated (exercises UnfavoriteNoMatch)",
+			args: []string{"unfavorite", "does not exist zzz"},
+			// Unlike the two subtests above, favorites.json here has a real,
+			// non-matching entry. loadFavoritesChecked succeeds (favorites
+			// isn't empty), so this reaches unfavoriteByQuery and its
+			// case UnfavoriteNoMatch switch arm in runUnfavorite, rather than
+			// the errNoFavorites shortcut the two subtests above take.
+			setup: func(t *testing.T, home string) {
+				_, favorites, _ := fixturePaths(home)
+				mustSaveFavorites(t, favorites, []Album{miles})
+			},
+			want: 0,
+		},
+		{
 			name: "favorite: multiple matches",
 			args: []string{"favorite", "the"},
 			setup: func(t *testing.T, home string) {
