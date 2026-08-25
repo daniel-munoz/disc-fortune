@@ -17,16 +17,7 @@ A Unix `fortune`-style CLI that randomly picks a vinyl record from your Discogs 
 ## Usage
 
 ```sh
-# Sync your full Discogs collection
-disc-fortune --sync
-
-# List available folder names
-disc-fortune --sync --list-folders
-
-# Sync only specific folders
-disc-fortune --sync --folder "Vinyl 12\"" --folder "Vinyl 7\""
-
-# Print a random album
+# Print a random album (the default — no command needed)
 disc-fortune
 
 # Filter by year or year range
@@ -41,36 +32,86 @@ disc-fortune --format 12\"
 # Combine filters
 disc-fortune --year 1970-1980 --genre jazz
 
-# View pick history
-disc-fortune --history 10     # last 10 picks
-disc-fortune --history 25     # last 25 picks
-disc-fortune --history 0      # all picks
-
-# Mark the last pick as a favorite
-disc-fortune --favorite-last
-
-# Favorite a specific album by query (case-insensitive substring of "Artist - Title")
-disc-fortune --favorite "kind of blue"
-
-# Favorite by query, narrowed with filters when the query alone is ambiguous
-disc-fortune --favorite "miles" --year 1959
-disc-fortune --favorite "coltrane" --genre jazz
-
 # Pick randomly from favorites only
-disc-fortune --favorites
-
-# Filter within favorites
-disc-fortune --favorites --year 1970-1980
-
-# Remove last pick from favorites
-disc-fortune --unfavorite-last
-
-# List all albums matching filters
-disc-fortune --list
-disc-fortune --list --favorites
-disc-fortune --list --genre jazz --year 1970-1980
-disc-fortune --list --format 12\"
+disc-fortune pick --favorites
 ```
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `pick` | Print a random album. Runs by default when you give no command. |
+| `list` | List every matching album, with a count. |
+| `sync` | Fetch your collection from Discogs. |
+| `folders` | List your Discogs folder names. |
+| `history` | Show recent picks. |
+| `favorite` | Add an album to favorites. |
+| `unfavorite` | Remove an album from favorites. |
+| `version` | Print the version. |
+| `help` | Show help for a command. |
+
+Run `disc-fortune help <command>` for details on any of them.
+
+### Syncing
+
+```sh
+# Sync your full Discogs collection
+disc-fortune sync
+
+# List available folder names
+disc-fortune folders
+
+# Sync only specific folders
+disc-fortune sync --folder "Vinyl 12\"" --folder "Vinyl 7\""
+```
+
+### Listing
+
+```sh
+# Every album in the collection
+disc-fortune list
+
+# Everything matching a filter
+disc-fortune list --year 1970-1980 --genre jazz
+
+# Favorites only
+disc-fortune list --favorites
+```
+
+### History
+
+```sh
+disc-fortune history        # last 10 picks
+disc-fortune history 25     # last 25 picks
+disc-fortune history 0      # all picks
+```
+
+### Favorites
+
+```sh
+# Favorite the last pick
+disc-fortune favorite
+
+# Favorite a specific album (case-insensitive substring of "Artist - Title")
+disc-fortune favorite "kind of blue"
+
+# Narrow an ambiguous query with filters
+disc-fortune favorite "miles" --year 1959
+disc-fortune favorite "coltrane" --genre jazz
+
+# Remove the last pick from favorites
+disc-fortune unfavorite
+
+# Remove a specific album from favorites
+disc-fortune unfavorite "kind of blue"
+```
+
+### Exit codes
+
+`disc-fortune` exits 0 when the command produced what you asked for, and 1 when
+it could not — no collection synced yet, no albums matching your filters, an
+ambiguous favorite query, or a usage error. Removing a favorite that is not
+there exits 0, since the end state you asked for already holds.
 
 ## Features
 

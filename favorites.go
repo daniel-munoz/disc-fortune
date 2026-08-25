@@ -108,7 +108,7 @@ type FavoriteOutcome struct {
 	Matches []Album // populated when Status is FavoriteMultiMatch
 }
 
-// favoriteByQuery is the testable core of --favorite. It applies the query+filter
+// favoriteByQuery is the testable core of `favorite QUERY`. It applies the query+filter
 // to the provided collection and, if exactly one album matches, adds it to the
 // favorites file at favPath. The caller is responsible for loading the collection,
 // printing output, and choosing exit codes.
