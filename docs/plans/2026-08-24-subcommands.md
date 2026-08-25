@@ -1915,10 +1915,14 @@ can downgrade to v1 without touching your data.
 Run:
 
 ```bash
-grep -n 'disc-fortune --' README.md RELEASE_NOTES_v2.0.0.md *.go
+grep -nE '\-\-(sync|list-folders|list|favorite-last|unfavorite-last|favorite|history|version)\b' *.go README.md
 ```
 
-Expected: no output. (`docs/plans/` and `RELEASE_NOTES_v1.*.md` are historical records and are intentionally left alone, so they are not searched.)
+Expected: no output — no removed v1 flag survives in a Go source string or the README.
+
+This greps for the *removed* flag names specifically, not for `disc-fortune --`. Two things legitimately still contain a leading `--`: the README's `disc-fortune --year 1975`, because implicit `pick` takes filter flags, and `RELEASE_NOTES_v2.0.0.md`, whose migration table quotes every v1 flag on purpose — so the release notes are not searched. The surviving flags (`--year`, `--genre`, `--label`, `--format`, `--favorites`, `--folder`) are not in the pattern, and `--favorite\b` does not match `--favorites`.
+
+(`docs/plans/` and `RELEASE_NOTES_v1.*.md` are historical records, intentionally left alone.)
 
 Then confirm the README's command list matches the binary:
 
