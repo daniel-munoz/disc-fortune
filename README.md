@@ -110,8 +110,10 @@ disc-fortune unfavorite "kind of blue"
 
 `disc-fortune` exits 0 when the command produced what you asked for, and 1 when
 it could not — no collection synced yet, no albums matching your filters, an
-ambiguous favorite query, or a usage error. Removing a favorite that is not
-there exits 0, since the end state you asked for already holds.
+ambiguous `favorite` or `unfavorite` query, or a usage error. Removing a
+favorite that is not there exits 0, since the end state you asked for already
+holds. `history` on an empty log also exits 0: a log report succeeds even when
+the log has nothing in it.
 
 ## Features
 

@@ -189,6 +189,25 @@ func parseHistory(args []string) (historyConfig, error) {
 	return historyConfig{limit: limit}, nil
 }
 
+// parseHelp validates help's arguments (an optional topic). Routing it
+// through newFlagSet/parseInterspersed, like every other command, means
+// -h/-help/--help on help itself hits the flag package's built-in ErrHelp
+// case instead of being mistaken for a topic named "--help".
+func parseHelp(args []string) (string, error) {
+	fs := newFlagSet("help")
+	rest, err := parseInterspersed(fs, args)
+	if err != nil {
+		return "", fmt.Errorf("help: %w", err)
+	}
+	if len(rest) > 1 {
+		return "", fmt.Errorf("help: too many arguments")
+	}
+	if len(rest) == 1 {
+		return rest[0], nil
+	}
+	return "", nil
+}
+
 func parseSync(args []string) (syncConfig, error) {
 	fs := newFlagSet("sync")
 	var folders arrayFlags
@@ -257,6 +276,21 @@ func lookup(name string) *command {
 	return nil
 }
 
+// v1Signposts maps a v1 flag (leading dashes trimmed) to the v2 command that
+// replaced it, for the migration signpost in resolve. Filter flags that still
+// work verbatim under implicit pick (--favorites, --year, --genre, --label,
+// --format) must NOT appear here: adding them would break working v2
+// invocations by redirecting them to a command the user never asked for.
+var v1Signposts = map[string]string{
+	"sync":            "disc-fortune sync",
+	"list":            "disc-fortune list",
+	"list-folders":    "disc-fortune folders",
+	"history":         "disc-fortune history",
+	"favorite-last":   "disc-fortune favorite",
+	"unfavorite-last": "disc-fortune unfavorite",
+	"favorite":        "disc-fortune favorite QUERY",
+}
+
 // resolve maps raw argv (without the program name) to a command and its
 // arguments. Empty argv, or a leading flag, means the implicit pick.
 func resolve(args []string) (*command, []string, error) {
@@ -267,6 +301,10 @@ func resolve(args []string) (*command, []string, error) {
 		case "-v", "--version", "-version":
 			return nil, nil, fmt.Errorf(
 				"there is no %s flag; use `disc-fortune version`", args[0])
+		}
+		if target, ok := v1Signposts[strings.TrimLeft(args[0], "-")]; ok {
+			return nil, nil, fmt.Errorf(
+				"%s is now `%s` (see RELEASE_NOTES_v2.0.0.md)", args[0], target)
 		}
 	}
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
@@ -449,12 +487,9 @@ Flags (only valid alongside a QUERY):
 			summary: "Show help for a command",
 			usage:   "Usage: disc-fortune help [COMMAND]\n\nShows general help, or detailed help for one command.",
 			run: func(args []string) {
-				topic := ""
-				if len(args) > 1 {
-					fatal("help: too many arguments")
-				}
-				if len(args) == 1 {
-					topic = args[0]
+				topic, err := parseHelp(args)
+				if handleParseErr("help", err) {
+					return
 				}
 				out, err := helpText(topic)
 				if err != nil {
