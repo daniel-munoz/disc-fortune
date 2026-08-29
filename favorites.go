@@ -62,17 +62,22 @@ func addFavorite(path string, album Album) error {
 			continue
 		}
 
-		// Stamp the incoming ID onto a stored entry that predates release
-		// IDs, so naming a specific pressing actually resolves an ambiguous
-		// favorite instead of reporting it forever. This is safe rather
-		// than a guess: an un-ID'd favorite that can still be re-favorited
-		// from the collection is necessarily an ambiguous one, because a
-		// unique match would already have been stamped by the backfill.
-		// The stored entry is therefore exactly the one the user is now
-		// disambiguating, and either way they end up with one favorite for
-		// that name.
+		// Replace a stored entry that predates release IDs with the one the
+		// user just named, so naming a specific pressing actually resolves
+		// an ambiguous favorite instead of reporting it forever. This is
+		// safe rather than a guess: an un-ID'd favorite that can still be
+		// re-favorited from the collection is necessarily an ambiguous one,
+		// because a unique match would already have been stamped by the
+		// backfill. The stored entry is therefore exactly the one the user
+		// is now disambiguating, and either way they end up with one
+		// favorite for that name.
+		//
+		// The whole record is replaced, not just the ID. Stamping the ID
+		// alone would leave the entry asserting one pressing while carrying
+		// another's year, label and catalogue number -- and permanently, as
+		// backfillAlbums skips every entry that already has an ID.
 		if album.ReleaseID != 0 && fav.ReleaseID == 0 {
-			favorites[i].ReleaseID = album.ReleaseID
+			favorites[i] = album
 			if err := saveFavorites(path, favorites); err != nil {
 				return err
 			}

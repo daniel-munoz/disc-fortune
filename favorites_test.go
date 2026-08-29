@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -498,6 +499,37 @@ func TestAddFavoriteStampsIDOntoLegacyMatch(t *testing.T) {
 	}
 	if favs[0].ReleaseID != 111 {
 		t.Errorf("stored ReleaseID = %d, want 111 (stamped and persisted)", favs[0].ReleaseID)
+	}
+}
+
+// TestAddFavoriteResolvesWithTheNamedPressingsMetadata guards against a
+// half-resolved record: stamping only the ID would leave the entry asserting
+// one pressing while carrying another's year, label and catalogue number,
+// and no later backfill would ever revisit it.
+func TestAddFavoriteResolvesWithTheNamedPressingsMetadata(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	// The ambiguous legacy entry happens to hold the 1959 pressing's details.
+	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", CatNo: "CL 1355"}
+	if err := saveFavorites(favPath, []Album{legacy}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	// The user names the 1997 reissue instead.
+	named := Album{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1997, Label: "Legacy", CatNo: "CK 64935"}
+	if err := addFavorite(favPath, named); !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 1 {
+		t.Fatalf("got %d favorites, want 1", len(favs))
+	}
+	if !reflect.DeepEqual(favs[0], named) {
+		t.Errorf("stored = %+v, want the named pressing %+v", favs[0], named)
 	}
 }
 

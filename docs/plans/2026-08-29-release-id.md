@@ -1548,13 +1548,17 @@ sync: it is idempotent and the next sync retries it."
   It stays un-ID'd, so `backfillAlbums` finds it again each time. This is
   deliberate rather than overlooked: it is the only signal the user gets, it is
   actionable, and it stops the moment they re-favorite the specific pressing.
-  Re-favoriting genuinely resolves it because `addFavorite` stamps the incoming
-  release ID onto the matching un-ID'd entry before returning
+  Re-favoriting genuinely resolves it because `addFavorite` replaces the
+  matching un-ID'd entry with the record the user named, before returning
   `ErrAlreadyInFavorites` — an un-ID'd favorite that can still be re-favorited
   from the collection is necessarily an ambiguous one, since a unique match
   would already have been stamped by the backfill. The CLI still prints
   "Already in favorites", which is accurate: the user ends up with one favorite
-  for that name either way, now pinned to the pressing they named. Suppressing
+  for that name either way, now pinned to the pressing they named. The whole
+  record is replaced rather than just its ID: stamping the ID alone would leave
+  the entry asserting one pressing while carrying another's year, label and
+  catalogue number, permanently, since `backfillAlbums` skips any entry that
+  already has an ID. Suppressing
   the report instead would need a flag in `meta.json` and would hide a condition
   the user could actually fix. Revisit only if it proves noisy.
 - **A `pick` racing a `sync` can lose its history entry.** `sync` now rewrites
