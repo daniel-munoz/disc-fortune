@@ -89,3 +89,72 @@ func TestCollectAlbumsDeduplicates(t *testing.T) {
 		}
 	}
 }
+
+// TestCollectAlbumsKeepsDistinctPressings is the bug T4 exists to fix: two
+// different releases sharing an artist and title used to collapse into one.
+func TestCollectAlbumsKeepsDistinctPressings(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
+		resp := collectionPage{Releases: []collectionRelease{
+			{BasicInformation: releaseInfo{ID: 111, Title: "Kind of Blue", Artists: []releaseArtist{{Name: "Miles Davis"}}, Year: 1959}},
+			{BasicInformation: releaseInfo{ID: 222, Title: "Kind of Blue", Artists: []releaseArtist{{Name: "Miles Davis"}}, Year: 1997}},
+		}}
+		resp.Pagination.Pages = 1
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	client, srv := newTestClient(mux)
+	defer srv.Close()
+
+	origBase := discogsBaseURL
+	setBaseURL(srv.URL)
+	defer setBaseURL(origBase)
+
+	albums, err := collectAlbums(client, "testuser", []int{0})
+	if err != nil {
+		t.Fatalf("collectAlbums: %v", err)
+	}
+	if len(albums) != 2 {
+		t.Fatalf("got %d albums, want 2 (distinct pressings)", len(albums))
+	}
+	if albums[0].ReleaseID == albums[1].ReleaseID {
+		t.Errorf("both albums have ReleaseID %d", albums[0].ReleaseID)
+	}
+}
+
+// TestCollectAlbumsMergesSameReleaseAcrossFolders keeps the dedup that is
+// still wanted: one release filed in two folders is one record.
+func TestCollectAlbumsMergesSameReleaseAcrossFolders(t *testing.T) {
+	mux := http.NewServeMux()
+	makeHandler := func(releases []collectionRelease) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			resp := collectionPage{Releases: releases}
+			resp.Pagination.Pages = 1
+			json.NewEncoder(w).Encode(resp)
+		}
+	}
+
+	// The same release ID, but the two folders report slightly different
+	// titles -- an ID match must win over a name mismatch.
+	mux.HandleFunc("/users/testuser/collection/folders/1/releases", makeHandler([]collectionRelease{
+		{BasicInformation: releaseInfo{ID: 333, Title: "Souvlaki", Artists: []releaseArtist{{Name: "Slowdive"}}}},
+	}))
+	mux.HandleFunc("/users/testuser/collection/folders/2/releases", makeHandler([]collectionRelease{
+		{BasicInformation: releaseInfo{ID: 333, Title: "Souvlaki (Reissue)", Artists: []releaseArtist{{Name: "Slowdive"}}}},
+	}))
+
+	client, srv := newTestClient(mux)
+	defer srv.Close()
+
+	origBase := discogsBaseURL
+	setBaseURL(srv.URL)
+	defer setBaseURL(origBase)
+
+	albums, err := collectAlbums(client, "testuser", []int{1, 2})
+	if err != nil {
+		t.Fatalf("collectAlbums: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("got %d albums, want 1 (same release in two folders)", len(albums))
+	}
+}

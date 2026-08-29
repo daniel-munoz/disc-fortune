@@ -112,6 +112,10 @@ func resolveFolderIDs(client *discogsClient, username string, names []string) ([
 }
 
 // collectAlbums fetches releases from the given folders and deduplicates them.
+//
+// Dedup is on Identity, not Key: two pressings of one title are two records
+// and must both survive, while one release filed in two folders is one
+// record however its title is spelled in each.
 func collectAlbums(client *discogsClient, username string, folderIDs []int) ([]Album, error) {
 	seen := make(map[string]bool)
 	var albums []Album
@@ -122,8 +126,8 @@ func collectAlbums(client *discogsClient, username string, folderIDs []int) ([]A
 			return nil, err
 		}
 		for _, a := range releases {
-			if key := a.Key(); !seen[key] {
-				seen[key] = true
+			if id := a.Identity(); !seen[id] {
+				seen[id] = true
 				albums = append(albums, a)
 			}
 		}
