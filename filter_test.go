@@ -166,3 +166,23 @@ func TestFilterQueryComposesWithYear(t *testing.T) {
 		t.Errorf("Title = %q, want Kind of Blue", filtered[0].Title)
 	}
 }
+
+// TestFilterQueryStillMatchesWithReleaseID is the guard for the reason
+// Key() was not turned into the identity: --query substring-matches against
+// it, so an ID-preferring Key() would break every query silently.
+func TestFilterQueryStillMatchesWithReleaseID(t *testing.T) {
+	albums := []Album{
+		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 222, Artist: "Slowdive", Title: "Souvlaki"},
+	}
+
+	got := Filter{Query: "miles"}.Apply(albums)
+	if len(got) != 1 || got[0].ReleaseID != 111 {
+		t.Fatalf("Apply() = %+v, want the Miles Davis release", got)
+	}
+
+	got = Filter{Query: "souvlaki"}.Apply(albums)
+	if len(got) != 1 || got[0].ReleaseID != 222 {
+		t.Fatalf("Apply() = %+v, want the Slowdive release", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -141,5 +142,106 @@ func TestLoadCollectionCheckedPopulated(t *testing.T) {
 	}
 	if len(albums) != 1 {
 		t.Errorf("got %d albums, want 1", len(albums))
+	}
+}
+
+func TestAlbumIdentity(t *testing.T) {
+	withID := Album{ReleaseID: 12345, Artist: "Miles Davis", Title: "Kind of Blue"}
+	if got, want := withID.Identity(), "id:12345"; got != want {
+		t.Errorf("Identity() = %q, want %q", got, want)
+	}
+
+	withoutID := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	if got, want := withoutID.Identity(), "name:Miles Davis - Kind of Blue"; got != want {
+		t.Errorf("Identity() = %q, want %q", got, want)
+	}
+}
+
+// TestAlbumKeyIgnoresReleaseID guards the whole point of the two-method split:
+// Key() is the search string, so adding an ID must not change it.
+func TestAlbumKeyIgnoresReleaseID(t *testing.T) {
+	album := Album{ReleaseID: 12345, Artist: "Miles Davis", Title: "Kind of Blue"}
+	if got, want := album.Key(), "Miles Davis - Kind of Blue"; got != want {
+		t.Errorf("Key() = %q, want %q", got, want)
+	}
+}
+
+func TestSameAlbum(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b Album
+		want bool
+	}{
+		{
+			name: "same id, different stored title",
+			a:    Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind Of Blue"},
+			b:    Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+			want: true,
+		},
+		{
+			name: "different ids, same name",
+			a:    Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+			b:    Album{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
+			want: false,
+		},
+		{
+			name: "legacy entry matches an ID'd one by name",
+			a:    Album{Artist: "Miles Davis", Title: "Kind of Blue"},
+			b:    Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+			want: true,
+		},
+		{
+			name: "both legacy, same name",
+			a:    Album{Artist: "Slowdive", Title: "Souvlaki"},
+			b:    Album{Artist: "Slowdive", Title: "Souvlaki"},
+			want: true,
+		},
+		{
+			name: "both legacy, different name",
+			a:    Album{Artist: "Slowdive", Title: "Souvlaki"},
+			b:    Album{Artist: "Ride", Title: "Nowhere"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sameAlbum(tt.a, tt.b); got != tt.want {
+				t.Errorf("sameAlbum() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestReleaseIDOmittedWhenZero keeps pre-migration records byte-identical to
+// what v2.1.0 wrote, so upgrading does not rewrite every line of every file.
+func TestReleaseIDOmittedWhenZero(t *testing.T) {
+	data, err := json.Marshal(Album{Artist: "Slowdive", Title: "Souvlaki"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), "release_id") {
+		t.Errorf("marshalled zero ID: %s", data)
+	}
+}
+
+// TestReleaseIDSurvivesDowngrade asserts the v2.2 file shape decodes cleanly
+// into the v2.1 struct shape, so downgrading loses nothing but the ID.
+func TestReleaseIDSurvivesDowngrade(t *testing.T) {
+	data, err := json.Marshal(Album{ReleaseID: 12345, Artist: "Slowdive", Title: "Souvlaki"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	// The v2.1.0 shape: no release_id field at all.
+	var legacy struct {
+		Artist string `json:"artist"`
+		Title  string `json:"title"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		t.Fatalf("v2.1 decode of v2.2 data: %v", err)
+	}
+	if legacy.Artist != "Slowdive" || legacy.Title != "Souvlaki" {
+		t.Errorf("lost data on downgrade: %+v", legacy)
 	}
 }

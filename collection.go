@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 const (
@@ -16,18 +17,52 @@ const (
 
 // Album represents a single record with metadata.
 type Album struct {
-	Artist  string   `json:"artist"`
-	Title   string   `json:"title"`
-	Year    int      `json:"year,omitempty"`
-	Label   string   `json:"label,omitempty"`
-	CatNo   string   `json:"catno,omitempty"`
-	Genres  []string `json:"genres,omitempty"`
-	Formats []string `json:"formats,omitempty"`
+	// ReleaseID is the Discogs release ID. It is zero for entries written
+	// before v2.2.0, which is what Identity and sameAlbum fall back for.
+	ReleaseID int      `json:"release_id,omitempty"`
+	Artist    string   `json:"artist"`
+	Title     string   `json:"title"`
+	Year      int      `json:"year,omitempty"`
+	Label     string   `json:"label,omitempty"`
+	CatNo     string   `json:"catno,omitempty"`
+	Genres    []string `json:"genres,omitempty"`
+	Formats   []string `json:"formats,omitempty"`
 }
 
-// Key returns a deduplication key for the album.
+// Key returns the human-readable "Artist - Title" label. It is also the
+// legacy identity: it is what --query substring-matches against, and what
+// identifies entries written before release IDs existed. It deliberately
+// ignores ReleaseID -- an ID-preferring Key would break every query.
 func (a Album) Key() string {
 	return a.Artist + " - " + a.Title
+}
+
+// Identity returns a map key that distinguishes two records. Sync
+// deduplication is its only caller, and there every album comes straight
+// from the API, so the ID is always present. The "id:"/"name:" prefixes keep
+// a numeric-looking artist name from ever colliding with an ID.
+func (a Album) Identity() string {
+	if a.ReleaseID != 0 {
+		return "id:" + strconv.Itoa(a.ReleaseID)
+	}
+	return "name:" + a.Key()
+}
+
+// sameAlbum reports whether two entries are the same record. It is
+// deliberately lenient when either side predates the release ID: a pre-2.2
+// favorite and that same record freshly synced must not look like two
+// different albums, or favoriting it again would append a duplicate.
+//
+// The consequence is that sameAlbum is not transitive -- an entry with no ID
+// acts as a wildcard for its name. That is fine inside a linear "is this
+// already in the list?" scan, and it is exactly why Identity, not sameAlbum,
+// is what sync dedup uses: a non-transitive comparison there would make the
+// surviving set depend on fetch order.
+func sameAlbum(a, b Album) bool {
+	if a.ReleaseID != 0 && b.ReleaseID != 0 {
+		return a.ReleaseID == b.ReleaseID
+	}
+	return a.Key() == b.Key()
 }
 
 // activeConfig is resolved once, by initConfig, before any command runs.
