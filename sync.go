@@ -53,6 +53,11 @@ func runSync(cfg syncConfig) {
 		fatal("Error: %v", err)
 	}
 
+	// Read before the write below overwrites it: comparing the two is what
+	// tells us whether this is the first sync after the identity change.
+	// Failing to read it is not an error -- it just means no notice.
+	previous, _ := loadCollectionFrom(collectionPath())
+
 	if err := saveCollection(albums); err != nil {
 		fatal("Error saving collection: %v", err)
 	}
@@ -63,6 +68,15 @@ func runSync(cfg syncConfig) {
 		fatal("Error saving sync metadata: %v", err)
 	}
 
+	// Also after the collection lands, so IDs are never stamped from a
+	// collection that then failed to save. A failure here does not fail the
+	// sync: the sync itself succeeded, the pass is idempotent, and the next
+	// sync retries it.
+	backfillReport, err := runBackfill(favoritesPath(), historyPath(), albums)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not fill in release IDs: %v\n", err)
+	}
+
 	withMetadata := 0
 	for _, album := range albums {
 		if album.Year != 0 || album.Label != "" || len(album.Genres) > 0 {
@@ -71,6 +85,8 @@ func runSync(cfg syncConfig) {
 	}
 
 	fmt.Printf("Synced %d albums (%d with full metadata)\n", len(albums), withMetadata)
+	fmt.Print(unmergeNotice(previous, albums))
+	fmt.Print(backfillReport)
 }
 
 // runFolders lists the user's Discogs collection folders.

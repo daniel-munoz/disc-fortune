@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -157,5 +160,176 @@ func TestIndexByLegacyKeyCollapsesRepeatedIDs(t *testing.T) {
 
 	if got := idx["Slowdive - Souvlaki"]; len(got) != 1 || got[0] != 111 {
 		t.Errorf("index = %v, want [111]", got)
+	}
+}
+
+func TestBackfillSummary(t *testing.T) {
+	tests := []struct {
+		name string
+		fav  backfillResult
+		hist backfillResult
+		want string
+	}{
+		{
+			name: "nothing to say",
+			want: "",
+		},
+		{
+			name: "both files",
+			fav:  backfillResult{Updated: 12},
+			hist: backfillResult{Updated: 106},
+			want: "Filled in release IDs for 12 favorites and 106 history entries.\n",
+		},
+		{
+			name: "favorites only",
+			fav:  backfillResult{Updated: 12},
+			want: "Filled in release IDs for 12 favorites.\n",
+		},
+		{
+			name: "history only",
+			hist: backfillResult{Updated: 106},
+			want: "Filled in release IDs for 106 history entries.\n",
+		},
+		{
+			name: "singular",
+			fav:  backfillResult{Updated: 1},
+			hist: backfillResult{Updated: 1},
+			want: "Filled in release IDs for 1 favorite and 1 history entry.\n",
+		},
+		{
+			name: "ambiguous favorites are listed",
+			fav:  backfillResult{Ambiguous: []string{"Miles Davis - Kind of Blue"}},
+			want: "These favorites matched more than one record and were left as-is:\n" +
+				"  Miles Davis - Kind of Blue\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := backfillSummary(tt.fav, tt.hist); got != tt.want {
+				t.Errorf("backfillSummary() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// History ambiguity is deliberately silent: a log has nothing to act on.
+func TestBackfillSummaryIgnoresHistoryAmbiguity(t *testing.T) {
+	hist := backfillResult{Ambiguous: []string{"Miles Davis - Kind of Blue"}}
+	if got := backfillSummary(backfillResult{}, hist); got != "" {
+		t.Errorf("backfillSummary() = %q, want empty", got)
+	}
+}
+
+func TestRunBackfillWritesBothFiles(t *testing.T) {
+	dir := t.TempDir()
+	favPath := filepath.Join(dir, "favorites.json")
+	histPath := filepath.Join(dir, "history.json")
+
+	if err := saveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+	if err := saveHistory(histPath, []HistoryEntry{
+		{Album: Album{Artist: "Slowdive", Title: "Souvlaki"}, Timestamp: time.Now()},
+	}); err != nil {
+		t.Fatalf("saveHistory: %v", err)
+	}
+
+	report, err := runBackfill(favPath, histPath, testCollection())
+	if err != nil {
+		t.Fatalf("runBackfill: %v", err)
+	}
+	if report != "Filled in release IDs for 1 favorite and 1 history entry.\n" {
+		t.Errorf("report = %q", report)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if favs[0].ReleaseID != 111 {
+		t.Errorf("favorite ReleaseID = %d, want 111", favs[0].ReleaseID)
+	}
+
+	entries, err := loadHistory(histPath)
+	if err != nil {
+		t.Fatalf("loadHistory: %v", err)
+	}
+	if entries[0].Album.ReleaseID != 111 {
+		t.Errorf("history ReleaseID = %d, want 111", entries[0].Album.ReleaseID)
+	}
+}
+
+// The acceptance criterion: running sync twice leaves the files
+// byte-identical, and the second run reports nothing.
+func TestRunBackfillIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	favPath := filepath.Join(dir, "favorites.json")
+	histPath := filepath.Join(dir, "history.json")
+
+	if err := saveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+	if err := saveHistory(histPath, []HistoryEntry{
+		{Album: Album{Artist: "Slowdive", Title: "Souvlaki"}, Timestamp: time.Now()},
+	}); err != nil {
+		t.Fatalf("saveHistory: %v", err)
+	}
+
+	if _, err := runBackfill(favPath, histPath, testCollection()); err != nil {
+		t.Fatalf("first runBackfill: %v", err)
+	}
+	favBefore, err := os.ReadFile(favPath)
+	if err != nil {
+		t.Fatalf("read favorites: %v", err)
+	}
+	histBefore, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+
+	report, err := runBackfill(favPath, histPath, testCollection())
+	if err != nil {
+		t.Fatalf("second runBackfill: %v", err)
+	}
+	if report != "" {
+		t.Errorf("second run reported %q, want nothing", report)
+	}
+
+	favAfter, err := os.ReadFile(favPath)
+	if err != nil {
+		t.Fatalf("read favorites: %v", err)
+	}
+	histAfter, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if !bytes.Equal(favBefore, favAfter) {
+		t.Error("favorites.json changed on the second pass")
+	}
+	if !bytes.Equal(histBefore, histAfter) {
+		t.Error("history.json changed on the second pass")
+	}
+}
+
+// A user who has never favorited anything must not have empty files
+// created for them.
+func TestRunBackfillLeavesAbsentFilesAlone(t *testing.T) {
+	dir := t.TempDir()
+	favPath := filepath.Join(dir, "favorites.json")
+	histPath := filepath.Join(dir, "history.json")
+
+	report, err := runBackfill(favPath, histPath, testCollection())
+	if err != nil {
+		t.Fatalf("runBackfill: %v", err)
+	}
+	if report != "" {
+		t.Errorf("report = %q, want nothing", report)
+	}
+	if _, err := os.Stat(favPath); !os.IsNotExist(err) {
+		t.Error("favorites.json was created")
+	}
+	if _, err := os.Stat(histPath); !os.IsNotExist(err) {
+		t.Error("history.json was created")
 	}
 }
