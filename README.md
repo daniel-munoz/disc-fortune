@@ -47,10 +47,25 @@ disc-fortune pick --favorites
 | `history` | Show recent picks. |
 | `favorite` | Add an album to favorites. |
 | `unfavorite` | Remove an album from favorites. |
+| `migrate` | Move your data to the `XDG_CONFIG_HOME` location. |
 | `version` | Print the version. |
 | `help` | Show help for a command. |
 
 Run `disc-fortune help <command>` for details on any of them.
+
+### Global flags
+
+Every command accepts `--color`:
+
+```sh
+disc-fortune list --color=always | less -R   # keep color through a pipe
+disc-fortune list --color=never              # no escape sequences, even on a terminal
+```
+
+`--color=auto` is the default: color when stdout is a terminal, none when it is
+redirected. Under `auto`, a non-empty [`NO_COLOR`](https://no-color.org)
+environment variable disables color. An explicit `--color=always` overrides
+`NO_COLOR`, since that is you asking directly.
 
 ### Syncing
 
@@ -123,10 +138,32 @@ the log has nothing in it.
 - **Favorites** - Mark albums you love (by last pick or by query) and pick randomly from that subset
 - **List mode** - Browse all albums (or filtered subsets) without picking one
 - **Offline operation** - All data stored locally after initial sync
+- **Crash-safe writes** - Every data file is written atomically, so an interrupted write cannot corrupt your collection or history
+- **Resilient syncing** - Rate limits and server hiccups are retried with backoff, and long syncs report progress
 
 ## Data
 
-Your data is stored locally in `~/.config/disc-fortune/`:
+Your data is stored locally in `$XDG_CONFIG_HOME/disc-fortune/`, falling back to
+`~/.config/disc-fortune/` when `XDG_CONFIG_HOME` is unset:
+
 - `collection.json` - Your full collection with metadata (artist, title, year, label, catalog number, genres, formats)
 - `history.json` - Timestamped history of all your picks
 - `favorites.json` - Albums you've marked as favorites
+- `meta.json` - When you last synced
+
+Every one of these is written atomically: disc-fortune writes a temporary file
+alongside the target, flushes it, then renames it into place. An interrupted
+write leaves the previous file untouched rather than truncated.
+
+### If you already have `XDG_CONFIG_HOME` set
+
+disc-fortune will keep reading your existing `~/.config/disc-fortune/` rather
+than silently starting fresh somewhere else — upgrading never makes your
+collection appear to vanish. It says so once, and you can move it when ready:
+
+```sh
+disc-fortune migrate
+```
+
+That copies each file to the new location and removes the originals. It refuses
+to run if the destination already contains files.
