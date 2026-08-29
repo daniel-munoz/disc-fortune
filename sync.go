@@ -71,7 +71,9 @@ func runSync(cfg syncConfig) {
 	// Also after the collection lands, so IDs are never stamped from a
 	// collection that then failed to save. A failure here does not fail the
 	// sync: the sync itself succeeded, the pass is idempotent, and the next
-	// sync retries it.
+	// sync retries it. The report is kept and printed below either way --
+	// a partial pass may have already rewritten favorites, and the user has
+	// to be told what changed, not just that something went wrong.
 	backfillReport, err := runBackfill(favoritesPath(), historyPath(), albums)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not fill in release IDs: %v\n", err)

@@ -333,3 +333,38 @@ func TestRunBackfillLeavesAbsentFilesAlone(t *testing.T) {
 		t.Error("history.json was created")
 	}
 }
+
+// TestRunBackfillReportsWorkDoneBeforeAFailure: favorites.json has already
+// been rewritten by the time the history step fails, so the summary must
+// come back with the error rather than being swallowed. Otherwise the user
+// sees only a warning and is never told their favorites changed.
+func TestRunBackfillReportsWorkDoneBeforeAFailure(t *testing.T) {
+	dir := t.TempDir()
+	favPath := filepath.Join(dir, "favorites.json")
+	histPath := filepath.Join(dir, "history.json")
+
+	if err := saveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+	// Unparseable history, so the pass fails only after favorites landed.
+	// Not a live data path -- t.TempDir -- so the atomic saver is not owed.
+	if err := os.WriteFile(histPath, []byte("{not json"), 0o600); err != nil {
+		t.Fatalf("write history: %v", err)
+	}
+
+	report, err := runBackfill(favPath, histPath, testCollection())
+	if err == nil {
+		t.Fatal("runBackfill: got nil error, want the history failure")
+	}
+	if want := "Filled in release IDs for 1 favorite.\n"; report != want {
+		t.Errorf("report = %q, want %q", report, want)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if favs[0].ReleaseID != 111 {
+		t.Errorf("favorite ReleaseID = %d, want 111 (the write the report describes)", favs[0].ReleaseID)
+	}
+}

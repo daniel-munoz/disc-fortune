@@ -134,6 +134,11 @@ func plural(n int, one, many string) string {
 // A file is rewritten only when something actually changed, so a user who
 // has never favorited anything never gets an empty favorites.json created
 // for them, and a second sync touches nothing.
+//
+// The summary comes back alongside an error, not instead of it: favorites
+// are written before history is even read, so a failure in the second half
+// would otherwise leave the user with changed favorites and nothing but a
+// warning telling them so.
 func runBackfill(favPath, histPath string, collection []Album) (string, error) {
 	favorites, err := loadFavorites(favPath)
 	if err != nil {
@@ -142,18 +147,19 @@ func runBackfill(favPath, histPath string, collection []Album) (string, error) {
 	filledFavorites, favRes := backfillAlbums(favorites, collection)
 	if favRes.Updated > 0 {
 		if err := saveFavorites(favPath, filledFavorites); err != nil {
+			// Nothing landed, so there is nothing to report.
 			return "", fmt.Errorf("saving favorites: %w", err)
 		}
 	}
 
 	history, err := loadHistory(histPath)
 	if err != nil {
-		return "", fmt.Errorf("loading history: %w", err)
+		return backfillSummary(favRes, backfillResult{}), fmt.Errorf("loading history: %w", err)
 	}
 	filledHistory, histRes := backfillHistory(history, collection)
 	if histRes.Updated > 0 {
 		if err := saveHistory(histPath, filledHistory); err != nil {
-			return "", fmt.Errorf("saving history: %w", err)
+			return backfillSummary(favRes, backfillResult{}), fmt.Errorf("saving history: %w", err)
 		}
 	}
 
