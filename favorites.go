@@ -44,7 +44,7 @@ func saveFavorites(path string, albums []Album) error {
 	if err != nil {
 		return fmt.Errorf("encoding favorites: %w", err)
 	}
-	return os.WriteFile(path, data, collectionFilePerms)
+	return writeFileAtomic(path, data, collectionFilePerms)
 }
 
 // addFavorite adds an album to favorites if not already present.

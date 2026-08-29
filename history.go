@@ -44,7 +44,7 @@ func saveHistory(path string, entries []HistoryEntry) error {
 	if err != nil {
 		return fmt.Errorf("encoding history: %w", err)
 	}
-	return os.WriteFile(path, data, collectionFilePerms)
+	return writeFileAtomic(path, data, collectionFilePerms)
 }
 
 // addToHistory appends an album to history.
