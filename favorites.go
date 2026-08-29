@@ -54,10 +54,11 @@ func addFavorite(path string, album Album) error {
 		return err
 	}
 
-	// Check for duplicates
-	key := album.Key()
+	// sameAlbum rather than Key: two pressings of one title are two
+	// favorites, but an entry written before release IDs existed is still
+	// the same record as its freshly synced self.
 	for _, fav := range favorites {
-		if fav.Key() == key {
+		if sameAlbum(fav, album) {
 			return ErrAlreadyInFavorites
 		}
 	}
@@ -73,11 +74,10 @@ func removeFavorite(path string, album Album) error {
 		return err
 	}
 
-	key := album.Key()
 	var filtered []Album
 	found := false
 	for _, fav := range favorites {
-		if fav.Key() == key {
+		if sameAlbum(fav, album) {
 			found = true
 			continue
 		}

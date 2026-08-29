@@ -332,3 +332,93 @@ func TestLoadFavoritesCheckedPopulated(t *testing.T) {
 		t.Errorf("got %d favorites, want 1", len(favs))
 	}
 }
+
+// TestAddFavoriteKeepsDistinctPressings: two different releases sharing an
+// artist and title are two favorites, not one.
+func TestAddFavoriteKeepsDistinctPressings(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	first := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	second := Album{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1997}
+
+	if err := addFavorite(favPath, first); err != nil {
+		t.Fatalf("addFavorite(first): %v", err)
+	}
+	if err := addFavorite(favPath, second); err != nil {
+		t.Fatalf("addFavorite(second): %v", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 2 {
+		t.Fatalf("got %d favorites, want 2", len(favs))
+	}
+}
+
+// TestAddFavoriteLegacyEntryIsNotDuplicated is the reason sameAlbum is
+// lenient: a favorite written by v2.1.0 has no ID, and re-favoriting that
+// same record after a sync must not append a second copy.
+func TestAddFavoriteLegacyEntryIsNotDuplicated(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	if err := saveFavorites(favPath, []Album{legacy}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	synced := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}
+	err := addFavorite(favPath, synced)
+	if !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Errorf("error = %v, want ErrAlreadyInFavorites", err)
+	}
+}
+
+// TestRemoveFavoriteLegacyEntry: unfavoriting after a sync must still find
+// the entry that was written before IDs existed.
+func TestRemoveFavoriteLegacyEntry(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	if err := saveFavorites(favPath, []Album{legacy}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	synced := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}
+	if err := removeFavorite(favPath, synced); err != nil {
+		t.Fatalf("removeFavorite: %v", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 0 {
+		t.Errorf("got %d favorites, want 0", len(favs))
+	}
+}
+
+// TestRemoveFavoriteSurvivesRetitle: once both sides carry an ID, an
+// upstream retitle on Discogs no longer orphans the favorite.
+func TestRemoveFavoriteSurvivesRetitle(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	stored := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind Of Blue"}
+	if err := saveFavorites(favPath, []Album{stored}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	retitled := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue (1959)"}
+	if err := removeFavorite(favPath, retitled); err != nil {
+		t.Fatalf("removeFavorite: %v", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 0 {
+		t.Errorf("got %d favorites, want 0", len(favs))
+	}
+}
