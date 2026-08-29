@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 const version = "2.0.0"
@@ -92,6 +93,10 @@ func runPick(cfg selection) {
 	}
 
 	fmt.Println(formatAlbum(album, isTTY(os.Stdout)))
+
+	// Advisory, and therefore on stderr and only for a human at a terminal:
+	// stdout is the data channel and must stay parseable.
+	fmt.Fprint(os.Stderr, syncNotice(metaPath(), time.Now(), isTTY(os.Stderr)))
 }
 
 func runList(cfg selection) {

@@ -2,8 +2,24 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
+	"time"
 )
+
+// syncProgress returns a progressFunc writing to w, or nil when progress is
+// unwanted. Progress goes to stderr and only when stderr is a terminal:
+// stdout is the data channel, and a redirected stderr means the output is
+// being captured by something that does not want a page counter in it.
+func syncProgress(w io.Writer, enabled bool) progressFunc {
+	if !enabled {
+		return nil
+	}
+	return func(format string, args ...any) {
+		fmt.Fprintf(w, format, args...)
+	}
+}
 
 // arrayFlags collects a repeatable string flag (--folder).
 type arrayFlags []string
@@ -20,6 +36,7 @@ func runSync(cfg syncConfig) {
 	if err != nil {
 		fatal("Error: %v", err)
 	}
+	client.progress = syncProgress(os.Stderr, isTTY(os.Stderr))
 
 	username, err := client.getUsername()
 	if err != nil {
@@ -38,6 +55,12 @@ func runSync(cfg syncConfig) {
 
 	if err := saveCollection(albums); err != nil {
 		fatal("Error saving collection: %v", err)
+	}
+
+	// Recorded after the collection lands, so a stale timestamp never claims
+	// a sync that did not actually persist.
+	if err := recordSync(metaPath(), time.Now()); err != nil {
+		fatal("Error saving sync metadata: %v", err)
 	}
 
 	withMetadata := 0

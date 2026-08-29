@@ -171,7 +171,9 @@ func TestGetCollectionReleasesWithMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
 		resp := collectionPage{
-			Pagination: struct{ Pages int `json:"pages"` }{Pages: 1},
+			Pagination: struct {
+				Pages int `json:"pages"`
+			}{Pages: 1},
 			Releases: []collectionRelease{{
 				BasicInformation: releaseInfo{
 					Title:   "Kind of Blue",
