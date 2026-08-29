@@ -156,3 +156,59 @@ func resolveFolderNames(names []string, folders []folder) ([]int, error) {
 	}
 	return ids, nil
 }
+
+// unmergedCount counts the albums that share an artist and title with at
+// least one other album -- that is, every record involved in a collision the
+// old name-based dedup used to hide.
+func unmergedCount(albums []Album) int {
+	byKey := make(map[string]int, len(albums))
+	for _, a := range albums {
+		byKey[a.Key()]++
+	}
+
+	count := 0
+	for _, n := range byKey {
+		if n > 1 {
+			count += n
+		}
+	}
+	return count
+}
+
+// unmergeNotice explains the collection count that is about to jump, or ""
+// when there is nothing to explain.
+//
+// Three conditions together: a previous collection existed, at least one of
+// its entries had no release ID, and the fresh collection has a collision.
+// That fires exactly once, on the first sync after upgrading, and suppresses
+// itself forever afterwards because every entry has an ID from then on -- so
+// no flag in meta.json is needed to make it one-time.
+//
+// The wording states the collision count as a fact rather than blaming it
+// for the whole change in size. Someone who also bought records since their
+// last sync would otherwise be told something false.
+func unmergeNotice(prev, next []Album) string {
+	if len(prev) == 0 {
+		return ""
+	}
+
+	legacy := false
+	for _, a := range prev {
+		if a.ReleaseID == 0 {
+			legacy = true
+			break
+		}
+	}
+	if !legacy {
+		return ""
+	}
+
+	n := unmergedCount(next)
+	if n == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"Note: %d records share an artist and title with another record. Before v2.2.0\n"+
+			"      these were merged into one entry; they are now listed separately.\n", n)
+}

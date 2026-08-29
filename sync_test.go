@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -156,5 +157,83 @@ func TestCollectAlbumsMergesSameReleaseAcrossFolders(t *testing.T) {
 	}
 	if len(albums) != 1 {
 		t.Fatalf("got %d albums, want 1 (same release in two folders)", len(albums))
+	}
+}
+
+func TestUnmergedCount(t *testing.T) {
+	// Two Kind of Blue pressings and one Souvlaki: two records share a name.
+	albums := []Album{
+		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 333, Artist: "Slowdive", Title: "Souvlaki"},
+	}
+
+	if got := unmergedCount(albums); got != 2 {
+		t.Errorf("unmergedCount() = %d, want 2", got)
+	}
+}
+
+func TestUnmergedCountNoCollisions(t *testing.T) {
+	albums := []Album{
+		{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"},
+		{ReleaseID: 222, Artist: "Ride", Title: "Nowhere"},
+	}
+
+	if got := unmergedCount(albums); got != 0 {
+		t.Errorf("unmergedCount() = %d, want 0", got)
+	}
+}
+
+// The notice fires on the first sync after upgrading, which is the moment
+// the collection count visibly jumps.
+func TestUnmergeNoticeOnFirstSync(t *testing.T) {
+	prev := []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
+	next := []Album{
+		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+
+	got := unmergeNotice(prev, next)
+	if !strings.Contains(got, "2 records") {
+		t.Errorf("notice = %q, want it to mention 2 records", got)
+	}
+	if !strings.HasSuffix(got, "\n") {
+		t.Errorf("notice = %q, want a trailing newline", got)
+	}
+}
+
+// And never again: every entry has an ID from then on, so no flag in
+// meta.json is needed to make it one-time.
+func TestUnmergeNoticeSilentOnSecondSync(t *testing.T) {
+	prev := []Album{
+		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+	next := prev
+
+	if got := unmergeNotice(prev, next); got != "" {
+		t.Errorf("notice = %q, want empty on the second sync", got)
+	}
+}
+
+func TestUnmergeNoticeSilentWithoutCollisions(t *testing.T) {
+	prev := []Album{{Artist: "Slowdive", Title: "Souvlaki"}}
+	next := []Album{{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"}}
+
+	if got := unmergeNotice(prev, next); got != "" {
+		t.Errorf("notice = %q, want empty when nothing un-merged", got)
+	}
+}
+
+// A fresh install has no previous collection and nothing was ever merged,
+// so there is nothing to explain.
+func TestUnmergeNoticeSilentOnFreshInstall(t *testing.T) {
+	next := []Album{
+		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+
+	if got := unmergeNotice(nil, next); got != "" {
+		t.Errorf("notice = %q, want empty with no previous collection", got)
 	}
 }
