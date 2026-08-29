@@ -18,6 +18,9 @@ const staleAfter = 90 * 24 * time.Hour
 // which also keeps it out of the way of the schema change T4 has planned.
 type Meta struct {
 	SyncedAt time.Time `json:"synced_at,omitempty"`
+	// LegacyNoticeShown records that the one-time XDG migration notice has
+	// already been printed, so it is not repeated on every command.
+	LegacyNoticeShown bool `json:"legacy_notice_shown,omitempty"`
 }
 
 func metaPath() string {

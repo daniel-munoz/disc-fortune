@@ -85,6 +85,24 @@ func TestHelperProcess(t *testing.T) {
 	dispatch(args)
 }
 
+// helperEnv builds the subprocess environment: HOME pinned at home, and the
+// variables disc-fortune reads from the environment stripped, so a developer
+// who happens to have XDG_CONFIG_HOME or NO_COLOR set does not get different
+// test results from CI.
+func helperEnv(home string) []string {
+	var env []string
+	for _, e := range os.Environ() {
+		switch {
+		case strings.HasPrefix(e, "HOME="),
+			strings.HasPrefix(e, "XDG_CONFIG_HOME="),
+			strings.HasPrefix(e, "NO_COLOR="):
+			continue
+		}
+		env = append(env, e)
+	}
+	return append(env, "HOME="+home)
+}
+
 // runHelper re-execs the test binary as `disc-fortune <args...>` with HOME
 // pointed at home, and returns the subprocess's exit code and combined
 // output.
@@ -94,14 +112,7 @@ func runHelper(t *testing.T, home string, args ...string) (exitCode int, output 
 	helperArgs := append([]string{"-test.run=^TestHelperProcess$", "--"}, args...)
 	cmd := exec.Command(os.Args[0], helperArgs...)
 
-	var env []string
-	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "HOME=") {
-			continue
-		}
-		env = append(env, e)
-	}
-	cmd.Env = append(env, "HOME="+home, "DISC_FORTUNE_HELPER=1")
+	cmd.Env = append(helperEnv(home), "DISC_FORTUNE_HELPER=1")
 
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -121,17 +132,18 @@ func runHelper(t *testing.T, home string, args ...string) (exitCode int, output 
 func runHelperSplit(t *testing.T, home string, args ...string) (exitCode int, stdout, stderr string) {
 	t.Helper()
 
+	return runHelperEnv(t, home, nil, args...)
+}
+
+// runHelperEnv is runHelperSplit with extra environment variables layered on
+// top, for the tests that exercise XDG_CONFIG_HOME and NO_COLOR.
+func runHelperEnv(t *testing.T, home string, extraEnv []string, args ...string) (exitCode int, stdout, stderr string) {
+	t.Helper()
+
 	helperArgs := append([]string{"-test.run=^TestHelperProcess$", "--"}, args...)
 	cmd := exec.Command(os.Args[0], helperArgs...)
 
-	var env []string
-	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "HOME=") {
-			continue
-		}
-		env = append(env, e)
-	}
-	cmd.Env = append(env, "HOME="+home, "DISC_FORTUNE_HELPER=1")
+	cmd.Env = append(append(helperEnv(home), "DISC_FORTUNE_HELPER=1"), extraEnv...)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf

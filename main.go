@@ -48,6 +48,12 @@ func loadFavoritesOrExit() []Album {
 	return favorites
 }
 
+// stdoutColor resolves whether stdout gets escape sequences, combining the
+// --color flag, NO_COLOR, and whether stdout is a terminal.
+func stdoutColor(mode colorMode) bool {
+	return useColor(mode, isTTY(os.Stdout), os.Getenv)
+}
+
 // selectAlbums loads the collection or favorites per cfg and applies its filter.
 func selectAlbums(cfg selection) []Album {
 	var albums []Album
@@ -92,7 +98,7 @@ func runPick(cfg selection) {
 		fatal("Error saving history: %v", err)
 	}
 
-	fmt.Println(formatAlbum(album, isTTY(os.Stdout)))
+	fmt.Println(formatAlbum(album, stdoutColor(cfg.color)))
 
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
@@ -101,7 +107,7 @@ func runPick(cfg selection) {
 
 func runList(cfg selection) {
 	albums := selectAlbums(cfg)
-	out := formatList(albums, isTTY(os.Stdout))
+	out := formatList(albums, stdoutColor(cfg.color))
 	if len(albums) == 0 {
 		fmt.Fprint(os.Stderr, out)
 		os.Exit(1)
@@ -120,7 +126,7 @@ func runHistory(cfg historyConfig) {
 		limit = len(entries) // 0 means show all
 	}
 
-	fmt.Print(formatHistory(entries, limit, isTTY(os.Stdout)))
+	fmt.Print(formatHistory(entries, limit, stdoutColor(cfg.color)))
 }
 
 func runFavorite(cfg favoriteConfig) {
@@ -143,7 +149,7 @@ func runFavorite(cfg favoriteConfig) {
 	case FavoriteNoMatch:
 		fatal("No albums match query %q", cfg.query)
 	case FavoriteMultiMatch:
-		fmt.Print(formatList(outcome.Matches, isTTY(os.Stdout)))
+		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color)))
 		fmt.Fprintln(os.Stderr, "Be more specific or add filters.")
 		os.Exit(1)
 	}
@@ -181,7 +187,7 @@ func runUnfavorite(cfg favoriteConfig) {
 		// Removal is idempotent: nothing to remove is a success.
 		fmt.Printf("No favorites match %q - nothing to remove.\n", cfg.query)
 	case UnfavoriteMultiMatch:
-		fmt.Print(formatList(outcome.Matches, isTTY(os.Stdout)))
+		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color)))
 		fmt.Fprintln(os.Stderr, "Be more specific or add filters.")
 		os.Exit(1)
 	}

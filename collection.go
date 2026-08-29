@@ -30,13 +30,27 @@ func (a Album) Key() string {
 	return a.Artist + " - " + a.Title
 }
 
+// activeConfig is resolved once, by initConfig, before any command runs.
+// Caching it keeps the path helpers below simple: they cannot fail, so every
+// call site does not have to thread an error it can do nothing about.
+var activeConfig configLocation
+
+// configDir returns the directory holding disc-fortune's data files. It no
+// longer exits on failure -- resolveConfigDir returns the error and initConfig
+// reports it once, at startup.
 func configDir() string {
-	home, err := os.UserHomeDir()
+	return activeConfig.Dir
+}
+
+// initConfig resolves the config location for this run. It is called from
+// dispatch, before the chosen command executes.
+func initConfig(getenv func(string) string, homeDir func() (string, error)) error {
+	loc, err := resolveConfigDir(getenv, homeDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot determine home directory: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	return filepath.Join(home, ".config", "disc-fortune")
+	activeConfig = loc
+	return nil
 }
 
 func collectionPath() string {

@@ -6,6 +6,50 @@ import (
 	"strings"
 )
 
+// colorMode is the resolved value of --color.
+type colorMode int
+
+const (
+	// colorAuto colorizes only when writing to a terminal and NO_COLOR is unset.
+	colorAuto colorMode = iota
+	colorAlways
+	colorNever
+)
+
+// parseColorMode converts the --color flag value to a colorMode.
+func parseColorMode(s string) (colorMode, error) {
+	switch s {
+	case "auto":
+		return colorAuto, nil
+	case "always":
+		return colorAlways, nil
+	case "never":
+		return colorNever, nil
+	default:
+		return colorAuto, fmt.Errorf("invalid --color value %q (want auto, always, or never)", s)
+	}
+}
+
+// useColor decides whether to emit escape sequences, given the resolved
+// --color mode and whether the destination is a terminal.
+//
+// An explicit --color=always or --color=never always wins: no-color.org asks
+// that NO_COLOR be overridable by the user's own instruction, and someone who
+// typed --color=always meant it. Only under auto does NO_COLOR apply, and
+// then only when non-empty, again per no-color.org.
+func useColor(mode colorMode, tty bool, getenv func(string) string) bool {
+	switch mode {
+	case colorAlways:
+		return true
+	case colorNever:
+		return false
+	}
+	if getenv("NO_COLOR") != "" {
+		return false
+	}
+	return tty
+}
+
 const (
 	colorReset     = "\033[0m"
 	colorBoldCyan  = "\033[1;36m"

@@ -10,13 +10,30 @@ import (
 	"strings"
 )
 
+// globalFlags holds the flags every command accepts. They are registered in
+// newFlagSet rather than per-command, so a command physically cannot ship
+// without them and their help text cannot drift. Later global flags belong
+// here too.
+type globalFlags struct {
+	color *string
+}
+
+// mode resolves the global flags into the values commands actually use.
+func (g *globalFlags) mode() (colorMode, error) {
+	return parseColorMode(*g.color)
+}
+
 // newFlagSet builds a FlagSet that never prints or exits on its own, so the
-// caller controls the message and the exit code.
-func newFlagSet(name string) *flag.FlagSet {
+// caller controls the message and the exit code. Every command's flags start
+// here, which is what makes the global flags universal.
+func newFlagSet(name string) (*flag.FlagSet, *globalFlags) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {}
-	return fs
+	g := &globalFlags{
+		color: fs.String("color", "auto", "When to colorize output: auto, always, or never"),
+	}
+	return fs, g
 }
 
 // parseInterspersed parses args allowing flags to appear before, after, or
@@ -85,6 +102,11 @@ type command struct {
 	summary string // one line, listed by `help`
 	usage   string // full block, shown by `help <cmd>` and on usage error
 	run     func(args []string)
+	// needsConfig marks the commands that read or write data files. Only
+	// those fail when the config directory cannot be resolved; help,
+	// version and folders must keep working on a machine with no usable
+	// home directory.
+	needsConfig bool
 }
 
 // commands is the full CLI surface. It is populated in init rather than as a
@@ -96,6 +118,7 @@ var commands []command
 type selection struct {
 	favoritesOnly bool
 	filter        Filter
+	color         colorMode
 }
 
 // favoriteConfig is the parsed form of favorite and unfavorite. An empty query
@@ -103,11 +126,13 @@ type selection struct {
 type favoriteConfig struct {
 	query  string
 	filter Filter
+	color  colorMode
 }
 
 // historyConfig is the parsed form of history. A limit of 0 means "all".
 type historyConfig struct {
 	limit int
+	color colorMode
 }
 
 // syncConfig is the parsed form of sync.
@@ -116,7 +141,7 @@ type syncConfig struct {
 }
 
 func parseSelection(name string, args []string) (selection, error) {
-	fs := newFlagSet(name)
+	fs, gf := newFlagSet(name)
 	favoritesOnly := fs.Bool("favorites", false, "Restrict to favorites only")
 	ff := addFilterFlags(fs)
 
@@ -131,11 +156,15 @@ func parseSelection(name string, args []string) (selection, error) {
 	if err != nil {
 		return selection{}, fmt.Errorf("%s: %v", name, err)
 	}
-	return selection{favoritesOnly: *favoritesOnly, filter: filter}, nil
+	color, err := gf.mode()
+	if err != nil {
+		return selection{}, fmt.Errorf("%s: %v", name, err)
+	}
+	return selection{favoritesOnly: *favoritesOnly, filter: filter, color: color}, nil
 }
 
 func parseFavorite(name string, args []string) (favoriteConfig, error) {
-	fs := newFlagSet(name)
+	fs, gf := newFlagSet(name)
 	ff := addFilterFlags(fs)
 
 	rest, err := parseInterspersed(fs, args)
@@ -151,23 +180,27 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 	if err != nil {
 		return favoriteConfig{}, fmt.Errorf("%s: %v", name, err)
 	}
+	color, err := gf.mode()
+	if err != nil {
+		return favoriteConfig{}, fmt.Errorf("%s: %v", name, err)
+	}
 
 	if len(rest) == 0 {
 		if ff.any() {
 			return favoriteConfig{}, fmt.Errorf("%s: filters require a query", name)
 		}
-		return favoriteConfig{filter: filter}, nil
+		return favoriteConfig{filter: filter, color: color}, nil
 	}
 
 	query := strings.TrimSpace(rest[0])
 	if query == "" {
 		return favoriteConfig{}, fmt.Errorf("%s: requires a query", name)
 	}
-	return favoriteConfig{query: query, filter: filter}, nil
+	return favoriteConfig{query: query, filter: filter, color: color}, nil
 }
 
 func parseHistory(args []string) (historyConfig, error) {
-	fs := newFlagSet("history")
+	fs, gf := newFlagSet("history")
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return historyConfig{}, fmt.Errorf("history: %w", err)
@@ -186,7 +219,11 @@ func parseHistory(args []string) (historyConfig, error) {
 		}
 		limit = n
 	}
-	return historyConfig{limit: limit}, nil
+	color, err := gf.mode()
+	if err != nil {
+		return historyConfig{}, fmt.Errorf("history: %v", err)
+	}
+	return historyConfig{limit: limit, color: color}, nil
 }
 
 // parseHelp validates help's arguments (an optional topic). Routing it
@@ -194,7 +231,7 @@ func parseHistory(args []string) (historyConfig, error) {
 // -h/-help/--help on help itself hits the flag package's built-in ErrHelp
 // case instead of being mistaken for a topic named "--help".
 func parseHelp(args []string) (string, error) {
-	fs := newFlagSet("help")
+	fs, _ := newFlagSet("help")
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return "", fmt.Errorf("help: %w", err)
@@ -209,7 +246,7 @@ func parseHelp(args []string) (string, error) {
 }
 
 func parseSync(args []string) (syncConfig, error) {
-	fs := newFlagSet("sync")
+	fs, _ := newFlagSet("sync")
 	var folders arrayFlags
 	fs.Var(&folders, "folder", "Sync only specific folder(s) by name (repeatable)")
 
@@ -225,7 +262,7 @@ func parseSync(args []string) (syncConfig, error) {
 
 // parseNoArgs validates that a command was invoked with no flags and no arguments.
 func parseNoArgs(name string, args []string) error {
-	fs := newFlagSet(name)
+	fs, _ := newFlagSet(name)
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
@@ -340,6 +377,16 @@ func helpText(topic string) (string, error) {
 	return sb.String(), nil
 }
 
+// globalFlagHelp documents the flags newFlagSet registers on every command.
+// It is appended to each usage block programmatically, for the same reason
+// the flags themselves are registered centrally: a command must not be able
+// to ship without them.
+const globalFlagHelp = `
+
+Global flags (accepted by every command):
+  --color WHEN     Colorize output: auto (default), always, or never.
+                   auto colorizes only a terminal, and honors NO_COLOR.`
+
 const filterFlagHelp = `  --year VALUE     Filter by year or year range (e.g., 1975 or 1970-1980)
   --genre VALUE    Filter by genre (case-insensitive substring match)
   --label VALUE    Filter by label (case-insensitive substring match)
@@ -348,8 +395,9 @@ const filterFlagHelp = `  --year VALUE     Filter by year or year range (e.g., 1
 func init() {
 	commands = []command{
 		{
-			name:    "pick",
-			summary: "Print a random album (default)",
+			name:        "pick",
+			needsConfig: true,
+			summary:     "Print a random album (default)",
 			usage: `Usage: disc-fortune pick [flags]
 
 Prints one random album from your collection and records it in history.
@@ -367,8 +415,9 @@ Flags:
 			},
 		},
 		{
-			name:    "list",
-			summary: "List every matching album",
+			name:        "list",
+			needsConfig: true,
+			summary:     "List every matching album",
 			usage: `Usage: disc-fortune list [flags]
 
 Prints every album matching the filters, with a count.
@@ -385,8 +434,9 @@ Flags:
 			},
 		},
 		{
-			name:    "sync",
-			summary: "Fetch your collection from Discogs",
+			name:        "sync",
+			needsConfig: true,
+			summary:     "Fetch your collection from Discogs",
 			usage: `Usage: disc-fortune sync [--folder NAME ...]
 
 Fetches your Discogs collection and caches it locally. Requires DISCOGS_TOKEN
@@ -419,8 +469,9 @@ Lists the folder names in your Discogs collection, for use with
 			},
 		},
 		{
-			name:    "history",
-			summary: "Show recent picks",
+			name:        "history",
+			needsConfig: true,
+			summary:     "Show recent picks",
 			usage: `Usage: disc-fortune history [N]
 
 Shows the last N picks. N defaults to 10; 0 shows all of them.`,
@@ -433,8 +484,9 @@ Shows the last N picks. N defaults to 10; 0 shows all of them.`,
 			},
 		},
 		{
-			name:    "favorite",
-			summary: "Add an album to favorites",
+			name:        "favorite",
+			needsConfig: true,
+			summary:     "Add an album to favorites",
 			usage: `Usage: disc-fortune favorite [QUERY] [flags]
 
 With no QUERY, favorites the last pick. With a QUERY, favorites the one
@@ -453,8 +505,9 @@ Flags (only valid alongside a QUERY):
 			},
 		},
 		{
-			name:    "unfavorite",
-			summary: "Remove an album from favorites",
+			name:        "unfavorite",
+			needsConfig: true,
+			summary:     "Remove an album from favorites",
 			usage: `Usage: disc-fortune unfavorite [QUERY] [flags]
 
 With no QUERY, unfavorites the last pick. With a QUERY, removes the one
@@ -469,6 +522,26 @@ Flags (only valid alongside a QUERY):
 					return
 				}
 				runUnfavorite(cfg)
+			},
+		},
+		{
+			name:        "migrate",
+			needsConfig: true,
+			summary:     "Move config to the XDG location",
+			usage: `Usage: disc-fortune migrate
+
+Moves disc-fortune's data files from the legacy ~/.config/disc-fortune to the
+directory XDG_CONFIG_HOME points at.
+
+disc-fortune keeps using the legacy directory when it already holds your data,
+even with XDG_CONFIG_HOME set, so that an upgrade never appears to lose your
+collection. This command performs the move once you are ready. It refuses to
+run if the destination already contains files.`,
+			run: func(args []string) {
+				if handleParseErr("migrate", parseNoArgs("migrate", args)) {
+					return
+				}
+				runMigrate()
 			},
 		},
 		{
@@ -499,6 +572,14 @@ Flags (only valid alongside a QUERY):
 			},
 		},
 	}
+
+	// Documented centrally, matching where they are registered.
+	for i := range commands {
+		if commands[i].name == "help" {
+			continue
+		}
+		commands[i].usage += globalFlagHelp
+	}
 }
 
 // dispatch resolves argv and runs the chosen command.
@@ -506,6 +587,15 @@ func dispatch(args []string) {
 	cmd, rest, err := resolve(args)
 	if err != nil {
 		fatal("disc-fortune: %v", err)
+	}
+	// Resolved once, here, so every path helper below can be infallible.
+	// A failure is only fatal for the commands that actually need it.
+	if err := initConfig(os.Getenv, os.UserHomeDir); err != nil {
+		if cmd.needsConfig {
+			fatal("disc-fortune: %v", err)
+		}
+	} else if cmd.needsConfig {
+		fmt.Fprint(os.Stderr, migrationNotice(activeConfig, metaPath(), isTTY(os.Stderr)))
 	}
 	cmd.run(rest)
 }

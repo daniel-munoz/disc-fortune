@@ -12,7 +12,7 @@ import (
 )
 
 func TestParseInterspersedFlagsAfterPositional(t *testing.T) {
-	fs := newFlagSet("favorite")
+	fs, _ := newFlagSet("favorite")
 	year := fs.String("year", "", "")
 
 	rest, err := parseInterspersed(fs, []string{"miles", "--year", "1959"})
@@ -28,7 +28,7 @@ func TestParseInterspersedFlagsAfterPositional(t *testing.T) {
 }
 
 func TestParseInterspersedFlagsBeforePositional(t *testing.T) {
-	fs := newFlagSet("favorite")
+	fs, _ := newFlagSet("favorite")
 	year := fs.String("year", "", "")
 
 	rest, err := parseInterspersed(fs, []string{"--year", "1959", "miles"})
@@ -44,7 +44,7 @@ func TestParseInterspersedFlagsBeforePositional(t *testing.T) {
 }
 
 func TestParseInterspersedFlagsSurroundingPositional(t *testing.T) {
-	fs := newFlagSet("favorite")
+	fs, _ := newFlagSet("favorite")
 	year := fs.String("year", "", "")
 	genre := fs.String("genre", "", "")
 
@@ -61,7 +61,7 @@ func TestParseInterspersedFlagsSurroundingPositional(t *testing.T) {
 }
 
 func TestParseInterspersedMultiplePositionals(t *testing.T) {
-	fs := newFlagSet("favorite")
+	fs, _ := newFlagSet("favorite")
 	rest, err := parseInterspersed(fs, []string{"kind", "of", "blue"})
 	if err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
@@ -72,7 +72,7 @@ func TestParseInterspersedMultiplePositionals(t *testing.T) {
 }
 
 func TestParseInterspersedDashTerminator(t *testing.T) {
-	fs := newFlagSet("favorite")
+	fs, _ := newFlagSet("favorite")
 	rest, err := parseInterspersed(fs, []string{"--", "-live-"})
 	if err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
@@ -83,14 +83,14 @@ func TestParseInterspersedDashTerminator(t *testing.T) {
 }
 
 func TestParseInterspersedUnknownFlag(t *testing.T) {
-	fs := newFlagSet("pick")
+	fs, _ := newFlagSet("pick")
 	if _, err := parseInterspersed(fs, []string{"--nope"}); err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
 }
 
 func TestFilterFlagsBuildsFilter(t *testing.T) {
-	fs := newFlagSet("pick")
+	fs, _ := newFlagSet("pick")
 	ff := addFilterFlags(fs)
 	if _, err := parseInterspersed(fs, []string{"--year", "1970-1980", "--genre", "jazz"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
@@ -108,7 +108,7 @@ func TestFilterFlagsBuildsFilter(t *testing.T) {
 }
 
 func TestFilterFlagsRejectsBadYear(t *testing.T) {
-	fs := newFlagSet("pick")
+	fs, _ := newFlagSet("pick")
 	ff := addFilterFlags(fs)
 	if _, err := parseInterspersed(fs, []string{"--year", "nineteen"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
@@ -119,7 +119,7 @@ func TestFilterFlagsRejectsBadYear(t *testing.T) {
 }
 
 func TestFilterFlagsAnyFalseWhenUnset(t *testing.T) {
-	fs := newFlagSet("pick")
+	fs, _ := newFlagSet("pick")
 	ff := addFilterFlags(fs)
 	if _, err := parseInterspersed(fs, nil); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
