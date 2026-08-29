@@ -246,7 +246,7 @@ func parseHelp(args []string) (string, error) {
 }
 
 func parseSync(args []string) (syncConfig, error) {
-	fs, _ := newFlagSet("sync")
+	fs, gf := newFlagSet("sync")
 	var folders arrayFlags
 	fs.Var(&folders, "folder", "Sync only specific folder(s) by name (repeatable)")
 
@@ -257,18 +257,28 @@ func parseSync(args []string) (syncConfig, error) {
 	if len(rest) > 0 {
 		return syncConfig{}, fmt.Errorf("sync: unexpected argument %q", rest[0])
 	}
+	// sync colorizes nothing, but a bad --color value is still a typo and
+	// must be reported rather than ignored.
+	if _, err := gf.mode(); err != nil {
+		return syncConfig{}, fmt.Errorf("sync: %v", err)
+	}
 	return syncConfig{folders: folders}, nil
 }
 
 // parseNoArgs validates that a command was invoked with no flags and no arguments.
 func parseNoArgs(name string, args []string) error {
-	fs, _ := newFlagSet(name)
+	fs, gf := newFlagSet(name)
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	if len(rest) > 0 {
 		return fmt.Errorf("%s: unexpected argument %q", name, rest[0])
+	}
+	// These commands produce no colorized output, but they still accept the
+	// flag, so they must still reject a bad value for it.
+	if _, err := gf.mode(); err != nil {
+		return fmt.Errorf("%s: %v", name, err)
 	}
 	return nil
 }

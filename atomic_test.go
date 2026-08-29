@@ -43,7 +43,16 @@ func TestWriteFileAtomicCreatesFile(t *testing.T) {
 	}
 }
 
+// withUmask sets the process umask for the duration of a test. It is
+// process-global, so these tests must not run in parallel.
+func withUmask(t *testing.T, mask int) {
+	t.Helper()
+	old := syscall.Umask(mask)
+	t.Cleanup(func() { syscall.Umask(old) })
+}
+
 func TestWriteFileAtomicAppliesPerms(t *testing.T) {
+	withUmask(t, 0o022)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
@@ -57,6 +66,84 @@ func TestWriteFileAtomicAppliesPerms(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != collectionFilePerms {
 		t.Errorf("perm = %o, want %o", got, collectionFilePerms)
+	}
+}
+
+// writeFileAtomic replaced os.WriteFile, so it must reproduce os.WriteFile's
+// permission semantics. The first of those is that perm is a request filtered
+// by the process umask, not a mode imposed on the user: someone running with
+// umask 077 expects their collection to stay private.
+func TestWriteFileAtomicRespectsUmaskOnNewFiles(t *testing.T) {
+	withUmask(t, 0o077)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "collection.json")
+
+	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if want := os.FileMode(0o600); info.Mode().Perm() != want {
+		t.Errorf("perm = %04o, want %04o (0644 filtered through umask 077)",
+			info.Mode().Perm(), want)
+	}
+}
+
+// The second half of os.WriteFile's semantics: perm applies only at creation.
+// An existing file keeps whatever mode it has, so a user who tightened
+// history.json does not have it widened again on the next pick.
+func TestWriteFileAtomicPreservesAnExistingFilesMode(t *testing.T) {
+	withUmask(t, 0o022)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.json")
+	if err := os.WriteFile(path, []byte("old"), collectionFilePerms); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if want := os.FileMode(0o600); info.Mode().Perm() != want {
+		t.Errorf("perm = %04o, want %04o -- the user's own mode was overwritten",
+			info.Mode().Perm(), want)
+	}
+}
+
+// A widened mode must survive too: the rule is "leave it alone", not
+// "tighten it".
+func TestWriteFileAtomicPreservesAWidenedMode(t *testing.T) {
+	withUmask(t, 0o077)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "collection.json")
+	if err := os.WriteFile(path, []byte("old"), 0o600); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if err := os.Chmod(path, 0o664); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if want := os.FileMode(0o664); info.Mode().Perm() != want {
+		t.Errorf("perm = %04o, want %04o -- umask must not narrow an existing file",
+			info.Mode().Perm(), want)
 	}
 }
 

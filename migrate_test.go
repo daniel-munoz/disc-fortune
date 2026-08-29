@@ -153,3 +153,31 @@ func TestMigrateConfigErrorsWhenSourceMissing(t *testing.T) {
 		t.Fatal("migrateConfig succeeded with no source directory")
 	}
 }
+
+// migrate moves files that already exist; their modes belong to the user and
+// must survive the move verbatim. Because writeFileAtomic honors the umask
+// when creating a file, migrate has to restore the source mode explicitly --
+// otherwise migrating under a strict umask silently re-permissions the data.
+func TestMigrateConfigPreservesSourceModeUnderStrictUmask(t *testing.T) {
+	root := t.TempDir()
+	from := filepath.Join(root, "legacy", "disc-fortune")
+	to := filepath.Join(root, "xdg", "disc-fortune")
+	seedConfigDir(t, from)
+	if err := os.Chmod(filepath.Join(from, "collection.json"), 0o644); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	withUmask(t, 0o077)
+
+	if _, err := migrateConfig(from, to); err != nil {
+		t.Fatalf("migrateConfig: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(to, "collection.json"))
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if want := os.FileMode(0o644); info.Mode().Perm() != want {
+		t.Errorf("perm = %04o, want %04o -- migrate re-permissioned the user's data",
+			info.Mode().Perm(), want)
+	}
+}

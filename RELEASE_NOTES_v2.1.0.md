@@ -21,6 +21,11 @@ All data files are now written atomically: to a temporary file in the same
 directory, flushed to disk, then renamed into place. A failed write leaves the
 previous file byte-for-byte intact.
 
+File permissions behave exactly as they did before: a file being created gets
+`0644` as filtered by your umask, so `umask 077` still yields a private
+collection; and a file that already exists keeps whatever mode it has, so if
+you have tightened `history.json` yourself it stays tightened.
+
 ## Syncing survives rate limits, and tells you it is alive
 
 Four fixes in one code path:

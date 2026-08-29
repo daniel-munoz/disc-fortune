@@ -97,3 +97,31 @@ func TestMigrateCommandExists(t *testing.T) {
 		t.Error("migrate usage should explain what it migrates and why")
 	}
 }
+
+// Accepting the flag is only half of it. A typo must be rejected by every
+// command, or `disc-fortune folders --color=sometimes` silently does the
+// wrong thing while `disc-fortune list --color=sometimes` errors -- exactly
+// the drift that registering the flag centrally was meant to prevent.
+func TestEveryCommandRejectsInvalidColor(t *testing.T) {
+	parsers := map[string]func([]string) error{
+		"pick":       func(a []string) error { _, err := parseSelection("pick", a); return err },
+		"list":       func(a []string) error { _, err := parseSelection("list", a); return err },
+		"favorite":   func(a []string) error { _, err := parseFavorite("favorite", a); return err },
+		"unfavorite": func(a []string) error { _, err := parseFavorite("unfavorite", a); return err },
+		"history":    func(a []string) error { _, err := parseHistory(a); return err },
+		"sync":       func(a []string) error { _, err := parseSync(a); return err },
+		"folders":    func(a []string) error { return parseNoArgs("folders", a) },
+		"version":    func(a []string) error { return parseNoArgs("version", a) },
+		"migrate":    func(a []string) error { return parseNoArgs("migrate", a) },
+	}
+	for name, parse := range parsers {
+		err := parse([]string{"--color", "sometimes"})
+		if err == nil {
+			t.Errorf("%s accepted --color=sometimes", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("%s error %q should name the command", name, err)
+		}
+	}
+}

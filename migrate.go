@@ -76,8 +76,15 @@ func migrateConfig(from, to string) (int, error) {
 		if info, err := e.Info(); err == nil {
 			perm = info.Mode().Perm()
 		}
-		if err := writeFileAtomic(filepath.Join(to, e.Name()), data, perm); err != nil {
+		dst := filepath.Join(to, e.Name())
+		if err := writeFileAtomic(dst, data, perm); err != nil {
 			return 0, err
+		}
+		// writeFileAtomic honors the umask when creating a file, which is
+		// right for a fresh write but wrong for a move: these files already
+		// exist and their modes are the user's, so restore them exactly.
+		if err := os.Chmod(dst, perm); err != nil {
+			return 0, fmt.Errorf("setting permissions on %s: %w", dst, err)
 		}
 		copied = append(copied, src)
 	}
