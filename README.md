@@ -9,7 +9,15 @@ A Unix `fortune`-style CLI that randomly picks a vinyl record from your Discogs 
    ```sh
    export DISCOGS_TOKEN=your_token_here
    ```
-3. Build:
+3. Install it:
+   ```sh
+   go install github.com/daniel-munoz/disc-fortune/v2@latest
+   ```
+   The `/v2` suffix is required. `go install github.com/daniel-munoz/disc-fortune@latest`,
+   without it, installs the latest v1 release — that is how Go module major
+   versions work, not a mistake on your part.
+
+   Or build from a clone:
    ```sh
    go build -o disc-fortune .
    ```
