@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -238,5 +239,45 @@ func TestGetAPIError(t *testing.T) {
 	_, err := client.getUsername()
 	if err == nil {
 		t.Fatal("expected error for 401 response")
+	}
+}
+
+func TestGetCollectionReleasesCapturesReleaseID(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
+		// Raw JSON so the test fails if the code reads instance_id, or the
+		// release object's own id, instead of basic_information.id.
+		fmt.Fprint(w, `{
+			"pagination": {"pages": 1},
+			"releases": [
+				{
+					"id": 777,
+					"instance_id": 999,
+					"basic_information": {
+						"id": 12345,
+						"title": "Kind of Blue",
+						"artists": [{"name": "Miles Davis"}]
+					}
+				}
+			]
+		}`)
+	})
+
+	client, srv := newTestClient(mux)
+	defer srv.Close()
+
+	origBase := discogsBaseURL
+	setBaseURL(srv.URL)
+	defer setBaseURL(origBase)
+
+	albums, err := client.getCollectionReleases("testuser", 0)
+	if err != nil {
+		t.Fatalf("getCollectionReleases: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("got %d albums, want 1", len(albums))
+	}
+	if albums[0].ReleaseID != 12345 {
+		t.Errorf("ReleaseID = %d, want 12345 (basic_information.id)", albums[0].ReleaseID)
 	}
 }

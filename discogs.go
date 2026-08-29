@@ -268,6 +268,11 @@ type releaseFormat struct {
 
 // releaseInfo represents the basic_information of a collection release.
 type releaseInfo struct {
+	// ID is the Discogs release ID. Note this is not the release object's
+	// sibling instance_id, which identifies one physical copy: someone who
+	// owns two copies of a pressing has two instances sharing one release
+	// ID, and collapsing those into a single entry is correct.
+	ID      int             `json:"id"`
 	Title   string          `json:"title"`
 	Artists []releaseArtist `json:"artists"`
 	Year    int             `json:"year"`
@@ -328,13 +333,14 @@ func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]
 			}
 
 			albums = append(albums, Album{
-				Artist:  artist,
-				Title:   r.BasicInformation.Title,
-				Year:    r.BasicInformation.Year,
-				Label:   label,
-				CatNo:   catno,
-				Genres:  r.BasicInformation.Genres,
-				Formats: formats,
+				ReleaseID: r.BasicInformation.ID,
+				Artist:    artist,
+				Title:     r.BasicInformation.Title,
+				Year:      r.BasicInformation.Year,
+				Label:     label,
+				CatNo:     catno,
+				Genres:    r.BasicInformation.Genres,
+				Formats:   formats,
 			})
 		}
 
