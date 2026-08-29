@@ -66,8 +66,15 @@ disc-fortune migrate
 
 `migrate` copies each file to the XDG location and removes the originals. It
 copies rather than renames, because `XDG_CONFIG_HOME` may be on another
-filesystem; each file is written atomically; and it refuses to run if the
-destination already contains files, rather than guessing at a merge.
+filesystem; each file is written atomically; it refuses to run if the
+destination already contains files, rather than guessing at a merge; and if it
+fails part-way it removes everything it had created, so the originals remain
+the only copy.
+
+"Which directory holds your data" is decided by looking for the data files
+themselves, not by checking whether a directory exists. An empty
+`$XDG_CONFIG_HOME/disc-fortune` — left by a dotfile manager, a package, or your
+own `mkdir` — will not hide a collection that lives in the legacy path.
 
 Color is now controllable:
 

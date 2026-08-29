@@ -40,9 +40,7 @@ func TestConfigDirUsesXDGWhenItAlreadyHasData(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
 	xdgDir := filepath.Join(xdg, "disc-fortune")
-	if err := os.MkdirAll(xdgDir, configDirPerms); err != nil {
-		t.Fatalf("seeding: %v", err)
-	}
+	seedCollectionAt(t, xdgDir, Album{Artist: "Sun Ra", Title: "Lanquidity"})
 
 	loc, err := resolveConfigDir(envMap(map[string]string{"XDG_CONFIG_HOME": xdg}), homeAt(home))
 	if err != nil {
@@ -63,9 +61,7 @@ func TestConfigDirKeepsLegacyDataWhenXDGIsEmpty(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
 	legacy := filepath.Join(home, ".config", "disc-fortune")
-	if err := os.MkdirAll(legacy, configDirPerms); err != nil {
-		t.Fatalf("seeding legacy: %v", err)
-	}
+	seedCollectionAt(t, legacy, Album{Artist: "Miles Davis", Title: "Kind of Blue"})
 
 	loc, err := resolveConfigDir(envMap(map[string]string{"XDG_CONFIG_HOME": xdg}), homeAt(home))
 	if err != nil {
@@ -137,5 +133,58 @@ func TestConfigDirSurvivesUnknownHomeWhenXDGIsSet(t *testing.T) {
 	}
 	if want := filepath.Join(xdg, "disc-fortune"); loc.Dir != want {
 		t.Errorf("Dir = %q, want %q", loc.Dir, want)
+	}
+}
+
+// An empty directory is not a collection. Anything can create
+// $XDG_CONFIG_HOME/disc-fortune -- a dotfile manager, a package, a user
+// running mkdir, or a migrate that failed part-way -- and if mere existence
+// were enough to win, the user's real collection would silently disappear
+// behind it with no way back. This is the exact failure resolveConfigDir
+// exists to prevent, so it must be decided on data, not on existence.
+func TestConfigDirIgnoresAnEmptyXDGDirectory(t *testing.T) {
+	home := t.TempDir()
+	xdg := t.TempDir()
+	legacy := filepath.Join(home, ".config", "disc-fortune")
+	seedCollectionAt(t, legacy, Album{Artist: "Alice Coltrane", Title: "Ptah, the El Daoud"})
+	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), configDirPerms); err != nil {
+		t.Fatalf("seeding empty xdg dir: %v", err)
+	}
+
+	loc, err := resolveConfigDir(envMap(map[string]string{"XDG_CONFIG_HOME": xdg}), homeAt(home))
+	if err != nil {
+		t.Fatalf("resolveConfigDir: %v", err)
+	}
+	if loc.Dir != legacy {
+		t.Fatalf("Dir = %q, want the legacy %q -- an empty directory shadowed the real collection", loc.Dir, legacy)
+	}
+	if want := filepath.Join(xdg, "disc-fortune"); loc.Preferred != want {
+		t.Errorf("Preferred = %q, want %q -- without it, `migrate` reports nothing to do", loc.Preferred, want)
+	}
+}
+
+// A directory holding any one of the data files counts as in use.
+func TestConfigDirTreatsAnyDataFileAsInUse(t *testing.T) {
+	for _, name := range []string{"collection.json", "favorites.json", "history.json", "meta.json"} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			xdg := t.TempDir()
+			xdgDir := filepath.Join(xdg, "disc-fortune")
+			if err := os.MkdirAll(xdgDir, configDirPerms); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(xdgDir, name), []byte("[]"), collectionFilePerms); err != nil {
+				t.Fatalf("seeding: %v", err)
+			}
+			seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "A", Title: "B"})
+
+			loc, err := resolveConfigDir(envMap(map[string]string{"XDG_CONFIG_HOME": xdg}), homeAt(home))
+			if err != nil {
+				t.Fatalf("resolveConfigDir: %v", err)
+			}
+			if loc.Dir != xdgDir {
+				t.Errorf("Dir = %q, want %q -- %s should mark the directory as in use", loc.Dir, xdgDir, name)
+			}
+		})
 	}
 }

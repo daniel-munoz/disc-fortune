@@ -53,16 +53,38 @@ func migrateConfig(from, to string) (int, error) {
 		return 0, fmt.Errorf("reading %s: %w", from, err)
 	}
 
-	if existing, err := os.ReadDir(to); err == nil && len(existing) > 0 {
-		return 0, fmt.Errorf("%s already contains data; move or remove it first", to)
+	// Whether this call creates the destination decides how much of it may be
+	// rolled back later: a directory the user already had is not ours to
+	// remove.
+	createdDir := false
+	if existing, err := os.ReadDir(to); err == nil {
+		if len(existing) > 0 {
+			return 0, fmt.Errorf("%s already contains data; move or remove it first", to)
+		}
+	} else if os.IsNotExist(err) {
+		createdDir = true
 	}
 	if err := os.MkdirAll(to, configDirPerms); err != nil {
 		return 0, fmt.Errorf("creating %s: %w", to, err)
 	}
 
-	// Copy everything first, so a failure part-way through never leaves the
-	// user with neither copy.
-	var copied []string
+	var copied, written []string
+
+	// rollback undoes everything this call created. Without it a failure
+	// part-way leaves a partial destination behind, and every later run has
+	// to guess which of two directories holds the real collection.
+	rollback := func(cause error) (int, error) {
+		for _, p := range written {
+			_ = os.Remove(p)
+		}
+		if createdDir {
+			_ = os.Remove(to)
+		}
+		return 0, cause
+	}
+
+	// Copy everything first, so a failure part-way never leaves the user with
+	// neither copy.
 	for _, e := range entries {
 		if !e.Type().IsRegular() {
 			continue
@@ -70,7 +92,7 @@ func migrateConfig(from, to string) (int, error) {
 		src := filepath.Join(from, e.Name())
 		data, err := os.ReadFile(src)
 		if err != nil {
-			return 0, fmt.Errorf("reading %s: %w", src, err)
+			return rollback(fmt.Errorf("reading %s: %w", src, err))
 		}
 		perm := os.FileMode(collectionFilePerms)
 		if info, err := e.Info(); err == nil {
@@ -78,13 +100,14 @@ func migrateConfig(from, to string) (int, error) {
 		}
 		dst := filepath.Join(to, e.Name())
 		if err := writeFileAtomic(dst, data, perm); err != nil {
-			return 0, err
+			return rollback(err)
 		}
+		written = append(written, dst)
 		// writeFileAtomic honors the umask when creating a file, which is
 		// right for a fresh write but wrong for a move: these files already
 		// exist and their modes are the user's, so restore them exactly.
 		if err := os.Chmod(dst, perm); err != nil {
-			return 0, fmt.Errorf("setting permissions on %s: %w", dst, err)
+			return rollback(fmt.Errorf("setting permissions on %s: %w", dst, err))
 		}
 		copied = append(copied, src)
 	}

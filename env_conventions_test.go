@@ -185,3 +185,28 @@ func TestBinaryDataCommandFailsClearlyWithoutAHomeDirectory(t *testing.T) {
 		t.Errorf("stderr = %q, want it to explain that the home directory is unknown", stderr)
 	}
 }
+
+// End to end: an empty XDG directory must not hide the user's collection,
+// and `migrate` must still offer the way forward.
+func TestBinarySurvivesAnEmptyXDGDirectory(t *testing.T) {
+	home := t.TempDir()
+	xdg := t.TempDir()
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Don Cherry", Title: "Brown Rice"})
+	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), configDirPerms); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	env := []string{"XDG_CONFIG_HOME=" + xdg}
+
+	code, stdout, stderr := runHelperEnv(t, home, env, "list")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 -- an empty directory hid the collection\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "Brown Rice") {
+		t.Errorf("stdout = %q, want the legacy collection", stdout)
+	}
+
+	code, stdout, stderr = runHelperEnv(t, home, env, "migrate")
+	if code != 0 || strings.Contains(stdout, "Nothing to migrate") {
+		t.Errorf("migrate should still have work to do: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}

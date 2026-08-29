@@ -181,3 +181,74 @@ func TestMigrateConfigPreservesSourceModeUnderStrictUmask(t *testing.T) {
 			info.Mode().Perm(), want)
 	}
 }
+
+// A migrate that fails part-way must leave the filesystem as it found it.
+// Otherwise it strands a partial destination directory, and every later run
+// has to decide which of two directories is the real one.
+func TestMigrateConfigCleansUpAfterAPartialFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the permission bits this test relies on")
+	}
+	root := t.TempDir()
+	from := filepath.Join(root, "legacy", "disc-fortune")
+	to := filepath.Join(root, "xdg", "disc-fortune")
+	seedConfigDir(t, from)
+	// os.ReadDir returns sorted names, so collection.json and favorites.json
+	// copy successfully before history.json fails: a genuine partial failure.
+	unreadable := filepath.Join(from, "history.json")
+	if err := os.Chmod(unreadable, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, collectionFilePerms) })
+
+	if _, err := migrateConfig(from, to); err == nil {
+		t.Fatal("migrateConfig succeeded despite an unreadable source file")
+	}
+
+	if _, err := os.Stat(to); !os.IsNotExist(err) {
+		entries, _ := os.ReadDir(to)
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("destination directory survived a failed migration, holding %v", names)
+	}
+	// And the originals are all still there.
+	for _, name := range []string{"collection.json", "favorites.json", "history.json"} {
+		if _, err := os.Stat(filepath.Join(from, name)); err != nil {
+			t.Errorf("source %s was lost: %v", name, err)
+		}
+	}
+}
+
+// A destination the user already had must not be deleted by a failed migrate;
+// only what this call created gets rolled back.
+func TestMigrateConfigKeepsAPreexistingEmptyDestination(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the permission bits this test relies on")
+	}
+	root := t.TempDir()
+	from := filepath.Join(root, "legacy", "disc-fortune")
+	to := filepath.Join(root, "xdg", "disc-fortune")
+	seedConfigDir(t, from)
+	if err := os.MkdirAll(to, configDirPerms); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	unreadable := filepath.Join(from, "history.json")
+	if err := os.Chmod(unreadable, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, collectionFilePerms) })
+
+	if _, err := migrateConfig(from, to); err == nil {
+		t.Fatal("migrateConfig succeeded despite an unreadable source file")
+	}
+
+	if _, err := os.Stat(to); err != nil {
+		t.Errorf("a destination directory the user already had was removed: %v", err)
+	}
+	entries, _ := os.ReadDir(to)
+	if len(entries) != 0 {
+		t.Errorf("partial copies left behind in the destination: %d entries", len(entries))
+	}
+}
