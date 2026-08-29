@@ -1544,12 +1544,28 @@ sync: it is idempotent and the next sync retries it."
 
 ## Accepted consequences
 
-- **An ambiguous favorite is reported on every sync, not just the first.** It
-  stays un-ID'd permanently, so `backfillAlbums` finds it again each time. This
-  is deliberate rather than overlooked: it is the only signal the user gets, it
-  is actionable, and it disappears the moment they re-favorite the specific
-  pressing. Suppressing it would need a flag in `meta.json` and would hide a
-  condition that never resolves on its own. Revisit only if it proves noisy.
+- **An ambiguous favorite is reported on every sync until the user resolves it.**
+  It stays un-ID'd, so `backfillAlbums` finds it again each time. This is
+  deliberate rather than overlooked: it is the only signal the user gets, it is
+  actionable, and it stops the moment they re-favorite the specific pressing.
+  Re-favoriting genuinely resolves it because `addFavorite` stamps the incoming
+  release ID onto the matching un-ID'd entry before returning
+  `ErrAlreadyInFavorites` — an un-ID'd favorite that can still be re-favorited
+  from the collection is necessarily an ambiguous one, since a unique match
+  would already have been stamped by the backfill. The CLI still prints
+  "Already in favorites", which is accurate: the user ends up with one favorite
+  for that name either way, now pinned to the pressing they named. Suppressing
+  the report instead would need a flag in `meta.json` and would hide a condition
+  the user could actually fix. Revisit only if it proves noisy.
+- **A `pick` racing a `sync` can lose its history entry.** `sync` now rewrites
+  `history.json` during the backfill, so a `pick` that appends between the
+  backfill's read and its atomic rename is overwritten by the older snapshot.
+  The window is the few milliseconds between those two operations. In v2.1.1
+  `sync` never touched history, so this is new. It is accepted for v2.2: this is
+  a single-user CLI, both commands are hand-run, and closing the window properly
+  means file locking across every reader and writer of the data files — a larger
+  change than the backfill itself, and one that belongs to its own task if the
+  race ever proves real.
 - **`sameAlbum` is not transitive.** See the design doc; it is bounded to
   linear scans in `favorites.go` and is the reason sync dedup uses `Identity()`.
 

@@ -154,7 +154,7 @@ the log has nothing in it.
 Your data is stored locally in `$XDG_CONFIG_HOME/disc-fortune/`, falling back to
 `~/.config/disc-fortune/` when `XDG_CONFIG_HOME` is unset:
 
-- `collection.json` - Your full collection with metadata (artist, title, year, label, catalog number, genres, formats)
+- `collection.json` - Your full collection with metadata (Discogs release ID, artist, title, year, label, catalog number, genres, formats)
 - `history.json` - Timestamped history of all your picks
 - `favorites.json` - Albums you've marked as favorites
 - `meta.json` - When you last synced
