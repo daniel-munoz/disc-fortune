@@ -57,38 +57,54 @@ func addFavorite(path string, album Album) error {
 	// sameAlbum rather than Key: two pressings of one title are two
 	// favorites, but an entry written before release IDs existed is still
 	// the same record as its freshly synced self.
-	for _, fav := range favorites {
-		if sameAlbum(fav, album) {
-			return ErrAlreadyInFavorites
+	for i, fav := range favorites {
+		if !sameAlbum(fav, album) {
+			continue
 		}
+
+		// Stamp the incoming ID onto a stored entry that predates release
+		// IDs, so naming a specific pressing actually resolves an ambiguous
+		// favorite instead of reporting it forever. This is safe rather
+		// than a guess: an un-ID'd favorite that can still be re-favorited
+		// from the collection is necessarily an ambiguous one, because a
+		// unique match would already have been stamped by the backfill.
+		// The stored entry is therefore exactly the one the user is now
+		// disambiguating, and either way they end up with one favorite for
+		// that name.
+		if album.ReleaseID != 0 && fav.ReleaseID == 0 {
+			favorites[i].ReleaseID = album.ReleaseID
+			if err := saveFavorites(path, favorites); err != nil {
+				return err
+			}
+		}
+		return ErrAlreadyInFavorites
 	}
 
 	favorites = append(favorites, album)
 	return saveFavorites(path, favorites)
 }
 
-// removeFavorite removes an album from favorites.
+// removeFavorite removes the first favorite matching album.
+//
+// First match only, never every match: sameAlbum is not transitive, so an
+// entry with no release ID matches every stored pressing sharing its name.
+// Filtering all matches out would silently delete distinct pressings the
+// user never named -- and `unfavorite` would still report removing one.
 func removeFavorite(path string, album Album) error {
 	favorites, err := loadFavorites(path)
 	if err != nil {
 		return err
 	}
 
-	var filtered []Album
-	found := false
-	for _, fav := range favorites {
+	for i, fav := range favorites {
 		if sameAlbum(fav, album) {
-			found = true
-			continue
+			// The three-index slice forces append to allocate rather than
+			// alias favorites' backing array and clobber it in place.
+			return saveFavorites(path, append(favorites[:i:i], favorites[i+1:]...))
 		}
-		filtered = append(filtered, fav)
 	}
 
-	if !found {
-		return ErrNotInFavorites
-	}
-
-	return saveFavorites(path, filtered)
+	return ErrNotInFavorites
 }
 
 // FavoriteStatus represents the outcome of attempting to favorite an album by query.

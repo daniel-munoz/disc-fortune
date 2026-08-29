@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -420,5 +422,168 @@ func TestRemoveFavoriteSurvivesRetitle(t *testing.T) {
 	}
 	if len(favs) != 0 {
 		t.Errorf("got %d favorites, want 0", len(favs))
+	}
+}
+
+// TestRemoveFavoriteRemovesOnlyFirstMatch is the guard for the silent data
+// loss a filter-all removal caused: sameAlbum is not transitive, so an
+// un-ID'd target matches every stored pressing sharing its name. Removing
+// all of them would delete records the user never named -- and the CLI would
+// still print a single "Removed from favorites" line.
+func TestRemoveFavoriteRemovesOnlyFirstMatch(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	stored := []Album{
+		{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959},
+		{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1997},
+	}
+	if err := saveFavorites(favPath, stored); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	// The un-ID'd album `unfavorite` with no query hands over, taken from
+	// the last history entry.
+	target := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	if err := removeFavorite(favPath, target); err != nil {
+		t.Fatalf("removeFavorite: %v", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 1 {
+		t.Fatalf("got %d favorites, want 1 (only the first match removed)", len(favs))
+	}
+	if favs[0].ReleaseID != 2 {
+		t.Errorf("surviving favorite ReleaseID = %d, want 2", favs[0].ReleaseID)
+	}
+}
+
+// TestRemoveFavoriteNoMatchStillErrors pins the ErrNotInFavorites contract
+// across the switch to a first-match scan.
+func TestRemoveFavoriteNoMatchStillErrors(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	if err := saveFavorites(favPath, []Album{{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	err := removeFavorite(favPath, Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"})
+	if !errors.Is(err, ErrNotInFavorites) {
+		t.Errorf("error = %v, want ErrNotInFavorites", err)
+	}
+}
+
+// TestAddFavoriteStampsIDOntoLegacyMatch is the documented remedy for an
+// ambiguous favorite: naming the specific pressing must actually resolve it.
+func TestAddFavoriteStampsIDOntoLegacyMatch(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	if err := saveFavorites(favPath, []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	err := addFavorite(favPath, Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"})
+	if !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 1 {
+		t.Fatalf("got %d favorites, want 1", len(favs))
+	}
+	if favs[0].ReleaseID != 111 {
+		t.Errorf("stored ReleaseID = %d, want 111 (stamped and persisted)", favs[0].ReleaseID)
+	}
+}
+
+// TestAddFavoriteDoesNotOverwriteAnExistingID: stamping targets the entry
+// that has no ID, never one the user has already disambiguated.
+func TestAddFavoriteDoesNotOverwriteAnExistingID(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	stored := []Album{
+		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{Artist: "Miles Davis", Title: "Kind of Blue"},
+	}
+	if err := saveFavorites(favPath, stored); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+
+	err := addFavorite(favPath, Album{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"})
+	if !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
+	}
+
+	favs, err := loadFavorites(favPath)
+	if err != nil {
+		t.Fatalf("loadFavorites: %v", err)
+	}
+	if len(favs) != 2 {
+		t.Fatalf("got %d favorites, want 2", len(favs))
+	}
+	if favs[0].ReleaseID != 111 {
+		t.Errorf("first ReleaseID = %d, want 111 (untouched)", favs[0].ReleaseID)
+	}
+	if favs[1].ReleaseID != 222 {
+		t.Errorf("second ReleaseID = %d, want 222 (stamped)", favs[1].ReleaseID)
+	}
+}
+
+// TestAddFavoriteWithoutIDStampsNothing: an incoming album that carries no
+// ID has nothing to contribute, so the file must not be rewritten at all.
+func TestAddFavoriteWithoutIDStampsNothing(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	if err := saveFavorites(favPath, []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+	before, err := os.ReadFile(favPath)
+	if err != nil {
+		t.Fatalf("read favorites: %v", err)
+	}
+
+	err = addFavorite(favPath, Album{Artist: "Miles Davis", Title: "Kind of Blue"})
+	if !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
+	}
+
+	after, err := os.ReadFile(favPath)
+	if err != nil {
+		t.Fatalf("read favorites: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("favorites.json changed:\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+// TestAddFavoriteAlreadyIDdStampsNothing: both sides carry the same ID, so
+// there is nothing to fill in and no reason to touch the file.
+func TestAddFavoriteAlreadyIDdStampsNothing(t *testing.T) {
+	favPath := filepath.Join(t.TempDir(), "favorites.json")
+
+	if err := saveFavorites(favPath, []Album{{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
+		t.Fatalf("saveFavorites: %v", err)
+	}
+	before, err := os.ReadFile(favPath)
+	if err != nil {
+		t.Fatalf("read favorites: %v", err)
+	}
+
+	err = addFavorite(favPath, Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue (1959)"})
+	if !errors.Is(err, ErrAlreadyInFavorites) {
+		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
+	}
+
+	after, err := os.ReadFile(favPath)
+	if err != nil {
+		t.Fatalf("read favorites: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("favorites.json changed:\nbefore: %s\nafter:  %s", before, after)
 	}
 }
