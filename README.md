@@ -37,8 +37,16 @@ disc-fortune --genre jazz
 disc-fortune --label blue-note
 disc-fortune --format 12\"
 
+# --format also matches a pressing's colour
+disc-fortune --format "blue translucent"
+
 # Combine filters
 disc-fortune --year 1970-1980 --genre jazz
+
+# Two pressings of one title can be identical in every field -- two
+# store-exclusive colours, say. --release-id names one exactly, and
+# needs no query beside it.
+disc-fortune favorite --release-id 1839278
 
 # Pick randomly from favorites only
 disc-fortune pick --favorites

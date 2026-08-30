@@ -264,6 +264,12 @@ type releaseLabel struct {
 type releaseFormat struct {
 	Name         string   `json:"name"`
 	Descriptions []string `json:"descriptions"`
+	// Text is the format's free-text qualifier, and it is where Discogs
+	// records a pressing's colour -- "Blue Translucent", "Coke Bottle
+	// Clear". Two store-exclusive colour variants of one album can be
+	// identical in every other field, so this is often the only thing that
+	// tells them apart.
+	Text string `json:"text"`
 }
 
 // releaseInfo represents the basic_information of a collection release.
@@ -330,6 +336,9 @@ func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]
 			for _, f := range r.BasicInformation.Formats {
 				formats = append(formats, f.Name)
 				formats = append(formats, f.Descriptions...)
+				if f.Text != "" {
+					formats = append(formats, f.Text)
+				}
 			}
 
 			albums = append(albums, Album{

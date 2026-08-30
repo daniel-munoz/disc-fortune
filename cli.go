@@ -59,18 +59,20 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 // unfavorite. Registering them in one place keeps their names and help text
 // from drifting apart between commands.
 type filterFlags struct {
-	year   *string
-	genre  *string
-	label  *string
-	format *string
+	year      *string
+	genre     *string
+	label     *string
+	format    *string
+	releaseID *int
 }
 
 func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 	return &filterFlags{
-		year:   fs.String("year", "", "Filter by year or year range (e.g., 1975 or 1970-1980)"),
-		genre:  fs.String("genre", "", "Filter by genre (case-insensitive substring match)"),
-		label:  fs.String("label", "", "Filter by label (case-insensitive substring match)"),
-		format: fs.String("format", "", "Filter by format (case-insensitive substring match)"),
+		year:      fs.String("year", "", "Filter by year or year range (e.g., 1975 or 1970-1980)"),
+		genre:     fs.String("genre", "", "Filter by genre (case-insensitive substring match)"),
+		label:     fs.String("label", "", "Filter by label (case-insensitive substring match)"),
+		format:    fs.String("format", "", "Filter by format or colour (case-insensitive substring match)"),
+		releaseID: fs.Int("release-id", 0, "Select one exact record by its Discogs release ID"),
 	}
 }
 
@@ -80,16 +82,25 @@ func (ff *filterFlags) Filter() (Filter, error) {
 		return Filter{}, err
 	}
 	return Filter{
-		Year:   *ff.year,
-		Genre:  *ff.genre,
-		Label:  *ff.label,
-		Format: *ff.format,
+		Year:      *ff.year,
+		Genre:     *ff.genre,
+		Label:     *ff.label,
+		Format:    *ff.format,
+		ReleaseID: *ff.releaseID,
 	}, nil
 }
 
-// any reports whether any filter flag was set.
-func (ff *filterFlags) any() bool {
+// anyNarrowing reports whether a filter that only *refines* a query was set.
+// Those cannot stand alone: --year 1959 does not say which record is meant.
+// --release-id is deliberately excluded, because it identifies one exact
+// record and needs nothing beside it.
+func (ff *filterFlags) anyNarrowing() bool {
 	return *ff.year != "" || *ff.genre != "" || *ff.label != "" || *ff.format != ""
+}
+
+// identifies reports whether the flags name one exact record on their own.
+func (ff *filterFlags) identifies() bool {
+	return *ff.releaseID != 0
 }
 
 // defaultHistoryLimit is how many past picks `history` shows with no argument.
@@ -186,7 +197,9 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 	}
 
 	if len(rest) == 0 {
-		if ff.any() {
+		// A release ID is a complete answer by itself, so it excuses the
+		// missing query -- and carries any narrowing filters along with it.
+		if ff.anyNarrowing() && !ff.identifies() {
 			return favoriteConfig{}, fmt.Errorf("%s: filters require a query", name)
 		}
 		return favoriteConfig{filter: filter, color: color}, nil
@@ -400,7 +413,8 @@ Global flags (accepted by every command):
 const filterFlagHelp = `  --year VALUE     Filter by year or year range (e.g., 1975 or 1970-1980)
   --genre VALUE    Filter by genre (case-insensitive substring match)
   --label VALUE    Filter by label (case-insensitive substring match)
-  --format VALUE   Filter by format (case-insensitive substring match)`
+  --format VALUE   Filter by format or colour (case-insensitive substring match)
+  --release-id N   Select one exact record by its Discogs release ID`
 
 func init() {
 	commands = []command{
@@ -501,10 +515,13 @@ Shows the last N picks. N defaults to 10; 0 shows all of them.`,
 
 With no QUERY, favorites the last pick. With a QUERY, favorites the one
 album in your collection whose "Artist - Title" contains it, case-insensitively.
-If the query matches several albums, they are listed and nothing is added;
-narrow it with filters.
+If the query matches several albums, they are listed with their release IDs
+and nothing is added; narrow it with filters, or name one with --release-id.
 
-Flags (only valid alongside a QUERY):
+Two pressings of a title can be identical in every other field -- two
+store-exclusive colours, say -- so --release-id is the one that always works.
+
+Flags (the filters narrow a QUERY; --release-id needs none):
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseFavorite("favorite", args)
@@ -524,7 +541,7 @@ With no QUERY, unfavorites the last pick. With a QUERY, removes the one
 favorite whose "Artist - Title" contains it, case-insensitively. Removing
 something that is not favorited succeeds quietly.
 
-Flags (only valid alongside a QUERY):
+Flags (the filters narrow a QUERY; --release-id needs none):
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseFavorite("unfavorite", args)

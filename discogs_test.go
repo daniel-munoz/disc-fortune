@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -279,5 +280,85 @@ func TestGetCollectionReleasesCapturesReleaseID(t *testing.T) {
 	}
 	if albums[0].ReleaseID != 12345 {
 		t.Errorf("ReleaseID = %d, want 12345 (basic_information.id)", albums[0].ReleaseID)
+	}
+}
+
+// TestGetCollectionReleasesCapturesFormatText: Discogs records a pressing's
+// colour in basic_information.formats[].text, not in descriptions. Discarding
+// it is why two colour variants used to render identically, so --format has
+// to see it.
+func TestGetCollectionReleasesCapturesFormatText(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{
+			"pagination": {"pages": 1},
+			"releases": [
+				{
+					"basic_information": {
+						"id": 1839278,
+						"title": "Souvlaki",
+						"artists": [{"name": "Slowdive"}],
+						"formats": [
+							{"name": "Vinyl", "descriptions": ["LP", "Album"], "text": "Blue Translucent"}
+						]
+					}
+				}
+			]
+		}`)
+	})
+
+	client, srv := newTestClient(mux)
+	defer srv.Close()
+
+	origBase := discogsBaseURL
+	setBaseURL(srv.URL)
+	defer setBaseURL(origBase)
+
+	albums, err := client.getCollectionReleases("testuser", 0)
+	if err != nil {
+		t.Fatalf("getCollectionReleases: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("got %d albums, want 1", len(albums))
+	}
+
+	want := []string{"Vinyl", "LP", "Album", "Blue Translucent"}
+	if !reflect.DeepEqual(albums[0].Formats, want) {
+		t.Errorf("Formats = %v, want %v", albums[0].Formats, want)
+	}
+
+	// The whole point: --format now finds it.
+	if got := (Filter{Format: "blue"}).Apply(albums); len(got) != 1 {
+		t.Errorf("Filter{Format: \"blue\"} matched %d albums, want 1", len(got))
+	}
+}
+
+// An absent or empty text field must not add a blank entry.
+func TestGetCollectionReleasesSkipsEmptyFormatText(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{
+			"pagination": {"pages": 1},
+			"releases": [
+				{"basic_information": {"id": 1, "title": "Nowhere", "artists": [{"name": "Ride"}],
+				 "formats": [{"name": "Vinyl", "descriptions": ["LP"]}]}}
+			]
+		}`)
+	})
+
+	client, srv := newTestClient(mux)
+	defer srv.Close()
+
+	origBase := discogsBaseURL
+	setBaseURL(srv.URL)
+	defer setBaseURL(origBase)
+
+	albums, err := client.getCollectionReleases("testuser", 0)
+	if err != nil {
+		t.Fatalf("getCollectionReleases: %v", err)
+	}
+	want := []string{"Vinyl", "LP"}
+	if !reflect.DeepEqual(albums[0].Formats, want) {
+		t.Errorf("Formats = %v, want %v", albums[0].Formats, want)
 	}
 }

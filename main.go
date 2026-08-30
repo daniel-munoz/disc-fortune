@@ -65,9 +65,29 @@ func selectAlbums(cfg selection) []Album {
 	return cfg.filter.Apply(albums)
 }
 
+// formatMatch formats one candidate of an ambiguous query: the album, plus
+// its release ID on a dim line of its own. Two pressings of a title can be
+// identical in artist, title, year, label, catalogue number and genre -- two
+// store-exclusive colours, say -- and then the ID is the only thing that
+// tells them apart, as well as the only thing --release-id can act on.
+func formatMatch(album Album, useColor bool) string {
+	out := formatAlbum(album, useColor)
+	if album.ReleaseID == 0 {
+		return out
+	}
+	line := fmt.Sprintf("release %d", album.ReleaseID)
+	if useColor {
+		line = colorDim + line + colorReset
+	}
+	return out + "\n" + line
+}
+
 // formatList formats a slice of albums for list display.
 // Albums are separated by blank lines; a count summary is appended.
-func formatList(albums []Album, useColor bool) string {
+//
+// showIDs is set only where the user has to choose between candidates. Plain
+// `list` leaves it off, so everyday output is unchanged.
+func formatList(albums []Album, useColor, showIDs bool) string {
 	if len(albums) == 0 {
 		return "No albums match the specified filters\n"
 	}
@@ -76,7 +96,11 @@ func formatList(albums []Album, useColor bool) string {
 		if i > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(formatAlbum(album, useColor))
+		if showIDs {
+			sb.WriteString(formatMatch(album, useColor))
+		} else {
+			sb.WriteString(formatAlbum(album, useColor))
+		}
 	}
 	noun := "albums"
 	if len(albums) == 1 {
@@ -107,7 +131,7 @@ func runPick(cfg selection) {
 
 func runList(cfg selection) {
 	albums := selectAlbums(cfg)
-	out := formatList(albums, stdoutColor(cfg.color))
+	out := formatList(albums, stdoutColor(cfg.color), false)
 	if len(albums) == 0 {
 		fmt.Fprint(os.Stderr, out)
 		os.Exit(1)
@@ -129,8 +153,20 @@ func runHistory(cfg historyConfig) {
 	fmt.Print(formatHistory(entries, limit, stdoutColor(cfg.color)))
 }
 
+// describe names what the user actually asked for, for messages about
+// finding nothing. Without it a query-less --release-id is reported as an
+// empty query.
+func (cfg favoriteConfig) describe() string {
+	if cfg.query == "" && cfg.filter.ReleaseID != 0 {
+		return fmt.Sprintf("release %d", cfg.filter.ReleaseID)
+	}
+	return fmt.Sprintf("%q", cfg.query)
+}
+
 func runFavorite(cfg favoriteConfig) {
-	if cfg.query == "" {
+	// An empty query means "the last pick" -- unless --release-id already
+	// names a record, which is a selection in its own right.
+	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
 		favoriteLastPick()
 		return
 	}
@@ -147,16 +183,17 @@ func runFavorite(cfg favoriteConfig) {
 	case FavoriteAlreadyFav:
 		fmt.Println("Already in favorites")
 	case FavoriteNoMatch:
-		fatal("No albums match query %q", cfg.query)
+		fatal("No albums match %s", cfg.describe())
 	case FavoriteMultiMatch:
-		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color)))
-		fmt.Fprintln(os.Stderr, "Be more specific or add filters.")
+		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color), true))
+		fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
 		os.Exit(1)
 	}
 }
 
 func runUnfavorite(cfg favoriteConfig) {
-	if cfg.query == "" {
+	// As in runFavorite: --release-id is a selection, not a missing query.
+	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
 		unfavoriteLastPick()
 		return
 	}
@@ -171,7 +208,7 @@ func runUnfavorite(cfg favoriteConfig) {
 		fatal("Error loading favorites: %v", err)
 	}
 	if errors.Is(err, errNoFavorites) {
-		fmt.Printf("No favorites match %q - nothing to remove.\n", cfg.query)
+		fmt.Printf("No favorites match %s - nothing to remove.\n", cfg.describe())
 		return
 	}
 
@@ -185,10 +222,10 @@ func runUnfavorite(cfg favoriteConfig) {
 		fmt.Printf("Removed from favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
 	case UnfavoriteNoMatch:
 		// Removal is idempotent: nothing to remove is a success.
-		fmt.Printf("No favorites match %q - nothing to remove.\n", cfg.query)
+		fmt.Printf("No favorites match %s - nothing to remove.\n", cfg.describe())
 	case UnfavoriteMultiMatch:
-		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color)))
-		fmt.Fprintln(os.Stderr, "Be more specific or add filters.")
+		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color), true))
+		fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
 		os.Exit(1)
 	}
 }

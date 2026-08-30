@@ -125,3 +125,28 @@ func TestEveryCommandRejectsInvalidColor(t *testing.T) {
 		}
 	}
 }
+
+// TestFilterFlagsAreDocumented is the drift guard the filter flags lacked.
+// Their help text is hand-written into each usage block rather than generated
+// from the FlagSet, so adding a flag silently leaves every usage block stale
+// -- which is exactly what happened when --release-id was added.
+func TestFilterFlagsAreDocumented(t *testing.T) {
+	filterFlagNames := []string{"--year", "--genre", "--label", "--format", "--release-id"}
+
+	documented := 0
+	for _, c := range commands {
+		// A command takes the filter flags if it documents any of them.
+		if !strings.Contains(c.usage, "--year") {
+			continue
+		}
+		documented++
+		for _, name := range filterFlagNames {
+			if !strings.Contains(c.usage, name) {
+				t.Errorf("%s usage does not mention %s", c.name, name)
+			}
+		}
+	}
+	if documented == 0 {
+		t.Fatal("no command documents the filter flags; the guard is not testing anything")
+	}
+}

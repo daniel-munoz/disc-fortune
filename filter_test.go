@@ -186,3 +186,35 @@ func TestFilterQueryStillMatchesWithReleaseID(t *testing.T) {
 		t.Fatalf("Apply() = %+v, want the Slowdive release", got)
 	}
 }
+
+// TestFilterReleaseIDMatchesExactly: the ID is an identity, not a search
+// term, so it matches whole values rather than substrings -- 183 must not
+// match 1839278.
+func TestFilterReleaseIDMatchesExactly(t *testing.T) {
+	albums := []Album{
+		{ReleaseID: 1839278, Artist: "Slowdive", Title: "Souvlaki"},
+		{ReleaseID: 183, Artist: "Ride", Title: "Nowhere"},
+	}
+
+	got := Filter{ReleaseID: 1839278}.Apply(albums)
+	if len(got) != 1 || got[0].ReleaseID != 1839278 {
+		t.Fatalf("Apply() = %+v, want only release 1839278", got)
+	}
+
+	if got := (Filter{ReleaseID: 999}).Apply(albums); len(got) != 0 {
+		t.Errorf("Apply() = %+v, want no matches for an unknown ID", got)
+	}
+}
+
+// TestFilterReleaseIDZeroIsUnset: zero means "not filtering", not "match the
+// entries that have no ID".
+func TestFilterReleaseIDZeroIsUnset(t *testing.T) {
+	albums := []Album{
+		{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"},
+		{Artist: "Ride", Title: "Nowhere"},
+	}
+
+	if got := (Filter{}).Apply(albums); len(got) != 2 {
+		t.Errorf("Apply() = %+v, want both albums", got)
+	}
+}

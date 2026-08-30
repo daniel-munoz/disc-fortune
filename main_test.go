@@ -15,7 +15,7 @@ func TestRunListOutput(t *testing.T) {
 		{Artist: "Slowdive", Title: "Souvlaki", Year: 1993, Label: "Creation Records", Genres: []string{"Shoegaze"}},
 		{Artist: "Ride", Title: "Nowhere", Year: 1990, Label: "Creation Records", Genres: []string{"Shoegaze"}},
 	}
-	out := formatList(albums, false)
+	out := formatList(albums, false, false)
 	if !strings.Contains(out, "Slowdive") {
 		t.Errorf("output missing Slowdive: %q", out)
 	}
@@ -28,7 +28,7 @@ func TestRunListOutput(t *testing.T) {
 }
 
 func TestRunListEmpty(t *testing.T) {
-	out := formatList([]Album{}, false)
+	out := formatList([]Album{}, false, false)
 	if !strings.Contains(out, "No albums") {
 		t.Errorf("expected empty message, got: %q", out)
 	}
@@ -39,7 +39,7 @@ func TestRunListSeparator(t *testing.T) {
 		{Artist: "A", Title: "X"},
 		{Artist: "B", Title: "Y"},
 	}
-	out := formatList(albums, false)
+	out := formatList(albums, false, false)
 	// There should be a blank line between the two entries
 	if !strings.Contains(out, "\n\n") {
 		t.Errorf("expected blank line separator between entries: %q", out)
@@ -47,7 +47,7 @@ func TestRunListSeparator(t *testing.T) {
 }
 
 func TestRunListSingular(t *testing.T) {
-	out := formatList([]Album{{Artist: "A", Title: "X"}}, false)
+	out := formatList([]Album{{Artist: "A", Title: "X"}}, false, false)
 	if !strings.Contains(out, "1 album") {
 		t.Errorf("expected singular 'album', got: %q", out)
 	}
@@ -393,7 +393,7 @@ func TestFailureDiagnosticsGoToStderr(t *testing.T) {
 		if strings.Contains(stdout, "Be more specific") {
 			t.Errorf("stdout = %q, want the trailer moved off stdout", stdout)
 		}
-		if !strings.Contains(stderr, "Be more specific or add filters.") {
+		if !strings.Contains(stderr, "Be more specific, add filters, or use --release-id.") {
 			t.Errorf("stderr = %q, want the trailer", stderr)
 		}
 	})
@@ -413,8 +413,136 @@ func TestFailureDiagnosticsGoToStderr(t *testing.T) {
 		if strings.Contains(stdout, "Be more specific") {
 			t.Errorf("stdout = %q, want the trailer moved off stdout", stdout)
 		}
-		if !strings.Contains(stderr, "Be more specific or add filters.") {
+		if !strings.Contains(stderr, "Be more specific, add filters, or use --release-id.") {
 			t.Errorf("stderr = %q, want the trailer", stderr)
+		}
+	})
+}
+
+// TestFormatListHidesIDsByDefault: everyday list output is unchanged from
+// v2.2.0 -- the release ID stays out of it.
+func TestFormatListHidesIDsByDefault(t *testing.T) {
+	albums := []Album{{ReleaseID: 1839278, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}}
+
+	got := formatList(albums, false, false)
+	if strings.Contains(got, "1839278") || strings.Contains(got, "release") {
+		t.Errorf("formatList showed the ID:\n%s", got)
+	}
+}
+
+// TestFormatListShowsIDsWhenAsked: at a multi-match the ID is the only thing
+// that can tell two identical-looking pressings apart, and the only thing
+// --release-id can act on.
+func TestFormatListShowsIDsWhenAsked(t *testing.T) {
+	albums := []Album{
+		{ReleaseID: 1839278, Artist: "Slowdive", Title: "Souvlaki", Year: 1993},
+		{ReleaseID: 9112233, Artist: "Slowdive", Title: "Souvlaki", Year: 1993},
+	}
+
+	got := formatList(albums, false, true)
+	for _, want := range []string{"release 1839278", "release 9112233"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("formatList missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// An entry with no ID -- written before v2.2.0 -- has nothing to show, and
+// must not render a bare "release 0".
+func TestFormatListOmitsAbsentIDs(t *testing.T) {
+	albums := []Album{{Artist: "Slowdive", Title: "Souvlaki"}}
+
+	got := formatList(albums, false, true)
+	if strings.Contains(got, "release") {
+		t.Errorf("formatList showed a release line for an un-ID'd entry:\n%s", got)
+	}
+}
+
+// TestReleaseIDSelectsWithoutAQuery covers the routing, not just the parsing:
+// runFavorite sends an empty query to the last pick, so a --release-id with
+// no query has to be recognised there too, or the flag is silently ignored.
+func TestReleaseIDSelectsWithoutAQuery(t *testing.T) {
+	blue := Album{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}
+	clear := Album{ReleaseID: 222, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}
+
+	t.Run("favorite", func(t *testing.T) {
+		home := t.TempDir()
+		collection, favorites, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{blue, clear})
+
+		code, stdout, stderr := runHelperSplit(t, home, "favorite", "--release-id", "222")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, stdout, stderr)
+		}
+
+		favs, err := loadFavorites(favorites)
+		if err != nil {
+			t.Fatalf("loadFavorites: %v", err)
+		}
+		if len(favs) != 1 || favs[0].ReleaseID != 222 {
+			t.Errorf("favorites = %+v, want only release 222", favs)
+		}
+	})
+
+	t.Run("unfavorite", func(t *testing.T) {
+		home := t.TempDir()
+		collection, favorites, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{blue, clear})
+		if err := saveFavorites(favorites, []Album{blue, clear}); err != nil {
+			t.Fatalf("saveFavorites: %v", err)
+		}
+
+		code, stdout, stderr := runHelperSplit(t, home, "unfavorite", "--release-id", "222")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, stdout, stderr)
+		}
+
+		favs, err := loadFavorites(favorites)
+		if err != nil {
+			t.Fatalf("loadFavorites: %v", err)
+		}
+		if len(favs) != 1 || favs[0].ReleaseID != 111 {
+			t.Errorf("favorites = %+v, want only release 111 left", favs)
+		}
+	})
+}
+
+// TestNoMatchMessageNamesTheReleaseID: a query-less --release-id would
+// otherwise be reported as an empty query -- 'No albums match query ""'.
+func TestNoMatchMessageNamesTheReleaseID(t *testing.T) {
+	album := Album{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"}
+
+	t.Run("favorite", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{album})
+
+		code, _, stderr := runHelperSplit(t, home, "favorite", "--release-id", "999")
+		if code != 1 {
+			t.Fatalf("exit code = %d, want 1", code)
+		}
+		if !strings.Contains(stderr, "release 999") {
+			t.Errorf("stderr = %q, want it to name release 999", stderr)
+		}
+		if strings.Contains(stderr, `""`) {
+			t.Errorf("stderr = %q, reports an empty query", stderr)
+		}
+	})
+
+	t.Run("unfavorite", func(t *testing.T) {
+		home := t.TempDir()
+		collection, favorites, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{album})
+		if err := saveFavorites(favorites, []Album{album}); err != nil {
+			t.Fatalf("saveFavorites: %v", err)
+		}
+
+		code, stdout, _ := runHelperSplit(t, home, "unfavorite", "--release-id", "999")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0 (removal is idempotent)", code)
+		}
+		if !strings.Contains(stdout, "release 999") {
+			t.Errorf("stdout = %q, want it to name release 999", stdout)
 		}
 	})
 }

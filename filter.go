@@ -8,16 +8,24 @@ import (
 
 // Filter represents album filtering criteria.
 type Filter struct {
-	Query  string
-	Year   string
-	Genre  string
-	Label  string
+	Query string
+	Year  string
+	Genre string
+	Label string
+	// Format matches any entry of Album.Formats, which includes the format
+	// name, its descriptions, and its free text -- the last being where
+	// Discogs records a pressing's colour.
 	Format string
+	// ReleaseID selects one exact record. Zero means unset. Unlike the
+	// filters above it identifies rather than narrows, which is why it is
+	// compared whole rather than by substring and why it needs no query
+	// alongside it.
+	ReleaseID int
 }
 
 // Apply filters albums based on criteria.
 func (f Filter) Apply(albums []Album) []Album {
-	if f.Query == "" && f.Year == "" && f.Genre == "" && f.Label == "" && f.Format == "" {
+	if f.Query == "" && f.Year == "" && f.Genre == "" && f.Label == "" && f.Format == "" && f.ReleaseID == 0 {
 		return albums
 	}
 
@@ -31,6 +39,9 @@ func (f Filter) Apply(albums []Album) []Album {
 }
 
 func (f Filter) matches(album Album) bool {
+	if f.ReleaseID != 0 && album.ReleaseID != f.ReleaseID {
+		return false
+	}
 	if f.Query != "" && !f.matchesQuery(album) {
 		return false
 	}

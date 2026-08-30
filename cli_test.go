@@ -102,8 +102,8 @@ func TestFilterFlagsBuildsFilter(t *testing.T) {
 	if filter.Year != "1970-1980" || filter.Genre != "jazz" {
 		t.Errorf("filter = %+v, want Year=1970-1980 Genre=jazz", filter)
 	}
-	if !ff.any() {
-		t.Error("any() = false, want true")
+	if !ff.anyNarrowing() {
+		t.Error("anyNarrowing() = false, want true")
 	}
 }
 
@@ -118,14 +118,33 @@ func TestFilterFlagsRejectsBadYear(t *testing.T) {
 	}
 }
 
-func TestFilterFlagsAnyFalseWhenUnset(t *testing.T) {
+func TestFilterFlagsNoneSetWhenUnset(t *testing.T) {
 	fs, _ := newFlagSet("pick")
 	ff := addFilterFlags(fs)
 	if _, err := parseInterspersed(fs, nil); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
-	if ff.any() {
-		t.Error("any() = true, want false when no filter flags set")
+	if ff.anyNarrowing() {
+		t.Error("anyNarrowing() = true, want false when no filter flags set")
+	}
+	if ff.identifies() {
+		t.Error("identifies() = true, want false when no filter flags set")
+	}
+}
+
+// TestFilterFlagsReleaseIDIsNotNarrowing pins the distinction the query rule
+// depends on: --release-id identifies, it does not narrow.
+func TestFilterFlagsReleaseIDIsNotNarrowing(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	if _, err := parseInterspersed(fs, []string{"--release-id", "1839278"}); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	if ff.anyNarrowing() {
+		t.Error("anyNarrowing() = true, want false for --release-id alone")
+	}
+	if !ff.identifies() {
+		t.Error("identifies() = false, want true for --release-id")
 	}
 }
 
@@ -599,5 +618,75 @@ func TestHandleParseErrWrappedHelpFlag(t *testing.T) {
 func TestHandleParseErrNilIsNotHandled(t *testing.T) {
 	if handleParseErr("pick", nil) {
 		t.Error("handleParseErr(nil) = true, want false")
+	}
+}
+
+// TestFavoriteAcceptsReleaseIDWithoutQuery: --release-id identifies one exact
+// record, so demanding a redundant query alongside it would be pointless.
+func TestFavoriteAcceptsReleaseIDWithoutQuery(t *testing.T) {
+	cfg, err := parseFavorite("favorite", []string{"--release-id", "1839278"})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if cfg.filter.ReleaseID != 1839278 {
+		t.Errorf("filter.ReleaseID = %d, want 1839278", cfg.filter.ReleaseID)
+	}
+	if cfg.query != "" {
+		t.Errorf("query = %q, want empty", cfg.query)
+	}
+}
+
+func TestUnfavoriteAcceptsReleaseIDWithoutQuery(t *testing.T) {
+	cfg, err := parseFavorite("unfavorite", []string{"--release-id", "1839278"})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if cfg.filter.ReleaseID != 1839278 {
+		t.Errorf("filter.ReleaseID = %d, want 1839278", cfg.filter.ReleaseID)
+	}
+}
+
+// TestFavoriteStillRequiresQueryForNarrowingFilters: the narrowing filters
+// only refine a query, so on their own they still cannot say which record is
+// meant. This behavior is unchanged from v2.2.0.
+func TestFavoriteStillRequiresQueryForNarrowingFilters(t *testing.T) {
+	for _, args := range [][]string{
+		{"--year", "1959"},
+		{"--genre", "jazz"},
+		{"--label", "columbia"},
+		{"--format", "blue"},
+	} {
+		_, err := parseFavorite("favorite", args)
+		if err == nil {
+			t.Errorf("parseFavorite(%v): expected an error, got none", args)
+			continue
+		}
+		if !strings.Contains(err.Error(), "filters require a query") {
+			t.Errorf("parseFavorite(%v) error = %q, want it to mention a query", args, err)
+		}
+	}
+}
+
+// A release ID alongside narrowing filters is still fine: the ID wins and the
+// rest simply agree or exclude it.
+func TestFavoriteAcceptsReleaseIDWithNarrowingFilters(t *testing.T) {
+	cfg, err := parseFavorite("favorite", []string{"--release-id", "1839278", "--year", "1993"})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if cfg.filter.ReleaseID != 1839278 || cfg.filter.Year != "1993" {
+		t.Errorf("filter = %+v, want both the ID and the year", cfg.filter)
+	}
+}
+
+func TestSelectionAcceptsReleaseID(t *testing.T) {
+	for _, name := range []string{"pick", "list"} {
+		cfg, err := parseSelection(name, []string{"--release-id", "1839278"})
+		if err != nil {
+			t.Fatalf("parseSelection(%s): %v", name, err)
+		}
+		if cfg.filter.ReleaseID != 1839278 {
+			t.Errorf("%s: filter.ReleaseID = %d, want 1839278", name, cfg.filter.ReleaseID)
+		}
 	}
 }
