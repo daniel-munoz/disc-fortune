@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const version = "2.1.1"
+const version = "2.2.0"
 
 // fatal prints an error message to stderr and exits.
 func fatal(format string, args ...any) {
