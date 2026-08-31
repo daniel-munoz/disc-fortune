@@ -116,7 +116,23 @@ func runPick(cfg selection) {
 		fatal("No albums match the specified filters")
 	}
 
-	album := randomAlbum(albums)
+	// History is read for the decision and then read again by addToHistory,
+	// which takes its own lock. Deciding from a marginally stale history is
+	// harmless, and it means no lock is held across the decision.
+	entries, err := loadHistory(historyPath())
+	if err != nil {
+		fatal("Error loading history: %v", err)
+	}
+
+	if cfg.unheard {
+		albums = unheardOnly(albums, entries)
+		if len(albums) == 0 {
+			fatal("Every album matching your filters has already been played.\n" +
+				"Drop --unheard, or try `disc-fortune pick --draw stale` for whatever you have left longest.")
+		}
+	}
+
+	album := pickAlbum(albums, entries, cfg.draw, newRNG())
 
 	if err := addToHistory(historyPath(), album); err != nil {
 		fatal("Error saving history: %v", err)

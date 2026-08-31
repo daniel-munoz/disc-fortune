@@ -546,3 +546,66 @@ func TestNoMatchMessageNamesTheReleaseID(t *testing.T) {
 		}
 	})
 }
+
+// mustSaveHistory and fixturePaths already exist in this file; runHelper
+// re-execs the test binary as the real CLI so os.Exit is observable.
+
+func TestPickUnheardExhaustedExitsOne(t *testing.T) {
+	home := t.TempDir()
+	collection, _, history := fixturePaths(home)
+
+	albums := []Album{
+		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
+		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
+	}
+	mustSaveCollection(t, collection, albums)
+	mustSaveHistory(t, history, []HistoryEntry{
+		{Album: albums[0], Timestamp: time.Now()},
+		{Album: albums[1], Timestamp: time.Now()},
+	})
+
+	code, stdout, stderr := runHelperSplit(t, home, "pick", "--unheard")
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "already been played") {
+		t.Errorf("stderr does not explain the exhaustion: %q", stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout should stay empty on failure, got %q", stdout)
+	}
+}
+
+func TestPickUnheardReturnsTheUnplayedOne(t *testing.T) {
+	home := t.TempDir()
+	collection, _, history := fixturePaths(home)
+
+	albums := []Album{
+		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
+		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
+	}
+	mustSaveCollection(t, collection, albums)
+	mustSaveHistory(t, history, []HistoryEntry{{Album: albums[0], Timestamp: time.Now()}})
+
+	code, stdout, _ := runHelperSplit(t, home, "pick", "--unheard")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "Ride") {
+		t.Errorf("stdout = %q, want the never-played album", stdout)
+	}
+}
+
+func TestPickRejectsBadDrawValue(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "A", Title: "1"}})
+
+	code, _, stderr := runHelperSplit(t, home, "pick", "--draw", "weighted")
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "--draw") {
+		t.Errorf("stderr does not mention --draw: %q", stderr)
+	}
+}

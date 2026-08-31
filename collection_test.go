@@ -94,24 +94,6 @@ func TestSaveCollectionCreatesDir(t *testing.T) {
 	}
 }
 
-func TestRandomAlbum(t *testing.T) {
-	albums := []Album{
-		{Artist: "A", Title: "1"},
-		{Artist: "B", Title: "2"},
-		{Artist: "C", Title: "3"},
-	}
-
-	// Run enough times to confirm it doesn't panic and returns valid albums.
-	seen := make(map[string]bool)
-	for range 100 {
-		a := randomAlbum(albums)
-		seen[a.Key()] = true
-	}
-	if len(seen) < 2 {
-		t.Errorf("expected multiple different albums over 100 picks, got %d unique", len(seen))
-	}
-}
-
 func TestLoadCollectionCheckedMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "collection.json")
 	_, err := loadCollectionChecked(path)

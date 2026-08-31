@@ -273,6 +273,25 @@ func TestStaleWeightsEmptyHistoryIsUniform(t *testing.T) {
 	}
 }
 
+// The uniform draw, which is what --draw any restores. This replaces the old
+// TestRandomAlbum from collection_test.go.
+func TestPickAlbumAnyReturnsValidAlbums(t *testing.T) {
+	albums := []Album{
+		{Artist: "A", Title: "1"},
+		{Artist: "B", Title: "2"},
+		{Artist: "C", Title: "3"},
+	}
+
+	seen := make(map[string]bool)
+	rng := seededRNG()
+	for range 100 {
+		seen[pickAlbum(albums, nil, drawAny, rng).Key()] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("expected multiple different albums over 100 picks, got %d unique", len(seen))
+	}
+}
+
 func TestWeightedIndexRespectsWeights(t *testing.T) {
 	counts := make([]int, 2)
 	rng := seededRNG()

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -121,10 +120,6 @@ func saveCollectionTo(path string, albums []Album) error {
 		return fmt.Errorf("encoding collection: %w", err)
 	}
 	return writeFileAtomic(path, data, collectionFilePerms)
-}
-
-func randomAlbum(albums []Album) Album {
-	return albums[rand.IntN(len(albums))]
 }
 
 var (
