@@ -249,6 +249,15 @@ decide whether to break.
 Wrapped call sites: `addToHistory`, `runBackfill`'s history read-modify-write, and
 `addFavorite` / `removeFavorite`.
 
+**Consequence for `migrate`.** The sidecars are new files in the config directory, and
+`migrateConfig` copies every regular file it finds there. It must skip them — they are
+scaffolding, not the user's data, and copying them would inflate its "moved N files"
+count — and then delete them from the source, because its closing best-effort
+`os.Remove(from)` only succeeds on an empty directory. Skipping without deleting would
+strand the legacy directory permanently. `hasData` is unaffected: it tests for the four
+named data files, not for directory emptiness, so a stray sidecar cannot capture
+directory resolution.
+
 **No nested acquisition.** Two `LOCK_EX` calls on the same path through two different
 file descriptors deadlock, even within one process. The call sites above are safe as
 written because `runBackfill` uses `loadHistory`/`saveHistory` and
