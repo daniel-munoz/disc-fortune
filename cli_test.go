@@ -690,3 +690,56 @@ func TestSelectionAcceptsReleaseID(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSelectionUnheardFlag(t *testing.T) {
+	for _, name := range []string{"pick", "list"} {
+		cfg, err := parseSelection(name, []string{"--unheard"})
+		if err != nil {
+			t.Fatalf("parseSelection(%q): %v", name, err)
+		}
+		if !cfg.unheard {
+			t.Errorf("%s: unheard = false, want true", name)
+		}
+	}
+}
+
+func TestParseSelectionDrawDefaultsToFresh(t *testing.T) {
+	cfg, err := parseSelection("pick", nil)
+	if err != nil {
+		t.Fatalf("parseSelection: %v", err)
+	}
+	if cfg.draw != drawFresh {
+		t.Errorf("draw = %v, want drawFresh", cfg.draw)
+	}
+}
+
+func TestParseSelectionDrawFlag(t *testing.T) {
+	cfg, err := parseSelection("pick", []string{"--draw", "stale"})
+	if err != nil {
+		t.Fatalf("parseSelection: %v", err)
+	}
+	if cfg.draw != drawStale {
+		t.Errorf("draw = %v, want drawStale", cfg.draw)
+	}
+}
+
+func TestParseSelectionRejectsBadDraw(t *testing.T) {
+	if _, err := parseSelection("pick", []string{"--draw", "weighted"}); err == nil {
+		t.Fatal("expected an error for an unknown --draw value")
+	}
+}
+
+// Nothing is drawn by `list`, so the flag must not be quietly accepted there.
+func TestParseSelectionRejectsDrawOnList(t *testing.T) {
+	if _, err := parseSelection("list", []string{"--draw", "stale"}); err == nil {
+		t.Fatal("expected list to reject --draw")
+	}
+}
+
+// --unheard reads history, which favorite and unfavorite have no business
+// loading. They take their flags from addFilterFlags, so this must stay true.
+func TestParseFavoriteRejectsUnheardFlag(t *testing.T) {
+	if _, err := parseFavorite("favorite", []string{"kind of blue", "--unheard"}); err == nil {
+		t.Fatal("expected favorite to reject --unheard")
+	}
+}

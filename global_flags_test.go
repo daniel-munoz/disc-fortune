@@ -150,3 +150,36 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 		t.Fatal("no command documents the filter flags; the guard is not testing anything")
 	}
 }
+
+// The commands that accept --unheard must document it, and the ones that do
+// not must not claim to. Same guard as TestFilterFlagsAreDocumented, for a
+// flag that is registered per-command rather than centrally.
+func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
+	for _, name := range []string{"pick", "list"} {
+		c := lookup(name)
+		if c == nil {
+			t.Fatalf("command %q not found", name)
+		}
+		if !strings.Contains(c.usage, "--unheard") {
+			t.Errorf("%s usage does not mention --unheard", name)
+		}
+	}
+	for _, name := range []string{"favorite", "unfavorite"} {
+		c := lookup(name)
+		if c == nil {
+			t.Fatalf("command %q not found", name)
+		}
+		if strings.Contains(c.usage, "--unheard") {
+			t.Errorf("%s documents --unheard but does not accept it", name)
+		}
+	}
+}
+
+func TestDrawFlagIsDocumentedOnPickOnly(t *testing.T) {
+	if c := lookup("pick"); !strings.Contains(c.usage, "--draw") {
+		t.Error("pick usage does not mention --draw")
+	}
+	if c := lookup("list"); strings.Contains(c.usage, "--draw") {
+		t.Error("list documents --draw but does not accept it")
+	}
+}

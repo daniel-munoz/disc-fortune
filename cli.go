@@ -128,8 +128,15 @@ var commands []command
 // selection is the parsed form of the flags shared by pick and list.
 type selection struct {
 	favoritesOnly bool
-	filter        Filter
-	color         colorMode
+	// unheard restricts to albums that have never been picked. It is a
+	// filter on the candidate set, like favoritesOnly, not a draw strategy
+	// -- which is what lets `list` have it too.
+	unheard bool
+	// draw is how pick chooses from the candidates. It is meaningless for
+	// list, which never sets it.
+	draw   drawMode
+	filter Filter
+	color  colorMode
 }
 
 // favoriteConfig is the parsed form of favorite and unfavorite. An empty query
@@ -154,6 +161,16 @@ type syncConfig struct {
 func parseSelection(name string, args []string) (selection, error) {
 	fs, gf := newFlagSet(name)
 	favoritesOnly := fs.Bool("favorites", false, "Restrict to favorites only")
+	unheard := fs.Bool("unheard", false, "Restrict to albums never picked before")
+
+	// --draw is registered only where something is actually drawn, so
+	// `list --draw stale` fails as an unknown flag rather than being
+	// accepted and silently ignored. Nothing else has to check for it.
+	var draw *string
+	if name != "list" {
+		draw = fs.String("draw", "fresh", "How to draw a pick: any, fresh, or stale")
+	}
+
 	ff := addFilterFlags(fs)
 
 	rest, err := parseInterspersed(fs, args)
@@ -171,7 +188,23 @@ func parseSelection(name string, args []string) (selection, error) {
 	if err != nil {
 		return selection{}, fmt.Errorf("%s: %v", name, err)
 	}
-	return selection{favoritesOnly: *favoritesOnly, filter: filter, color: color}, nil
+
+	mode := drawFresh
+	if draw != nil {
+		m, err := parseDrawMode(*draw)
+		if err != nil {
+			return selection{}, fmt.Errorf("%s: %v", name, err)
+		}
+		mode = m
+	}
+
+	return selection{
+		favoritesOnly: *favoritesOnly,
+		unheard:       *unheard,
+		draw:          mode,
+		filter:        filter,
+		color:         color,
+	}, nil
 }
 
 func parseFavorite(name string, args []string) (favoriteConfig, error) {
@@ -427,8 +460,15 @@ func init() {
 Prints one random album from your collection and records it in history.
 This is what runs when you give no command at all.
 
+By default a pick avoids the records you played most recently, so the same
+album does not come back around twice in a week. --draw any turns that off.
+
 Flags:
   --favorites      Pick from favorites only
+  --unheard        Pick only from albums you have never picked
+  --draw WHEN      How to draw: fresh (default), any, or stale.
+                   fresh skips your recent picks; any ignores history
+                   entirely; stale favors what you have left longest.
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseSelection("pick", args)
@@ -448,6 +488,7 @@ Prints every album matching the filters, with a count.
 
 Flags:
   --favorites      List favorites only
+  --unheard        List only albums you have never picked
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseSelection("list", args)
