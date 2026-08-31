@@ -130,3 +130,37 @@ func TestRecentlyPlayedZeroWindow(t *testing.T) {
 		t.Errorf("len = %d, want 0", len(got))
 	}
 }
+
+func TestUnheardOnlyKeepsNeverPlayed(t *testing.T) {
+	played := Album{ReleaseID: 1, Artist: "A", Title: "1"}
+	fresh := Album{ReleaseID: 2, Artist: "B", Title: "2"}
+
+	got := unheardOnly([]Album{played, fresh}, histOf(played))
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1; got %+v", len(got), got)
+	}
+	if got[0].ReleaseID != 2 {
+		t.Errorf("kept release %d, want 2", got[0].ReleaseID)
+	}
+}
+
+func TestUnheardOnlyEmptyHistoryKeepsEverything(t *testing.T) {
+	pool := []Album{{ReleaseID: 1, Artist: "A", Title: "1"}, {ReleaseID: 2, Artist: "B", Title: "2"}}
+	if got := unheardOnly(pool, nil); len(got) != 2 {
+		t.Errorf("len = %d, want 2", len(got))
+	}
+}
+
+// A history entry with no release ID does not say which pressing was played,
+// so --unheard must not claim any of them is unheard.
+func TestUnheardOnlyIsConservativeAboutUnIDdEntries(t *testing.T) {
+	pool := []Album{
+		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
+		{ReleaseID: 2, Artist: "Slowdive", Title: "Souvlaki"},
+	}
+	entries := histOf(Album{Artist: "Slowdive", Title: "Souvlaki"})
+
+	if got := unheardOnly(pool, entries); len(got) != 0 {
+		t.Errorf("len = %d, want 0; an un-ID'd entry must hide every pressing of its title", len(got))
+	}
+}

@@ -97,3 +97,20 @@ func recentlyPlayed(entries []HistoryEntry, n int) []Album {
 	}
 	return recent
 }
+
+// unheardOnly returns the albums in pool that never appear in entries.
+//
+// Conservative by construction: a history entry with no release ID matches
+// every pressing of its title, so none of them count as unheard. Nothing in
+// the file says which pressing was actually played, and calling the others
+// unheard would assert more than the data supports. The backfill retires
+// these entries on the first sync after upgrade.
+func unheardOnly(pool []Album, entries []HistoryEntry) []Album {
+	var out []Album
+	for _, album := range pool {
+		if _, played := lastPlayedIndex(entries, album); !played {
+			out = append(out, album)
+		}
+	}
+	return out
+}
