@@ -499,8 +499,11 @@ func TestPickAlbumFreshExcludesRecent(t *testing.T) {
 	// The three most recent picks are releases 1, 2 and 3.
 	entries := histOf(pool[2], pool[1], pool[0])
 
+	// One generator for the whole loop: re-seeding inside it would draw the
+	// same value 200 times and assert nothing the first draw did not.
+	rng := seededRNG()
 	for range 200 {
-		got := pickAlbum(pool, entries, drawFresh, seededRNG())
+		got := pickAlbum(pool, entries, drawFresh, rng)
 		if got.ReleaseID <= 3 {
 			t.Fatalf("fresh returned release %d, which is inside the anti-repeat window", got.ReleaseID)
 		}
