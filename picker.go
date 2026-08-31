@@ -138,6 +138,26 @@ func pickAlbum(pool []Album, entries []HistoryEntry, mode drawMode, rng *rand.Ra
 	return candidates[rng.IntN(len(candidates))]
 }
 
+// entriesInPool keeps only the history entries whose album is still a
+// candidate, so the anti-repeat window is filled from the same set it is
+// sized against.
+//
+// Without this the two halves disagree. antiRepeatWindow counts the filtered
+// pool, but history is global: a plain `pick` between two `pick --favorites`
+// would spend the favorites window on a record that is not a favorite, and the
+// favorite played moments earlier would be immediately re-pickable. The same
+// went for records sold out of the collection, whose entries linger in history
+// forever and would quietly weaken every future pick.
+func entriesInPool(entries []HistoryEntry, pool []Album) []HistoryEntry {
+	kept := make([]HistoryEntry, 0, len(entries))
+	for _, e := range entries {
+		if containsAlbum(pool, e.Album) {
+			kept = append(kept, e)
+		}
+	}
+	return kept
+}
+
 // excludeRecent drops the recently played from pool, falling back to the whole
 // pool when that would leave nothing.
 //
@@ -146,7 +166,7 @@ func pickAlbum(pool []Album, entries []HistoryEntry, mode drawMode, rng *rand.Ra
 // pressing of its title: three identically-titled pressings and one un-ID'd
 // entry empty a pool with a window of one.
 func excludeRecent(pool []Album, entries []HistoryEntry) []Album {
-	recent := recentlyPlayed(entries, antiRepeatWindow(len(pool)))
+	recent := recentlyPlayed(entriesInPool(entries, pool), antiRepeatWindow(len(pool)))
 	if len(recent) == 0 {
 		return pool
 	}

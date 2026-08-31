@@ -756,3 +756,79 @@ func TestPickDefaultDrawAvoidsRepeatsAcrossSequentialRuns(t *testing.T) {
 		}
 	}
 }
+
+// TestPickFavoritesAntiRepeatSurvivesAnInterleavedUnfilteredPick guards the
+// agreement between the two halves of the anti-repeat window: it is SIZED from
+// the filtered pool, so it must also be FILLED from that pool.
+//
+// Neither test above catches this.
+// TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw only ever runs
+// consecutive `pick --favorites`, and TestPickDefaultDrawAvoidsRepeatsAcrossSequentialRuns
+// runs no filter at all -- so both stay green even if the window is filled
+// from unfiltered global history. When it is, a plain `pick` between two
+// favorites picks spends the favorites window on a record that is not a
+// favorite, and the favorite played moments earlier becomes immediately
+// re-pickable.
+//
+// The interleaved pick is deliberately `--genre filler`, not a bare `pick`.
+// A bare pick could land on a favorite, which would legitimately advance the
+// favorites window and make the assertion below wrong for the right reason.
+// Restricting it to the non-favorite genre keeps the favorites pool's own
+// history untouched, so with a 3-favorite pool (window 1) the two favorites
+// picks must always differ.
+//
+// The round count is deliberate. With the window filled correctly this test
+// never fails; with it filled from global history each round is an
+// independent 1-in-3 chance of drawing the same favorite again, so one round
+// would miss a regression two times in three. Fifteen rounds cut that to
+// roughly (2/3)^15, about one in 430.
+func TestPickFavoritesAntiRepeatSurvivesAnInterleavedUnfilteredPick(t *testing.T) {
+	home := t.TempDir()
+	collection, favoritesPath, _ := fixturePaths(home)
+
+	favs := []Album{
+		{ReleaseID: 1, Artist: "Aardvark", Title: "One", Genres: []string{"Jazz"}},
+		{ReleaseID: 2, Artist: "Bobcat", Title: "Two", Genres: []string{"Jazz"}},
+		{ReleaseID: 3, Artist: "Coyote", Title: "Three", Genres: []string{"Jazz"}},
+	}
+	others := []Album{
+		{ReleaseID: 101, Artist: "Dingo", Title: "Four", Genres: []string{"Filler"}},
+		{ReleaseID: 102, Artist: "Egret", Title: "Five", Genres: []string{"Filler"}},
+		{ReleaseID: 103, Artist: "Falcon", Title: "Six", Genres: []string{"Filler"}},
+		{ReleaseID: 104, Artist: "Gannet", Title: "Seven", Genres: []string{"Filler"}},
+	}
+	mustSaveCollection(t, collection, append(append([]Album{}, favs...), others...))
+	mustSaveFavorites(t, favoritesPath, favs)
+
+	firstLine := func(s string) string {
+		return strings.SplitN(strings.TrimSpace(s), "\n", 2)[0]
+	}
+
+	for round := 0; round < 15; round++ {
+		code, out, stderr := runHelperSplit(t, home, "pick", "--favorites")
+		if code != 0 {
+			t.Fatalf("round %d: first favorites pick exited %d (stderr: %q)", round, code, stderr)
+		}
+		before := firstLine(out)
+		if before == "" {
+			t.Fatalf("round %d: first favorites pick produced no stdout", round)
+		}
+
+		if code, _, stderr := runHelperSplit(t, home, "pick", "--genre", "filler"); code != 0 {
+			t.Fatalf("round %d: interleaved non-favorite pick exited %d (stderr: %q)", round, code, stderr)
+		}
+
+		code, out, stderr = runHelperSplit(t, home, "pick", "--favorites")
+		if code != 0 {
+			t.Fatalf("round %d: second favorites pick exited %d (stderr: %q)", round, code, stderr)
+		}
+		after := firstLine(out)
+		if after == "" {
+			t.Fatalf("round %d: second favorites pick produced no stdout", round)
+		}
+
+		if before == after {
+			t.Errorf("round %d: %q was re-picked immediately; the interleaved non-favorite pick consumed the favorites anti-repeat window", round, before)
+		}
+	}
+}

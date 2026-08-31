@@ -302,3 +302,48 @@ func TestWeightedIndexRespectsWeights(t *testing.T) {
 		t.Errorf("counts = %v, want index 1 drawn far more often", counts)
 	}
 }
+
+// The window is sized from the filtered pool, so it has to be filled from that
+// same pool. A plain `pick` between two `pick --favorites` must not consume the
+// window and let a just-played favorite straight back in.
+func TestExcludeRecentFillsTheWindowFromThePoolNotGlobalHistory(t *testing.T) {
+	pool := []Album{
+		{ReleaseID: 1, Artist: "Fav", Title: "One"},
+		{ReleaseID: 2, Artist: "Fav", Title: "Two"},
+		{ReleaseID: 3, Artist: "Fav", Title: "Three"},
+	}
+	outsider := Album{ReleaseID: 99, Artist: "Other", Title: "X"}
+
+	// Pool of 3 gives a window of 1. Release 1 is the most recent pick from
+	// within the pool; the outsider is the most recent pick overall.
+	kept := excludeRecent(pool, histOf(pool[0], outsider))
+
+	for _, a := range kept {
+		if a.ReleaseID == 1 {
+			t.Fatalf("release 1 was the most recent pick within the pool but survived exclusion; kept = %+v", kept)
+		}
+	}
+	if len(kept) != 2 {
+		t.Errorf("len(kept) = %d, want 2", len(kept))
+	}
+}
+
+// A history entry for a record that is no longer a candidate -- sold, or
+// outside the current filter -- must not occupy a window slot either.
+func TestExcludeRecentIgnoresHistoryOutsideThePool(t *testing.T) {
+	pool := poolOf(9) // window 3
+	gone := []Album{
+		{ReleaseID: 101, Artist: "Sold", Title: "A"},
+		{ReleaseID: 102, Artist: "Sold", Title: "B"},
+		{ReleaseID: 103, Artist: "Sold", Title: "C"},
+	}
+	// Three departed records are the most recent picks, then release 1.
+	entries := histOf(pool[0], gone[0], gone[1], gone[2])
+
+	kept := excludeRecent(pool, entries)
+	for _, a := range kept {
+		if a.ReleaseID == 1 {
+			t.Fatalf("release 1 survived exclusion; departed records consumed the window. kept = %+v", kept)
+		}
+	}
+}

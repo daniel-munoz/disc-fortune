@@ -186,6 +186,17 @@ Walk history backwards collecting *distinct* albums until `N` are found, exclude
 draw uniformly from the survivors. Distinct albums rather than raw entries: picking the
 same record ten times in a row should not spend the whole window on one album.
 
+**The window is filled from the same pool it is sized against.** History is global, so
+before the window is filled the entries are narrowed to those whose album is still a
+candidate. Skipping that step makes the two halves disagree: a plain `pick` between two
+`pick --favorites` would spend the favorites window on a record that is not a favorite,
+and the favorite played moments earlier would be immediately re-pickable — silently
+defeating anti-repeat for every filtered pick interleaved with picks from outside that
+filter. The same applied to records sold out of the collection, whose entries linger in
+history forever and would quietly weaken every future pick. `staleWeights` needs no such
+narrowing: it reads position in global history, and filtering changes the magnitudes but
+not their order.
+
 **`stale`** — `fresh`'s exclusion, then a weighted draw over the survivors:
 
 ```
