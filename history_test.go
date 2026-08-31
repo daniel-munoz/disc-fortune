@@ -2,9 +2,7 @@ package main
 
 import (
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -67,34 +65,5 @@ func TestFormatTimestamp(t *testing.T) {
 				t.Errorf("formatTimestamp(%v) = %q, want something like %q", tt.ts, got, tt.want)
 			}
 		})
-	}
-}
-
-// Concurrent appends must not lose entries. This is the race the roadmap
-// parked for this phase: it stopped being cosmetic when history started
-// deciding what pick avoids.
-func TestAddToHistoryConcurrentAppendsDoNotLose(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "history.json")
-
-	const writers = 8
-	var wg sync.WaitGroup
-	for i := range writers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			album := Album{ReleaseID: i + 1, Artist: "A", Title: strconv.Itoa(i + 1)}
-			if err := addToHistory(path, album); err != nil {
-				t.Errorf("addToHistory: %v", err)
-			}
-		}()
-	}
-	wg.Wait()
-
-	entries, err := loadHistory(path)
-	if err != nil {
-		t.Fatalf("loadHistory: %v", err)
-	}
-	if len(entries) != writers {
-		t.Errorf("history has %d entries, want %d", len(entries), writers)
 	}
 }

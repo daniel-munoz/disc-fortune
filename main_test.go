@@ -693,3 +693,66 @@ func TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw(t *testing.T) {
 		}
 	}
 }
+
+// TestPickDefaultDrawAvoidsRepeatsAcrossSequentialRuns closes a gap the unit
+// tests leave open: TestPickAlbumFreshExcludesRecent (picker_test.go) pins
+// pickAlbum directly, and TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw
+// above never asserts anti-repeat happened at all. Nothing exercises the
+// wiring at main.go's runPick -- pickAlbum(albums, entries, cfg.draw,
+// newRNG()) -- so a future change that hardcoded drawAny there, or dropped
+// draw from the selection parseSelection returns, would leave the whole
+// suite green while plain `disc-fortune` silently reverted to pre-2.3
+// behavior. This runs the real binary with no flags, the default this
+// release exists to ship.
+//
+// A pool of 6 gives antiRepeatWindow(6) == 6/3 == 2: each pick excludes the
+// two most recently played distinct albums. history.json persists across
+// these sequential runs against the same home, the way it does for a real
+// user, so by the third pick the window is in effect and stays in effect:
+// at pick k (0-indexed, k >= 2) the two most recent distinct albums are
+// excluded, so pick k must differ from both pick k-1 and pick k-2 -- i.e. no
+// album repeats within any 3 consecutive picks.
+func TestPickDefaultDrawAvoidsRepeatsAcrossSequentialRuns(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+
+	albums := []Album{
+		{ReleaseID: 1, Artist: "Aardvark", Title: "One"},
+		{ReleaseID: 2, Artist: "Bobcat", Title: "Two"},
+		{ReleaseID: 3, Artist: "Coyote", Title: "Three"},
+		{ReleaseID: 4, Artist: "Dingo", Title: "Four"},
+		{ReleaseID: 5, Artist: "Egret", Title: "Five"},
+		{ReleaseID: 6, Artist: "Falcon", Title: "Six"},
+	}
+	mustSaveCollection(t, collection, albums)
+
+	var picks []string
+	for i := 0; i < 6; i++ {
+		code, stdout, stderr := runHelperSplit(t, home, "pick")
+		if code != 0 {
+			t.Fatalf("run %d: exit code = %d, want 0 (stderr: %q)", i, code, stderr)
+		}
+		if stdout == "" {
+			t.Fatalf("run %d: stdout is empty", i)
+		}
+
+		// pick prints "Artist - Title" on the first line and a metadata
+		// line only when the album has metadata; these fixtures have none,
+		// but split on the first line anyway so the test does not depend
+		// on that.
+		line := stdout
+		if idx := strings.IndexByte(stdout, '\n'); idx >= 0 {
+			line = stdout[:idx]
+		}
+		picks = append(picks, line)
+
+		if i >= 2 {
+			if picks[i] == picks[i-1] {
+				t.Errorf("run %d: repeated the immediately preceding pick %q", i, picks[i])
+			}
+			if picks[i] == picks[i-2] {
+				t.Errorf("run %d: repeated pick %d within the 3-pick anti-repeat window: %q", i, i-2, picks[i])
+			}
+		}
+	}
+}

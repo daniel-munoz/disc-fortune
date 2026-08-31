@@ -147,7 +147,7 @@ disc-fortune pick --favorites --draw any
 disc-fortune pick --draw fresh   # default: skip the recently played
 disc-fortune pick --draw any     # uniform draw, history ignored entirely
 disc-fortune pick --draw stale   # skip the recently played, then favor
-                                  # whatever you have left unplayed longest
+                                 # whatever you have left unplayed longest
 ```
 
 `--unheard` restricts `pick` and `list` to albums that have never appeared
