@@ -130,6 +130,17 @@ matching four albums uses a window of one, not ten. A pool of one or two
 excludes nothing. That is what keeps a narrow filter from ever being
 narrowed into an empty set.
 
+This applies to `--favorites` too: it is still a hard filter — a
+non-favorite is never reachable, full stop — but the pool it produces is
+subject to the same default draw as any other filter's pool. So
+`disc-fortune pick --favorites` now avoids the favorites you played most
+recently. Add `--draw any` to get the exact old behavior, a uniform draw
+across your favorites with history ignored:
+
+```sh
+disc-fortune pick --favorites --draw any
+```
+
 `--draw` controls how a pick is drawn:
 
 ```sh
@@ -177,6 +188,10 @@ disc-fortune unfavorite
 # Remove a specific album from favorites
 disc-fortune unfavorite "kind of blue"
 ```
+
+`disc-fortune pick --favorites` stays a hard filter — see
+[Discovery](#discovery) for how the default anti-repeat draw applies to the
+pool it produces, and how to turn that off with `--draw any`.
 
 ### Exit codes
 

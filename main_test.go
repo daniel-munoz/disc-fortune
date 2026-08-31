@@ -655,3 +655,41 @@ func TestListUnheardExhaustedExitsOne(t *testing.T) {
 		t.Errorf("stdout should stay empty on failure, got %q", stdout)
 	}
 }
+
+// TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw guards the roadmap's
+// maintainer dissent: --favorites must never become a soft bias. The new
+// default anti-repeat draw runs over whatever pool a filter produces, and
+// --favorites is a filter like any other, so its pool is subject to that
+// draw too -- but the pool itself must never include a non-favorite. This
+// pins that a run of picks confined to --favorites, exercised across enough
+// draws to invoke the anti-repeat exclusion at least once, never returns the
+// one album that was left out of favorites.
+func TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw(t *testing.T) {
+	home := t.TempDir()
+	collection, favorites, _ := fixturePaths(home)
+
+	fav1 := Album{ReleaseID: 1, Artist: "Fav", Title: "One"}
+	fav2 := Album{ReleaseID: 2, Artist: "Fav", Title: "Two"}
+	fav3 := Album{ReleaseID: 3, Artist: "Fav", Title: "Three"}
+	nonFav := Album{ReleaseID: 4, Artist: "NotAFavorite", Title: "Excluded"}
+
+	mustSaveCollection(t, collection, []Album{fav1, fav2, fav3, nonFav})
+	mustSaveFavorites(t, favorites, []Album{fav1, fav2, fav3})
+
+	// history.json persists across these calls (each is a fresh process
+	// reading and writing the same fixture directory), so this both
+	// accumulates enough history to trigger the default exclusion window
+	// and exercises the draw's randomness across several picks.
+	for i := 0; i < 20; i++ {
+		code, stdout, stderr := runHelperSplit(t, home, "pick", "--favorites")
+		if code != 0 {
+			t.Fatalf("run %d: exit code = %d, want 0 (stderr: %q)", i, code, stderr)
+		}
+		if strings.Contains(stdout, "NotAFavorite") {
+			t.Fatalf("run %d: stdout picked the non-favorite: %q", i, stdout)
+		}
+		if !strings.Contains(stdout, "Fav") {
+			t.Fatalf("run %d: stdout did not pick a favorite: %q", i, stdout)
+		}
+	}
+}

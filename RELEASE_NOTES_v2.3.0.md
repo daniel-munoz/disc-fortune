@@ -69,14 +69,30 @@ or two albums excludes nothing at all. That arithmetic is deliberate, and it
 is why a narrow filter can never be narrowed into an empty set — the
 exclusion always leaves something to pick.
 
-## `--favorites` is unchanged
+## `--favorites` is still a hard filter
 
-`--favorites` stays exactly what it was: a hard filter, picking uniformly
-among your favorites with no history-awareness layered on top. Converting it
-to a soft bias was considered and rejected — anyone scripting against
-today's behavior would break with no warning, and if soft-weighted favorites
-turn out to be wanted later, that gets its own flag rather than silently
-changing this one.
+`--favorites` was never converted to a soft bias, and it never will be by
+accident: a non-favorite stays completely unpickable, exactly as before.
+Converting it to a soft weighting was considered and rejected — anyone
+scripting against today's hard-filter behavior would break with no warning,
+and if soft-weighted favorites turn out to be wanted later, that gets its
+own flag rather than silently changing this one.
+
+What *has* changed is what happens inside that filter. `--favorites` narrows
+the candidate pool the same way `--genre`, `--year` and `--label` do, and the
+new default draw applies to whatever pool a filter produces — favorites
+included. So `disc-fortune pick --favorites` now avoids the favorites you
+played most recently, the same anti-repeat behavior plain `disc-fortune`
+gets. Exempting `--favorites` from that would make it the one filter that
+behaves differently from every other, which is worse than the inconsistency
+it would avoid.
+
+If you need the exact v2.2.1 draw — uniform across your favorites, history
+ignored — combine the two flags:
+
+```sh
+disc-fortune pick --favorites --draw any
+```
 
 ## `sync` and concurrent picks no longer race
 

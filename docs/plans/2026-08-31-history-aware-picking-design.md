@@ -35,7 +35,9 @@ These are not preferences. Each one is a rule an earlier phase paid for.
   therefore a backwards scan that stops at the first hit.
 - **`--favorites` stays a hard filter.** The roadmap records the maintainer's dissent:
   silently converting it to a soft bias would break anyone scripting against today's
-  behavior with no warning. Its behavior must be byte-identical to v2.2.1.
+  behavior with no warning. `--favorites` remains a hard filter and non-favorites stay
+  unreachable, while the pool it produces is subject to the default draw like any other
+  filter's pool, and `--draw any` reproduces the v2.2.1 draw.
 - **`Album.Key()` stays `"Artist - Title"`.** It is the `--query` search text, not an
   identity.
 - **Global flags register in `newFlagSet`**; filter flags in `addFilterFlags`. A
