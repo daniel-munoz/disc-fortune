@@ -140,27 +140,45 @@ func plural(n int, one, many string) string {
 // would otherwise leave the user with changed favorites and nothing but a
 // warning telling them so.
 func runBackfill(favPath, histPath string, collection []Album) (string, error) {
-	favorites, err := loadFavorites(favPath)
-	if err != nil {
-		return "", fmt.Errorf("loading favorites: %w", err)
-	}
-	filledFavorites, favRes := backfillAlbums(favorites, collection)
-	if favRes.Updated > 0 {
-		if err := saveFavorites(favPath, filledFavorites); err != nil {
-			// Nothing landed, so there is nothing to report.
-			return "", fmt.Errorf("saving favorites: %w", err)
+	var favRes backfillResult
+	err := withFileLock(favPath, func() error {
+		favorites, err := loadFavorites(favPath)
+		if err != nil {
+			return fmt.Errorf("loading favorites: %w", err)
 		}
+		filled, res := backfillAlbums(favorites, collection)
+		favRes = res
+		if res.Updated == 0 {
+			return nil
+		}
+		if err := saveFavorites(favPath, filled); err != nil {
+			return fmt.Errorf("saving favorites: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		// Nothing landed, so there is nothing to report.
+		return "", err
 	}
 
-	history, err := loadHistory(histPath)
-	if err != nil {
-		return backfillSummary(favRes, backfillResult{}), fmt.Errorf("loading history: %w", err)
-	}
-	filledHistory, histRes := backfillHistory(history, collection)
-	if histRes.Updated > 0 {
-		if err := saveHistory(histPath, filledHistory); err != nil {
-			return backfillSummary(favRes, backfillResult{}), fmt.Errorf("saving history: %w", err)
+	var histRes backfillResult
+	err = withFileLock(histPath, func() error {
+		history, err := loadHistory(histPath)
+		if err != nil {
+			return fmt.Errorf("loading history: %w", err)
 		}
+		filled, res := backfillHistory(history, collection)
+		histRes = res
+		if res.Updated == 0 {
+			return nil
+		}
+		if err := saveHistory(histPath, filled); err != nil {
+			return fmt.Errorf("saving history: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return backfillSummary(favRes, backfillResult{}), err
 	}
 
 	return backfillSummary(favRes, histRes), nil

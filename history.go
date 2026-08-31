@@ -48,16 +48,21 @@ func saveHistory(path string, entries []HistoryEntry) error {
 }
 
 // addToHistory appends an album to history.
+//
+// The whole load-append-save runs under the file lock: `sync`'s backfill
+// rewrites this same file, and without the lock one of the two writes is lost.
 func addToHistory(path string, album Album) error {
-	entries, err := loadHistory(path)
-	if err != nil {
-		return err
-	}
-	entries = append(entries, HistoryEntry{
-		Album:     album,
-		Timestamp: time.Now(),
+	return withFileLock(path, func() error {
+		entries, err := loadHistory(path)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, HistoryEntry{
+			Album:     album,
+			Timestamp: time.Now(),
+		})
+		return saveHistory(path, entries)
 	})
-	return saveHistory(path, entries)
 }
 
 // formatTimestamp formats a timestamp as relative time or date.

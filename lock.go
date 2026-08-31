@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // lockFilePerms is what a lock sidecar is created with. It never holds data;
@@ -42,4 +43,10 @@ func withFileLock(path string, fn func() error) error {
 	defer func() { _ = unlockFD(f) }()
 
 	return fn()
+}
+
+// isLockSidecar reports whether name is one of the lock files withFileLock
+// creates. Anything enumerating the config directory has to skip them.
+func isLockSidecar(name string) bool {
+	return strings.HasSuffix(name, ".lock")
 }

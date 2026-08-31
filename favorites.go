@@ -48,45 +48,50 @@ func saveFavorites(path string, albums []Album) error {
 }
 
 // addFavorite adds an album to favorites if not already present.
+//
+// Locked for the same reason as addToHistory: `sync`'s backfill rewrites
+// favorites.json wholesale, and without the lock one of the two writes is lost.
 func addFavorite(path string, album Album) error {
-	favorites, err := loadFavorites(path)
-	if err != nil {
-		return err
-	}
-
-	// sameAlbum rather than Key: two pressings of one title are two
-	// favorites, but an entry written before release IDs existed is still
-	// the same record as its freshly synced self.
-	for i, fav := range favorites {
-		if !sameAlbum(fav, album) {
-			continue
+	return withFileLock(path, func() error {
+		favorites, err := loadFavorites(path)
+		if err != nil {
+			return err
 		}
 
-		// Replace a stored entry that predates release IDs with the one the
-		// user just named, so naming a specific pressing actually resolves
-		// an ambiguous favorite instead of reporting it forever. This is
-		// safe rather than a guess: an un-ID'd favorite that can still be
-		// re-favorited from the collection is necessarily an ambiguous one,
-		// because a unique match would already have been stamped by the
-		// backfill. The stored entry is therefore exactly the one the user
-		// is now disambiguating, and either way they end up with one
-		// favorite for that name.
-		//
-		// The whole record is replaced, not just the ID. Stamping the ID
-		// alone would leave the entry asserting one pressing while carrying
-		// another's year, label and catalogue number -- and permanently, as
-		// backfillAlbums skips every entry that already has an ID.
-		if album.ReleaseID != 0 && fav.ReleaseID == 0 {
-			favorites[i] = album
-			if err := saveFavorites(path, favorites); err != nil {
-				return err
+		// sameAlbum rather than Key: two pressings of one title are two
+		// favorites, but an entry written before release IDs existed is still
+		// the same record as its freshly synced self.
+		for i, fav := range favorites {
+			if !sameAlbum(fav, album) {
+				continue
 			}
-		}
-		return ErrAlreadyInFavorites
-	}
 
-	favorites = append(favorites, album)
-	return saveFavorites(path, favorites)
+			// Replace a stored entry that predates release IDs with the one the
+			// user just named, so naming a specific pressing actually resolves
+			// an ambiguous favorite instead of reporting it forever. This is
+			// safe rather than a guess: an un-ID'd favorite that can still be
+			// re-favorited from the collection is necessarily an ambiguous one,
+			// because a unique match would already have been stamped by the
+			// backfill. The stored entry is therefore exactly the one the user
+			// is now disambiguating, and either way they end up with one
+			// favorite for that name.
+			//
+			// The whole record is replaced, not just the ID. Stamping the ID
+			// alone would leave the entry asserting one pressing while carrying
+			// another's year, label and catalogue number -- and permanently, as
+			// backfillAlbums skips every entry that already has an ID.
+			if album.ReleaseID != 0 && fav.ReleaseID == 0 {
+				favorites[i] = album
+				if err := saveFavorites(path, favorites); err != nil {
+					return err
+				}
+			}
+			return ErrAlreadyInFavorites
+		}
+
+		favorites = append(favorites, album)
+		return saveFavorites(path, favorites)
+	})
 }
 
 // removeFavorite removes the first favorite matching album.
@@ -96,20 +101,22 @@ func addFavorite(path string, album Album) error {
 // Filtering all matches out would silently delete distinct pressings the
 // user never named -- and `unfavorite` would still report removing one.
 func removeFavorite(path string, album Album) error {
-	favorites, err := loadFavorites(path)
-	if err != nil {
-		return err
-	}
-
-	for i, fav := range favorites {
-		if sameAlbum(fav, album) {
-			// The three-index slice forces append to allocate rather than
-			// alias favorites' backing array and clobber it in place.
-			return saveFavorites(path, append(favorites[:i:i], favorites[i+1:]...))
+	return withFileLock(path, func() error {
+		favorites, err := loadFavorites(path)
+		if err != nil {
+			return err
 		}
-	}
 
-	return ErrNotInFavorites
+		for i, fav := range favorites {
+			if sameAlbum(fav, album) {
+				// The three-index slice forces append to allocate rather than
+				// alias favorites' backing array and clobber it in place.
+				return saveFavorites(path, append(favorites[:i:i], favorites[i+1:]...))
+			}
+		}
+
+		return ErrNotInFavorites
+	})
 }
 
 // FavoriteStatus represents the outcome of attempting to favorite an album by query.

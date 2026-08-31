@@ -89,6 +89,11 @@ func migrateConfig(from, to string) (int, error) {
 		if !e.Type().IsRegular() {
 			continue
 		}
+		// Lock sidecars are runtime scaffolding, not the user's data. Copying
+		// them would inflate the moved-file count and litter the destination.
+		if isLockSidecar(e.Name()) {
+			continue
+		}
 		src := filepath.Join(from, e.Name())
 		data, err := os.ReadFile(src)
 		if err != nil {
@@ -115,6 +120,14 @@ func migrateConfig(from, to string) (int, error) {
 	for _, src := range copied {
 		if err := os.Remove(src); err != nil {
 			return len(copied), fmt.Errorf("removing %s after copying it: %w", src, err)
+		}
+	}
+	// Sidecars were not copied, so they would keep the legacy directory alive
+	// after everything real has moved out of it. They are ours, and they hold
+	// nothing, so drop them rather than leave the directory stranded.
+	for _, e := range entries {
+		if e.Type().IsRegular() && isLockSidecar(e.Name()) {
+			_ = os.Remove(filepath.Join(from, e.Name()))
 		}
 	}
 	// Only succeeds if nothing else was in there; anything left is not ours

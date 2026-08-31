@@ -252,3 +252,32 @@ func TestMigrateConfigKeepsAPreexistingEmptyDestination(t *testing.T) {
 		t.Errorf("partial copies left behind in the destination: %d entries", len(entries))
 	}
 }
+
+// Lock sidecars are runtime scaffolding, not the user's data. Copying them
+// would inflate the "moved N files" count and litter the new directory.
+func TestMigrateSkipsLockSidecars(t *testing.T) {
+	from, to := t.TempDir(), filepath.Join(t.TempDir(), "xdg")
+
+	if err := os.WriteFile(filepath.Join(from, "collection.json"), []byte("[]"), 0644); err != nil {
+		t.Fatalf("writing collection: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(from, "history.json.lock"), nil, 0644); err != nil {
+		t.Fatalf("writing lock sidecar: %v", err)
+	}
+
+	n, err := migrateConfig(from, to)
+	if err != nil {
+		t.Fatalf("migrateConfig: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("moved %d files, want 1 (the sidecar must not count)", n)
+	}
+	if _, err := os.Stat(filepath.Join(to, "history.json.lock")); !os.IsNotExist(err) {
+		t.Error("the lock sidecar was copied to the destination")
+	}
+	// A skipped sidecar must not strand the legacy directory: it is ours, it
+	// holds nothing, and leaving it keeps the old directory alive forever.
+	if _, err := os.Stat(from); !os.IsNotExist(err) {
+		t.Error("the legacy directory survived because a sidecar was left in it")
+	}
+}
