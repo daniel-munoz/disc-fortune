@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand/v2"
+)
 
 // drawMode selects how pick draws from the candidate pool.
 type drawMode int
@@ -113,4 +116,97 @@ func unheardOnly(pool []Album, entries []HistoryEntry) []Album {
 		}
 	}
 	return out
+}
+
+// pickAlbum chooses one album from pool, consulting entries per mode.
+//
+// pool must not be empty; the caller reports that case with its own message
+// and exit code, because what to say about it depends on which filters were
+// responsible.
+func pickAlbum(pool []Album, entries []HistoryEntry, mode drawMode, rng *rand.Rand) Album {
+	if mode == drawAny {
+		return pool[rng.IntN(len(pool))]
+	}
+
+	// drawStale is drawFresh plus a bias, not an alternative to it, so the
+	// anti-repeat guarantee holds whatever --draw says.
+	candidates := excludeRecent(pool, entries)
+
+	if mode == drawStale {
+		return candidates[weightedIndex(staleWeights(candidates, entries), rng)]
+	}
+	return candidates[rng.IntN(len(candidates))]
+}
+
+// excludeRecent drops the recently played from pool, falling back to the whole
+// pool when that would leave nothing.
+//
+// The fallback is reachable, not padding. antiRepeatWindow bounds the number
+// of excluded *names*, and a history entry with no release ID matches every
+// pressing of its title: three identically-titled pressings and one un-ID'd
+// entry empty a pool with a window of one.
+func excludeRecent(pool []Album, entries []HistoryEntry) []Album {
+	recent := recentlyPlayed(entries, antiRepeatWindow(len(pool)))
+	if len(recent) == 0 {
+		return pool
+	}
+
+	var kept []Album
+	for _, album := range pool {
+		if !containsAlbum(recent, album) {
+			kept = append(kept, album)
+		}
+	}
+	if len(kept) == 0 {
+		return pool
+	}
+	return kept
+}
+
+// staleWeights scores each candidate by how long it has gone unplayed,
+// measured in picks rather than in time. A never-played record outranks every
+// played one; among played ones the least recent wins. The lowest weight is 1,
+// so nothing is ever unreachable, and an empty history makes every weight
+// equal, which degenerates to a uniform draw.
+//
+// Linear rather than exponential: the records that would justify a sharper
+// curve are the recently played ones, and excludeRecent has already removed
+// them.
+func staleWeights(candidates []Album, entries []HistoryEntry) []int {
+	weights := make([]int, len(candidates))
+	for i, album := range candidates {
+		idx, played := lastPlayedIndex(entries, album)
+		if !played {
+			weights[i] = len(entries) + 1
+			continue
+		}
+		weights[i] = len(entries) - idx
+	}
+	return weights
+}
+
+// weightedIndex draws an index from weights with probability proportional to
+// each weight. Every weight must be at least 1, which staleWeights guarantees.
+func weightedIndex(weights []int, rng *rand.Rand) int {
+	total := 0
+	for _, w := range weights {
+		total += w
+	}
+	target := rng.IntN(total)
+	for i, w := range weights {
+		target -= w
+		if target < 0 {
+			return i
+		}
+	}
+	// Unreachable while every weight is positive; returning the last index
+	// beats panicking if that ever stops being true.
+	return len(weights) - 1
+}
+
+// newRNG seeds a generator from the global source. pickAlbum takes an explicit
+// *rand.Rand rather than calling rand.IntN so that tests can pin the sequence;
+// this is where production gets a real one.
+func newRNG() *rand.Rand {
+	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 }
