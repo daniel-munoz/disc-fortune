@@ -147,6 +147,21 @@ func runPick(cfg selection) {
 
 func runList(cfg selection) {
 	albums := selectAlbums(cfg)
+
+	// Only load history when it is actually needed: `list` has never
+	// required a readable history.json and must not start now.
+	if cfg.unheard && len(albums) > 0 {
+		entries, err := loadHistory(historyPath())
+		if err != nil {
+			fatal("Error loading history: %v", err)
+		}
+		albums = unheardOnly(albums, entries)
+		if len(albums) == 0 {
+			fmt.Fprintln(os.Stderr, "Every album matching your filters has already been played.")
+			os.Exit(1)
+		}
+	}
+
 	out := formatList(albums, stdoutColor(cfg.color), false)
 	if len(albums) == 0 {
 		fmt.Fprint(os.Stderr, out)

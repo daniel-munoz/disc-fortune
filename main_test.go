@@ -609,3 +609,49 @@ func TestPickRejectsBadDrawValue(t *testing.T) {
 		t.Errorf("stderr does not mention --draw: %q", stderr)
 	}
 }
+
+func TestListUnheardFiltersPlayedAlbums(t *testing.T) {
+	home := t.TempDir()
+	collection, _, history := fixturePaths(home)
+
+	albums := []Album{
+		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
+		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
+	}
+	mustSaveCollection(t, collection, albums)
+	mustSaveHistory(t, history, []HistoryEntry{{Album: albums[0], Timestamp: time.Now()}})
+
+	code, stdout, _ := runHelperSplit(t, home, "list", "--unheard")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.Contains(stdout, "Slowdive") {
+		t.Errorf("stdout lists a played album: %q", stdout)
+	}
+	if !strings.Contains(stdout, "Ride") {
+		t.Errorf("stdout is missing the unplayed album: %q", stdout)
+	}
+	if !strings.Contains(stdout, "1 album") {
+		t.Errorf("stdout is missing the count: %q", stdout)
+	}
+}
+
+func TestListUnheardExhaustedExitsOne(t *testing.T) {
+	home := t.TempDir()
+	collection, _, history := fixturePaths(home)
+
+	album := Album{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}
+	mustSaveCollection(t, collection, []Album{album})
+	mustSaveHistory(t, history, []HistoryEntry{{Album: album, Timestamp: time.Now()}})
+
+	code, stdout, stderr := runHelperSplit(t, home, "list", "--unheard")
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "already been played") {
+		t.Errorf("stderr does not explain the exhaustion: %q", stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout should stay empty on failure, got %q", stdout)
+	}
+}
