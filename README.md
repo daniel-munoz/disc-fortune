@@ -50,6 +50,12 @@ disc-fortune favorite --release-id 1839278
 
 # Pick randomly from favorites only
 disc-fortune pick --favorites
+
+# Pick something you have never picked before
+disc-fortune pick --unheard
+
+# Restore the old, history-blind random draw
+disc-fortune pick --draw any
 ```
 
 ### Commands
@@ -109,6 +115,41 @@ disc-fortune list --year 1970-1980 --genre jazz
 disc-fortune list --favorites
 ```
 
+### Discovery
+
+By default, `pick` avoids the records you played most recently, so the same
+album does not come back around twice in a week:
+
+```sh
+disc-fortune
+```
+
+The exclusion window is your last `min(10, pool/3)` *distinct* picks,
+measured against whatever pool your filters leave — so `--genre jazz`
+matching four albums uses a window of one, not ten. A pool of one or two
+excludes nothing. That is what keeps a narrow filter from ever being
+narrowed into an empty set.
+
+`--draw` controls how a pick is drawn:
+
+```sh
+disc-fortune pick --draw fresh   # default: skip the recently played
+disc-fortune pick --draw any     # uniform draw, history ignored entirely
+disc-fortune pick --draw stale   # skip the recently played, then favor
+                                  # whatever you have left unplayed longest
+```
+
+`--unheard` restricts `pick` and `list` to albums that have never appeared
+in your history:
+
+```sh
+disc-fortune pick --unheard
+disc-fortune list --unheard --genre jazz
+```
+
+If everything matching your other filters has already been played,
+`pick --unheard` exits 1 and says so rather than picking a repeat.
+
 ### History
 
 ```sh
@@ -166,6 +207,12 @@ Your data is stored locally in `$XDG_CONFIG_HOME/disc-fortune/`, falling back to
 - `history.json` - Timestamped history of all your picks
 - `favorites.json` - Albums you've marked as favorites
 - `meta.json` - When you last synced
+
+You may also see `history.json.lock` and `favorites.json.lock` alongside
+them. These are advisory-lock sidecars that keep a `sync` and a concurrent
+`pick` or `favorite` from clobbering each other's write; they hold no data of
+yours, are safe to leave alone, and `migrate` neither copies them to the new
+location nor leaves them behind in the old one.
 
 Every one of these is written atomically: disc-fortune writes a temporary file
 alongside the target, flushes it, then renames it into place. An interrupted
