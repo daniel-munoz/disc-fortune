@@ -28,9 +28,16 @@ A Unix `fortune`-style CLI that randomly picks a vinyl record from your Discogs 
 # Print a random album (the default — no command needed)
 disc-fortune
 
-# Filter by year or year range
+### Filtering
+
+Filters follow one rule: **values within a field OR together, different fields
+AND together, and any `--exclude-` match removes the record outright.**
+
+```bash
+# Filter by year, decade, or range
 disc-fortune --year 1975
 disc-fortune --year 1970-1980
+disc-fortune --decade 70s
 
 # Filter by genre, label, or format
 disc-fortune --genre jazz
@@ -40,8 +47,33 @@ disc-fortune --format 12\"
 # --format also matches a pressing's colour
 disc-fortune --format "blue translucent"
 
-# Combine filters
+# Search the whole "Artist - Title" line, or one field of it
+disc-fortune --query "kind of blue"
+disc-fortune --artist "miles davis"
+disc-fortune --title "kind of blue"
+
+# Repeat a flag for "either" -- these are the same records, in one command
+disc-fortune --genre jazz --genre funk
+
+# Every filter has an --exclude- twin
+disc-fortune --exclude-genre rock
+disc-fortune list --decade 70s --exclude-label "blue note"
+
+# Different fields narrow each other
 disc-fortune --year 1970-1980 --genre jazz
+```
+
+`--year` and `--decade` are two spellings of one field, so they widen rather
+than narrow each other: `--year 1959 --decade 70s` gives you 1959 *or* the
+seventies.
+
+An exclusion only removes records that actually match it. Discogs leaves the
+year or label blank on plenty of releases, and those records survive
+`--exclude-year 1975` and `--exclude-label x` rather than quietly disappearing.
+
+Two-digit decades from `30s` to `90s` mean the twentieth century. `--decade
+20s` is refused, because it could mean either the 1920s or the 2020s — write
+whichever you meant in full.
 
 # Two pressings of one title can be identical in every field -- two
 # store-exclusive colours, say. --release-id names one exactly, and
@@ -205,7 +237,7 @@ the log has nothing in it.
 ## Features
 
 - **Metadata-rich display** - Shows year, label, catalog number, and genres with color-coded output
-- **Flexible filtering** - Filter by year, genre, label, or format
+- **Flexible filtering** - Filter by query, artist, title, year, decade, genre, label, or format; repeat any flag to mean "either", and exclude with `--exclude-genre` and friends
 - **Pick history** - Track all your picks with timestamps
 - **Favorites** - Mark albums you love (by last pick or by query) and pick randomly from that subset
 - **List mode** - Browse all albums (or filtered subsets) without picking one
