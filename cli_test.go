@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -99,7 +100,7 @@ func TestFilterFlagsBuildsFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Filter: %v", err)
 	}
-	if filter.Year != "1970-1980" || filter.Genre != "jazz" {
+	if !reflect.DeepEqual(filter.Year, years(t, "1970-1980")) || !reflect.DeepEqual(filter.Genre, include("jazz")) {
 		t.Errorf("filter = %+v, want Year=1970-1980 Genre=jazz", filter)
 	}
 	if !ff.anyNarrowing() {
@@ -163,7 +164,7 @@ func TestParseSelectionFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSelection: %v", err)
 	}
-	if cfg.filter.Year != "1970-1980" || cfg.filter.Genre != "jazz" {
+	if !reflect.DeepEqual(cfg.filter.Year, years(t, "1970-1980")) || !reflect.DeepEqual(cfg.filter.Genre, include("jazz")) {
 		t.Errorf("filter = %+v", cfg.filter)
 	}
 }
@@ -208,8 +209,8 @@ func TestParseFavoriteQueryWithTrailingFilter(t *testing.T) {
 	if cfg.query != "miles" {
 		t.Errorf("query = %q, want miles", cfg.query)
 	}
-	if cfg.filter.Year != "1959" {
-		t.Errorf("filter.Year = %q, want 1959 (trailing filter was dropped)", cfg.filter.Year)
+	if !reflect.DeepEqual(cfg.filter.Year, years(t, "1959")) {
+		t.Errorf("filter.Year = %+v, want 1959 (trailing filter was dropped)", cfg.filter.Year)
 	}
 }
 
@@ -674,7 +675,7 @@ func TestFavoriteAcceptsReleaseIDWithNarrowingFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseFavorite: %v", err)
 	}
-	if cfg.filter.ReleaseID != 1839278 || cfg.filter.Year != "1993" {
+	if cfg.filter.ReleaseID != 1839278 || !reflect.DeepEqual(cfg.filter.Year, years(t, "1993")) {
 		t.Errorf("filter = %+v, want both the ID and the year", cfg.filter)
 	}
 }

@@ -25,7 +25,10 @@ func TestFilterByYear(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.yearFilter, func(t *testing.T) {
-			f := Filter{Year: tt.yearFilter}
+			var f Filter
+			if tt.yearFilter != "" {
+				f = Filter{Year: years(t, tt.yearFilter)}
+			}
 			filtered := f.Apply(albums)
 			if len(filtered) != tt.want {
 				t.Errorf("got %d albums, want %d", len(filtered), tt.want)
@@ -41,7 +44,7 @@ func TestFilterByGenre(t *testing.T) {
 		{Artist: "C", Title: "3", Genres: []string{}},
 	}
 
-	f := Filter{Genre: "jazz"}
+	f := Filter{Genre: include("jazz")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 1 {
 		t.Errorf("got %d albums, want 1", len(filtered))
@@ -58,7 +61,7 @@ func TestFilterCombined(t *testing.T) {
 		{Artist: "C", Title: "3", Year: 1980, Genres: []string{"Jazz"}},
 	}
 
-	f := Filter{Year: "1970", Genre: "jazz"}
+	f := Filter{Year: years(t, "1970"), Genre: include("jazz")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 1 {
 		t.Errorf("got %d albums, want 1", len(filtered))
@@ -75,7 +78,7 @@ func TestFilterByQueryArtist(t *testing.T) {
 		{Artist: "Bill Evans", Title: "Sunday at the Village Vanguard"},
 	}
 
-	f := Filter{Query: "miles"}
+	f := Filter{Query: include("miles")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 1 {
 		t.Fatalf("got %d albums, want 1", len(filtered))
@@ -91,7 +94,7 @@ func TestFilterByQueryTitle(t *testing.T) {
 		{Artist: "John Coltrane", Title: "Giant Steps"},
 	}
 
-	f := Filter{Query: "giant"}
+	f := Filter{Query: include("giant")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 1 {
 		t.Fatalf("got %d albums, want 1", len(filtered))
@@ -106,7 +109,7 @@ func TestFilterByQueryCaseInsensitive(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
 
-	f := Filter{Query: "MILES"}
+	f := Filter{Query: include("MILES")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 1 {
 		t.Errorf("got %d albums, want 1 (case-insensitive)", len(filtered))
@@ -119,7 +122,7 @@ func TestFilterByQueryEmptyIsNoOp(t *testing.T) {
 		{Artist: "B", Title: "2"},
 	}
 
-	f := Filter{Query: ""}
+	f := Filter{}
 	filtered := f.Apply(albums)
 	if len(filtered) != 2 {
 		t.Errorf("got %d albums, want 2 (empty query should not filter)", len(filtered))
@@ -131,7 +134,7 @@ func TestFilterByQueryNoMatch(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
 
-	f := Filter{Query: "nonexistent"}
+	f := Filter{Query: include("nonexistent")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 0 {
 		t.Errorf("got %d albums, want 0", len(filtered))
@@ -145,7 +148,7 @@ func TestFilterByQueryMultipleMatches(t *testing.T) {
 		{Artist: "John Coltrane", Title: "Giant Steps"},
 	}
 
-	f := Filter{Query: "miles"}
+	f := Filter{Query: include("miles")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 2 {
 		t.Errorf("got %d albums, want 2", len(filtered))
@@ -158,7 +161,7 @@ func TestFilterQueryComposesWithYear(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
 	}
 
-	f := Filter{Query: "miles", Year: "1959"}
+	f := Filter{Query: include("miles"), Year: years(t, "1959")}
 	filtered := f.Apply(albums)
 	if len(filtered) != 1 {
 		t.Fatalf("got %d albums, want 1", len(filtered))
@@ -177,12 +180,12 @@ func TestFilterQueryStillMatchesWithReleaseID(t *testing.T) {
 		{ReleaseID: 222, Artist: "Slowdive", Title: "Souvlaki"},
 	}
 
-	got := Filter{Query: "miles"}.Apply(albums)
+	got := Filter{Query: include("miles")}.Apply(albums)
 	if len(got) != 1 || got[0].ReleaseID != 111 {
 		t.Fatalf("Apply() = %+v, want the Miles Davis release", got)
 	}
 
-	got = Filter{Query: "souvlaki"}.Apply(albums)
+	got = Filter{Query: include("souvlaki")}.Apply(albums)
 	if len(got) != 1 || got[0].ReleaseID != 222 {
 		t.Fatalf("Apply() = %+v, want the Slowdive release", got)
 	}
@@ -399,6 +402,195 @@ func TestParseDecadeValueRejectsGarbage(t *testing.T) {
 	for _, in := range []string{"", "s", "7s", "197s", "abc", "-5", "19700s"} {
 		if got, err := parseDecadeValue(in); err == nil {
 			t.Errorf("parseDecadeValue(%q) = %v, want an error", in, got)
+		}
+	}
+}
+
+// queryField is an index rather than a lookup, so a test pins the assumption.
+func TestQueryIsTheFirstFilterField(t *testing.T) {
+	if filterFields[queryField].name != "query" {
+		t.Fatalf("filterFields[queryField].name = %q, want %q",
+			filterFields[queryField].name, "query")
+	}
+}
+
+// Every table entry must read something off an album and point at a distinct
+// part of a Filter. A copy-pasted entry that forgets to change one of the two
+// closures is the failure this catches.
+func TestFilterFieldsAreWiredDistinctly(t *testing.T) {
+	var f Filter
+	seen := map[*FieldFilter]string{}
+	for _, field := range filterFields {
+		p := field.part(&f)
+		if p == nil {
+			t.Errorf("%s: part() returned nil", field.name)
+			continue
+		}
+		if other, dup := seen[p]; dup {
+			t.Errorf("%s and %s point at the same FieldFilter", field.name, other)
+		}
+		seen[p] = field.name
+		if field.albumValue == nil {
+			t.Errorf("%s: albumValue is nil", field.name)
+		}
+		if field.help == "" {
+			t.Errorf("%s: help is empty", field.name)
+		}
+	}
+	if len(seen) != 6 {
+		t.Errorf("wired %d fields, want 6 (query, artist, title, genre, label, format)", len(seen))
+	}
+}
+
+func TestFilterFieldsReadTheRightAlbumValues(t *testing.T) {
+	album := Album{
+		Artist:  "Miles Davis",
+		Title:   "Kind of Blue",
+		Label:   "Columbia",
+		Genres:  []string{"Jazz", "Bebop"},
+		Formats: []string{"Vinyl", "LP", "Blue Translucent"},
+	}
+	want := map[string][]string{
+		"query":  {"Miles Davis - Kind of Blue"},
+		"artist": {"Miles Davis"},
+		"title":  {"Kind of Blue"},
+		"label":  {"Columbia"},
+		"genre":  {"Jazz", "Bebop"},
+		"format": {"Vinyl", "LP", "Blue Translucent"},
+	}
+
+	for _, field := range filterFields {
+		got := field.albumValue(album)
+		exp := want[field.name]
+		if len(got) != len(exp) {
+			t.Errorf("%s: albumValue = %q, want %q", field.name, got, exp)
+			continue
+		}
+		for i := range got {
+			if got[i] != exp[i] {
+				t.Errorf("%s: albumValue = %q, want %q", field.name, got, exp)
+				break
+			}
+		}
+	}
+}
+
+// The grammar in one test: values within a field OR, different fields AND,
+// and an exclusion removes a match outright.
+func TestFilterGrammar(t *testing.T) {
+	albums := []Album{
+		{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}},
+		{Artist: "Herbie Hancock", Title: "Head Hunters", Year: 1973, Label: "Columbia", Genres: []string{"Jazz", "Funk"}},
+		{Artist: "Parliament", Title: "Mothership Connection", Year: 1975, Label: "Casablanca", Genres: []string{"Funk"}},
+		{Artist: "Black Sabbath", Title: "Paranoid", Year: 1970, Label: "Vertigo", Genres: []string{"Rock"}},
+		{Artist: "Unknown", Title: "Untitled"}, // no year, no label, no genres
+	}
+
+	tests := []struct {
+		name   string
+		filter Filter
+		want   []string // artists, in order
+	}{
+		{
+			name:   "one value behaves as it always has",
+			filter: Filter{Genre: include("jazz")},
+			want:   []string{"Miles Davis", "Herbie Hancock"},
+		},
+		{
+			name:   "values within a field OR",
+			filter: Filter{Genre: include("jazz", "funk")},
+			want:   []string{"Miles Davis", "Herbie Hancock", "Parliament"},
+		},
+		{
+			name:   "different fields AND",
+			filter: Filter{Genre: include("jazz", "funk"), Label: include("columbia")},
+			want:   []string{"Miles Davis", "Herbie Hancock"},
+		},
+		{
+			name:   "an exclusion removes matches",
+			filter: Filter{Genre: exclude("rock")},
+			want:   []string{"Miles Davis", "Herbie Hancock", "Parliament", "Unknown"},
+		},
+		{
+			name:   "an exclusion drops an album that also matches something else",
+			filter: Filter{Genre: include("jazz"), Label: exclude("columbia")},
+			want:   nil,
+		},
+		{
+			name:   "exclusion beats inclusion",
+			filter: Filter{Genre: FieldFilter{Include: []string{"jazz"}, Exclude: []string{"jazz"}}},
+			want:   nil,
+		},
+		{
+			name:   "an empty field is excluded by nothing",
+			filter: Filter{Label: exclude("columbia")},
+			want:   []string{"Parliament", "Black Sabbath", "Unknown"},
+		},
+		{
+			name:   "an unknown year is excluded by nothing",
+			filter: Filter{Year: YearFilter{Exclude: []yearRange{{1959, 1959}}}},
+			want:   []string{"Herbie Hancock", "Parliament", "Black Sabbath", "Unknown"},
+		},
+		{
+			name:   "year and decade ranges OR together",
+			filter: Filter{Year: YearFilter{Include: []yearRange{{1959, 1959}, {1970, 1979}}}},
+			want:   []string{"Miles Davis", "Herbie Hancock", "Parliament", "Black Sabbath"},
+		},
+		{
+			name:   "artist and title are separate fields",
+			filter: Filter{Artist: include("miles")},
+			want:   []string{"Miles Davis"},
+		},
+		{
+			name:   "title does not match the artist",
+			filter: Filter{Title: include("miles")},
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.filter.Apply(albums)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d albums %v, want %d %v", len(got), artistsOf(got), len(tt.want), tt.want)
+			}
+			for i, a := range got {
+				if a.Artist != tt.want[i] {
+					t.Errorf("album %d = %q, want %q", i, a.Artist, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func artistsOf(albums []Album) []string {
+	out := make([]string, len(albums))
+	for i, a := range albums {
+		out[i] = a.Artist
+	}
+	return out
+}
+
+// An unset filter returns the input untouched, which is what keeps `list`
+// from copying the whole collection for nothing.
+func TestFilterAnyReportsWhetherAnythingIsSet(t *testing.T) {
+	if (Filter{}).any() {
+		t.Error("empty Filter.any() = true, want false")
+	}
+	for name, f := range map[string]Filter{
+		"query include": {Query: include("miles")},
+		"query exclude": {Query: exclude("bootleg")},
+		"artist":        {Artist: include("miles")},
+		"title":         {Title: include("blue")},
+		"genre":         {Genre: include("jazz")},
+		"label":         {Label: include("columbia")},
+		"format":        {Format: include("vinyl")},
+		"year include":  {Year: YearFilter{Include: []yearRange{{1975, 1975}}}},
+		"year exclude":  {Year: YearFilter{Exclude: []yearRange{{1975, 1975}}}},
+		"release id":    {ReleaseID: 1839278},
+	} {
+		if !f.any() {
+			t.Errorf("%s: any() = false, want true", name)
 		}
 	}
 }

@@ -78,16 +78,25 @@ func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 
 // Filter builds a Filter from the parsed flags, validating the year format.
 func (ff *filterFlags) Filter() (Filter, error) {
-	if err := ParseYearFilter(*ff.year); err != nil {
-		return Filter{}, err
+	f := Filter{ReleaseID: *ff.releaseID}
+
+	if *ff.year != "" {
+		r, err := parseYearValue(*ff.year)
+		if err != nil {
+			return Filter{}, err
+		}
+		f.Year.Include = append(f.Year.Include, r)
 	}
-	return Filter{
-		Year:      *ff.year,
-		Genre:     *ff.genre,
-		Label:     *ff.label,
-		Format:    *ff.format,
-		ReleaseID: *ff.releaseID,
-	}, nil
+	if *ff.genre != "" {
+		f.Genre.Include = []string{*ff.genre}
+	}
+	if *ff.label != "" {
+		f.Label.Include = []string{*ff.label}
+	}
+	if *ff.format != "" {
+		f.Format.Include = []string{*ff.format}
+	}
+	return f, nil
 }
 
 // anyNarrowing reports whether a filter that only *refines* a query was set.

@@ -156,26 +156,86 @@ func parseDecadeValue(s string) (yearRange, error) {
 	return yearRange{start, start + 9}, nil
 }
 
-// Filter represents album filtering criteria.
+// filterField describes one substring-matched filter: the flag name it is
+// spelled with, its line of help, what it reads off an album, and where its
+// parsed values land in a Filter. Flag registration, help generation and
+// matching all loop over the table, so a new substring filter is one entry
+// here rather than four edits across three files.
+//
+// --year is deliberately not in the table: it parses its values and compares
+// them numerically, and two flag names (--year and --decade) feed it, so
+// forcing it into this shape would cost more than the duplication saves.
+type filterField struct {
+	name       string
+	help       string
+	albumValue func(Album) []string
+	part       func(*Filter) *FieldFilter
+}
+
+// queryField is the index of the query entry below. Query is special twice
+// over: it is the one field that satisfies favorite's "requires a query"
+// rule, and the one whose inclusions do not count as narrowing.
+// TestQueryIsTheFirstFilterField pins this.
+const queryField = 0
+
+var filterFields = []filterField{
+	{
+		name:       "query",
+		help:       `Filter by "Artist - Title" (case-insensitive substring)`,
+		albumValue: func(a Album) []string { return []string{a.Key()} },
+		part:       func(f *Filter) *FieldFilter { return &f.Query },
+	},
+	{
+		name:       "artist",
+		help:       "Filter by artist",
+		albumValue: func(a Album) []string { return []string{a.Artist} },
+		part:       func(f *Filter) *FieldFilter { return &f.Artist },
+	},
+	{
+		name:       "title",
+		help:       "Filter by title",
+		albumValue: func(a Album) []string { return []string{a.Title} },
+		part:       func(f *Filter) *FieldFilter { return &f.Title },
+	},
+	{
+		name:       "genre",
+		help:       "Filter by genre",
+		albumValue: func(a Album) []string { return a.Genres },
+		part:       func(f *Filter) *FieldFilter { return &f.Genre },
+	},
+	{
+		name:       "label",
+		help:       "Filter by label",
+		albumValue: func(a Album) []string { return []string{a.Label} },
+		part:       func(f *Filter) *FieldFilter { return &f.Label },
+	},
+	{
+		name: "format",
+		// Format matches any entry of Album.Formats, which includes the
+		// format name, its descriptions, and its free text -- the last
+		// being where Discogs records a pressing's colour.
+		help:       "Filter by format or colour",
+		albumValue: func(a Album) []string { return a.Formats },
+		part:       func(f *Filter) *FieldFilter { return &f.Format },
+	},
+}
+
+// Filter narrows a collection. Values within a field OR together, different
+// fields AND together, and any exclusion removes a match outright.
 type Filter struct {
-	Query string
-	Year  string
-	Genre string
-	Label string
-	// Format matches any entry of Album.Formats, which includes the format
-	// name, its descriptions, and its free text -- the last being where
-	// Discogs records a pressing's colour.
-	Format string
+	Query, Artist, Title, Genre, Label, Format FieldFilter
+	Year                                       YearFilter
 	// ReleaseID selects one exact record. Zero means unset. Unlike the
-	// filters above it identifies rather than narrows, which is why it is
-	// compared whole rather than by substring and why it needs no query
-	// alongside it.
+	// fields above it identifies rather than narrows, which is why it is
+	// compared whole, needs no query alongside it, and takes neither
+	// several values nor an exclusion.
 	ReleaseID int
 }
 
-// Apply filters albums based on criteria.
+// Apply returns the albums matching the filter. An unset filter returns the
+// input untouched rather than copying it.
 func (f Filter) Apply(albums []Album) []Album {
-	if f.Query == "" && f.Year == "" && f.Genre == "" && f.Label == "" && f.Format == "" && f.ReleaseID == 0 {
+	if !f.any() {
 		return albums
 	}
 
@@ -188,107 +248,28 @@ func (f Filter) Apply(albums []Album) []Album {
 	return filtered
 }
 
+// any reports whether the filter constrains anything at all.
+func (f Filter) any() bool {
+	if f.ReleaseID != 0 || len(f.Year.Include) > 0 || len(f.Year.Exclude) > 0 {
+		return true
+	}
+	for _, field := range filterFields {
+		p := field.part(&f)
+		if len(p.Include) > 0 || len(p.Exclude) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (f Filter) matches(album Album) bool {
 	if f.ReleaseID != 0 && album.ReleaseID != f.ReleaseID {
 		return false
 	}
-	if f.Query != "" && !f.matchesQuery(album) {
-		return false
-	}
-	if f.Year != "" && !f.matchesYear(album.Year) {
-		return false
-	}
-	if f.Genre != "" && !f.matchesGenre(album.Genres) {
-		return false
-	}
-	if f.Label != "" && !f.matchesString(album.Label, f.Label) {
-		return false
-	}
-	if f.Format != "" && !f.matchesFormats(album.Formats) {
-		return false
-	}
-	return true
-}
-
-func (f Filter) matchesQuery(album Album) bool {
-	return f.matchesString(album.Key(), f.Query)
-}
-
-func (f Filter) matchesYear(year int) bool {
-	if year == 0 {
-		return false
-	}
-
-	// Parse year or year range
-	if strings.Contains(f.Year, "-") {
-		parts := strings.Split(f.Year, "-")
-		if len(parts) != 2 {
+	for _, field := range filterFields {
+		if !field.part(&f).matches(field.albumValue(album)) {
 			return false
 		}
-		start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-		end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-		if err1 != nil || err2 != nil {
-			return false
-		}
-		// Auto-swap if backwards
-		if start > end {
-			start, end = end, start
-		}
-		return year >= start && year <= end
 	}
-
-	// Single year
-	targetYear, err := strconv.Atoi(strings.TrimSpace(f.Year))
-	if err != nil {
-		return false
-	}
-	return year == targetYear
-}
-
-func (f Filter) matchesGenre(genres []string) bool {
-	for _, g := range genres {
-		if f.matchesString(g, f.Genre) {
-			return true
-		}
-	}
-	return false
-}
-
-func (f Filter) matchesFormats(formats []string) bool {
-	for _, format := range formats {
-		if f.matchesString(format, f.Format) {
-			return true
-		}
-	}
-	return false
-}
-
-func (f Filter) matchesString(value, filter string) bool {
-	return strings.Contains(strings.ToLower(value), strings.ToLower(filter))
-}
-
-// ParseYearFilter validates year filter format.
-func ParseYearFilter(yearStr string) error {
-	if yearStr == "" {
-		return nil
-	}
-
-	if strings.Contains(yearStr, "-") {
-		parts := strings.Split(yearStr, "-")
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid year format. Use --year 1975 or --year 1970-1980")
-		}
-		_, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-		_, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-		if err1 != nil || err2 != nil {
-			return fmt.Errorf("invalid year format. Use --year 1975 or --year 1970-1980")
-		}
-		return nil
-	}
-
-	_, err := strconv.Atoi(strings.TrimSpace(yearStr))
-	if err != nil {
-		return fmt.Errorf("invalid year format. Use --year 1975 or --year 1970-1980")
-	}
-	return nil
+	return f.Year.matches(album.Year)
 }

@@ -141,7 +141,9 @@ type FavoriteOutcome struct {
 // favorites file at favPath. The caller is responsible for loading the collection,
 // printing output, and choosing exit codes.
 func favoriteByQuery(collection []Album, query string, filter Filter, favPath string) (FavoriteOutcome, error) {
-	filter.Query = query
+	if query != "" {
+		filter.Query.Include = append(filter.Query.Include, query)
+	}
 	matches := filter.Apply(collection)
 	switch len(matches) {
 	case 0:
@@ -181,7 +183,9 @@ type UnfavoriteOutcome struct {
 // An album that is already absent is reported as UnfavoriteNoMatch rather than
 // an error: removal is idempotent.
 func unfavoriteByQuery(favorites []Album, query string, filter Filter, favPath string) (UnfavoriteOutcome, error) {
-	filter.Query = query
+	if query != "" {
+		filter.Query.Include = append(filter.Query.Include, query)
+	}
 	matches := filter.Apply(favorites)
 	switch len(matches) {
 	case 0:

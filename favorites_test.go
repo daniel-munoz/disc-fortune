@@ -180,7 +180,7 @@ func TestFavoriteByQuery_ComposesWithFilter(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
 	}
 
-	outcome, err := favoriteByQuery(collection, "miles", Filter{Year: "1959"}, favPath)
+	outcome, err := favoriteByQuery(collection, "miles", Filter{Year: years(t, "1959")}, favPath)
 	if err != nil {
 		t.Fatalf("favoriteByQuery: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestUnfavoriteByQueryNarrowedByFilter(t *testing.T) {
 	}
 	favs, _ := loadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, "miles", Filter{Year: "1959"}, favPath)
+	outcome, err := unfavoriteByQuery(favs, "miles", Filter{Year: years(t, "1959")}, favPath)
 	if err != nil {
 		t.Fatalf("unfavoriteByQuery: %v", err)
 	}

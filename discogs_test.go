@@ -328,7 +328,7 @@ func TestGetCollectionReleasesCapturesFormatText(t *testing.T) {
 	}
 
 	// The whole point: --format now finds it.
-	if got := (Filter{Format: "blue"}).Apply(albums); len(got) != 1 {
+	if got := (Filter{Format: include("blue")}).Apply(albums); len(got) != 1 {
 		t.Errorf("Filter{Format: \"blue\"} matched %d albums, want 1", len(got))
 	}
 }
