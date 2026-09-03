@@ -257,3 +257,83 @@ func TestFieldFilterMatches(t *testing.T) {
 		})
 	}
 }
+
+// years builds an inclusive YearFilter from --year spellings, so the tests
+// below read the way the command line does.
+func years(t *testing.T, vals ...string) YearFilter {
+	t.Helper()
+	var yf YearFilter
+	for _, v := range vals {
+		r, err := parseYearValue(v)
+		if err != nil {
+			t.Fatalf("parseYearValue(%q): %v", v, err)
+		}
+		yf.Include = append(yf.Include, r)
+	}
+	return yf
+}
+
+func TestParseYearValue(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    yearRange
+		wantErr bool
+	}{
+		{in: "1975", want: yearRange{1975, 1975}},
+		{in: " 1975 ", want: yearRange{1975, 1975}},
+		{in: "1970-1980", want: yearRange{1970, 1980}},
+		{in: "1980-1970", want: yearRange{1970, 1980}}, // auto-swap, as in v2.3.0
+		{in: "1970 - 1980", want: yearRange{1970, 1980}},
+		{in: "nineteen", wantErr: true},
+		{in: "1970-", wantErr: true},
+		{in: "1970-1980-1990", wantErr: true},
+		{in: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := parseYearValue(tt.in)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseYearValue(%q) = %v, want an error", tt.in, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseYearValue(%q): %v", tt.in, err)
+			}
+			if got != tt.want {
+				t.Errorf("parseYearValue(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestYearFilterMatches(t *testing.T) {
+	tests := []struct {
+		name string
+		yf   YearFilter
+		year int
+		want bool
+	}{
+		{"unconstrained", YearFilter{}, 1975, true},
+		{"include single hit", YearFilter{Include: []yearRange{{1975, 1975}}}, 1975, true},
+		{"include single miss", YearFilter{Include: []yearRange{{1975, 1975}}}, 1976, false},
+		{"include range hit", YearFilter{Include: []yearRange{{1970, 1980}}}, 1975, true},
+		{"include is OR", YearFilter{Include: []yearRange{{1959, 1959}, {1970, 1979}}}, 1975, true},
+		{"exclude hit", YearFilter{Exclude: []yearRange{{1970, 1979}}}, 1975, false},
+		{"exclude miss", YearFilter{Exclude: []yearRange{{1970, 1979}}}, 1985, true},
+		{"exclusion beats inclusion", YearFilter{Include: []yearRange{{1970, 1980}}, Exclude: []yearRange{{1975, 1975}}}, 1975, false},
+		{"unknown year fails an inclusion", YearFilter{Include: []yearRange{{1970, 1980}}}, 0, false},
+		{"unknown year survives an exclusion", YearFilter{Exclude: []yearRange{{1970, 1980}}}, 0, true},
+		{"unknown year with no year filter", YearFilter{}, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.yf.matches(tt.year); got != tt.want {
+				t.Errorf("matches(%d) = %v, want %v", tt.year, got, tt.want)
+			}
+		})
+	}
+}

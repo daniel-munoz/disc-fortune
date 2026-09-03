@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -50,6 +51,75 @@ func containsAny(values []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// yearRange is an inclusive span of years. A single year is a range of one.
+type yearRange struct{ start, end int }
+
+func (r yearRange) contains(year int) bool { return year >= r.start && year <= r.end }
+
+// YearFilter is FieldFilter's shape over parsed ranges, because --year
+// compares numerically rather than by substring. --decade appends to it: they
+// are two spellings of one field, so --year 1959 --decade 70s means "1959 or
+// the 70s" rather than the empty intersection of two AND-ed fields.
+type YearFilter struct {
+	Include []yearRange
+	Exclude []yearRange
+}
+
+// matches reports whether an album's year passes. A zero year means Discogs
+// gave none: it falls in no range, so an inclusion never accepts it and an
+// exclusion never rejects it.
+func (yf YearFilter) matches(year int) bool {
+	if year == 0 {
+		return len(yf.Include) == 0
+	}
+	for _, r := range yf.Exclude {
+		if r.contains(year) {
+			return false
+		}
+	}
+	if len(yf.Include) == 0 {
+		return true
+	}
+	for _, r := range yf.Include {
+		if r.contains(year) {
+			return true
+		}
+	}
+	return false
+}
+
+// errBadYearFormat keeps the wording v2.3.0 shipped, because it is what users
+// have already seen and scripted against.
+var errBadYearFormat = errors.New("invalid year format. Use --year 1975 or --year 1970-1980")
+
+// parseYearValue parses one --year value: a single year, or a "start-end"
+// range whose ends are swapped when given backwards.
+func parseYearValue(s string) (yearRange, error) {
+	s = strings.TrimSpace(s)
+
+	if strings.Contains(s, "-") {
+		parts := strings.Split(s, "-")
+		if len(parts) != 2 {
+			return yearRange{}, errBadYearFormat
+		}
+		start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+		end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err1 != nil || err2 != nil {
+			return yearRange{}, errBadYearFormat
+		}
+		if start > end {
+			start, end = end, start
+		}
+		return yearRange{start, end}, nil
+	}
+
+	year, err := strconv.Atoi(s)
+	if err != nil {
+		return yearRange{}, errBadYearFormat
+	}
+	return yearRange{year, year}, nil
 }
 
 // Filter represents album filtering criteria.
