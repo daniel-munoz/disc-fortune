@@ -97,6 +97,55 @@ disc-fortune pick --unheard
 disc-fortune pick --draw any
 ```
 
+### JSON output
+
+`pick`, `list` and `history` accept `--json`, which replaces the human
+output with a documented payload. Nothing else changes: exit codes, the
+messages on stderr, and `pick` recording its pick are all identical either way.
+
+```sh
+disc-fortune pick --json
+disc-fortune list --json --genre jazz
+disc-fortune history --json 5
+```
+
+Each command emits a single JSON object:
+
+```json
+{
+  "album": {
+    "release_id": 1839278,
+    "artist": "Miles Davis",
+    "title": "Kind of Blue",
+    "year": 1959,
+    "label": "Columbia",
+    "catno": "CL 1355",
+    "genres": ["Jazz"],
+    "formats": ["Vinyl", "LP", "Album"]
+  }
+}
+```
+
+`list` emits `{"albums": [...], "count": N}` and `history` emits
+`{"entries": [{"album": {...}, "timestamp": "..."}], "count": N}`, most recent
+first. `count` is how many records were emitted, so `history --json 5` reports
+`5` however long your history is.
+
+Every album key is always present. `release_id`, `year`, `label` and `catno`
+are `null` when Discogs did not say — `release_id` is also `null` for anything
+picked before v2.2.0 — while `genres` and `formats` are `[]` rather than null,
+so a loop over them needs no guard. `artist` and `title` are always strings.
+
+Exit codes are unchanged, which means a script should check them: `list --json`
+matching nothing writes its message to stderr and exits 1 with an empty stdout,
+rather than emitting an empty result.
+
+```sh
+if out=$(disc-fortune list --json --genre jazz); then
+  echo "$out" | jq -r '.albums[] | "\(.artist) - \(.title)"'
+fi
+```
+
 ### Commands
 
 | Command | What it does |
@@ -256,6 +305,7 @@ the log has nothing in it.
 - **Offline operation** - All data stored locally after initial sync
 - **Crash-safe writes** - Every data file is written atomically, so an interrupted write cannot corrupt your collection or history
 - **Resilient syncing** - Rate limits and server hiccups are retried with backoff, and long syncs report progress
+- **Scriptable** - `--json` on `pick`, `list` and `history` emits a documented payload with a fixed key set
 
 ## Data
 
