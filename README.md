@@ -129,7 +129,7 @@ Each command emits a single JSON object:
 `list` emits `{"albums": [...], "count": N}` and `history` emits
 `{"entries": [{"album": {...}, "timestamp": "..."}], "count": N}`, most recent
 first. `count` is how many records were emitted, so `history --json 5` reports
-`5` however long your history is.
+at most `5` — fewer if your history is shorter.
 
 Every album key is always present. `release_id`, `year`, `label` and `catno`
 are `null` when Discogs did not say — `release_id` is also `null` for anything
