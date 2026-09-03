@@ -27,6 +27,7 @@ A Unix `fortune`-style CLI that randomly picks a vinyl record from your Discogs 
 ```sh
 # Print a random album (the default — no command needed)
 disc-fortune
+```
 
 ### Filtering
 
@@ -75,6 +76,7 @@ Two-digit decades from `30s` to `90s` mean the twentieth century. `--decade
 20s` is refused, because it could mean either the 1920s or the 2020s — write
 whichever you meant in full.
 
+```sh
 # Two pressings of one title can be identical in every field -- two
 # store-exclusive colours, say. --release-id names one exactly, and
 # needs no query beside it.
