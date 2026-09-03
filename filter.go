@@ -6,6 +6,52 @@ import (
 	"strings"
 )
 
+// FieldFilter is one field's constraint: values to require (any of), and
+// values that disqualify. Both empty means unconstrained.
+type FieldFilter struct {
+	Include []string
+	Exclude []string
+}
+
+// matches reports whether an album passes this field's constraint. values is
+// what the album has for the field: a one-element slice for a scalar like
+// Label, every element for a list like Genres.
+//
+// Exclusion is checked first and wins outright, so --genre jazz
+// --exclude-genre jazz is an empty filter rather than a conflict to resolve.
+// An album with nothing in this field matches no value, and so is excluded by
+// nothing -- absence is not a match, which is what stops one --exclude-label
+// from deleting every record Discogs left unlabelled.
+func (ff FieldFilter) matches(values []string) bool {
+	for _, ex := range ff.Exclude {
+		if containsAny(values, ex) {
+			return false
+		}
+	}
+	if len(ff.Include) == 0 {
+		return true
+	}
+	for _, in := range ff.Include {
+		if containsAny(values, in) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsAny reports whether needle is a case-insensitive substring of any
+// of values. An empty needle matches everything, which is why empty flag
+// values are dropped at parse time rather than defended against here.
+func containsAny(values []string, needle string) bool {
+	needle = strings.ToLower(needle)
+	for _, v := range values {
+		if strings.Contains(strings.ToLower(v), needle) {
+			return true
+		}
+	}
+	return false
+}
+
 // Filter represents album filtering criteria.
 type Filter struct {
 	Query string

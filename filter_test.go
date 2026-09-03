@@ -218,3 +218,42 @@ func TestFilterReleaseIDZeroIsUnset(t *testing.T) {
 		t.Errorf("Apply() = %+v, want both albums", got)
 	}
 }
+
+// include and exclude keep the filter literals in these tests readable.
+// Production code never builds a FieldFilter by hand -- addFilterFlags does
+// it from the flag values.
+func include(vals ...string) FieldFilter { return FieldFilter{Include: vals} }
+func exclude(vals ...string) FieldFilter { return FieldFilter{Exclude: vals} }
+
+func TestFieldFilterMatches(t *testing.T) {
+	tests := []struct {
+		name   string
+		ff     FieldFilter
+		values []string
+		want   bool
+	}{
+		{"unconstrained matches anything", FieldFilter{}, []string{"Jazz"}, true},
+		{"include hit", include("jazz"), []string{"Jazz"}, true},
+		{"include miss", include("funk"), []string{"Jazz"}, false},
+		{"include is OR", include("funk", "jazz"), []string{"Jazz"}, true},
+		{"include hits any album value", include("bebop"), []string{"Jazz", "Bebop"}, true},
+		{"include is a substring, not a whole value", include("azz"), []string{"Jazz"}, true},
+		{"include is case-insensitive", include("JAZZ"), []string{"jazz"}, true},
+		{"exclude hit", exclude("rock"), []string{"Rock"}, false},
+		{"exclude miss", exclude("rock"), []string{"Jazz"}, true},
+		{"exclude hits any album value", exclude("rock"), []string{"Rock", "Jazz"}, false},
+		{"exclude is OR", exclude("rock", "pop"), []string{"Pop"}, false},
+		{"exclusion beats inclusion", FieldFilter{Include: []string{"jazz"}, Exclude: []string{"jazz"}}, []string{"Jazz"}, false},
+		{"an empty album value is excluded by nothing", exclude("blue note"), []string{""}, true},
+		{"no album values are excluded by nothing", exclude("rock"), nil, true},
+		{"no album values satisfy no inclusion", include("jazz"), nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.ff.matches(tt.values); got != tt.want {
+				t.Errorf("matches(%q) = %v, want %v", tt.values, got, tt.want)
+			}
+		})
+	}
+}
