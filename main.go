@@ -138,7 +138,13 @@ func runPick(cfg selection) {
 		fatal("Error saving history: %v", err)
 	}
 
-	fmt.Println(formatAlbum(album, stdoutColor(cfg.color)))
+	if cfg.json {
+		if err := writeJSON(os.Stdout, pickPayload{Album: newJSONAlbum(album)}); err != nil {
+			fatal("Error writing JSON: %v", err)
+		}
+	} else {
+		fmt.Println(formatAlbum(album, stdoutColor(cfg.color)))
+	}
 
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
@@ -162,6 +168,16 @@ func runList(cfg selection) {
 		}
 	}
 
+	// The empty case below is deliberately left alone: an empty list has
+	// always been a failure, with its message on stderr and exit 1. --json
+	// changes the format, not the semantics.
+	if cfg.json && len(albums) > 0 {
+		if err := writeJSON(os.Stdout, newListPayload(albums)); err != nil {
+			fatal("Error writing JSON: %v", err)
+		}
+		return
+	}
+
 	out := formatList(albums, stdoutColor(cfg.color), false)
 	if len(albums) == 0 {
 		fmt.Fprint(os.Stderr, out)
@@ -179,6 +195,13 @@ func runHistory(cfg historyConfig) {
 	limit := cfg.limit
 	if limit == 0 {
 		limit = len(entries) // 0 means show all
+	}
+
+	if cfg.json {
+		if err := writeJSON(os.Stdout, newHistoryPayload(entries, limit)); err != nil {
+			fatal("Error writing JSON: %v", err)
+		}
+		return
 	}
 
 	fmt.Print(formatHistory(entries, limit, stdoutColor(cfg.color)))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -83,6 +84,13 @@ func TestHelperProcess(t *testing.T) {
 		}
 	}
 	dispatch(args)
+
+	// A success falls off the end of dispatch rather than calling os.Exit, so
+	// without this the test binary's own "PASS" would land on the
+	// subprocess's stdout right after the command's real output -- harmless
+	// for the Contains checks elsewhere, but fatal to a caller that parses
+	// stdout as a single JSON value.
+	os.Exit(0)
 }
 
 // helperEnv builds the subprocess environment: HOME pinned at home, and the
@@ -831,4 +839,190 @@ func TestPickFavoritesAntiRepeatSurvivesAnInterleavedUnfilteredPick(t *testing.T
 			t.Errorf("round %d: %q was re-picked immediately; the interleaved non-favorite pick consumed the favorites anti-repeat window", round, before)
 		}
 	}
+}
+
+// TestJSONOutput drives the real binary and parses what it emits. A payload
+// that only looks right is not enough -- these decode it.
+func TestJSONOutput(t *testing.T) {
+	miles := Album{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}}
+	bare := Album{Artist: "Some Artist", Title: "Untitled"}
+
+	t.Run("pick emits one album and exits 0", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		code, stdout, _ := runHelperSplit(t, home, "pick", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0", code)
+		}
+		var got pickPayload
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Fatalf("stdout does not parse: %v\n%s", err, stdout)
+		}
+		if got.Album.Artist != "Miles Davis" {
+			t.Errorf("artist = %q, want Miles Davis", got.Album.Artist)
+		}
+		if got.Album.ReleaseID == nil || *got.Album.ReleaseID != 1839278 {
+			t.Errorf("release_id missing from the payload: %+v", got.Album)
+		}
+	})
+
+	t.Run("pick still records history", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, historyFile := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		if code, _, stderr := runHelperSplit(t, home, "pick", "--json"); code != 0 {
+			t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+		}
+		entries, err := loadHistory(historyFile)
+		if err != nil {
+			t.Fatalf("loadHistory: %v", err)
+		}
+		if len(entries) != 1 {
+			t.Errorf("history has %d entries, want 1 -- --json is a format flag, not a dry run", len(entries))
+		}
+	})
+
+	t.Run("list emits albums and a count", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles, bare})
+
+		code, stdout, _ := runHelperSplit(t, home, "list", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0", code)
+		}
+		var got listPayload
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Fatalf("stdout does not parse: %v\n%s", err, stdout)
+		}
+		if got.Count != 2 || len(got.Albums) != 2 {
+			t.Errorf("count = %d, albums = %d, want 2 and 2", got.Count, len(got.Albums))
+		}
+	})
+
+	t.Run("an album with nothing known still carries every key", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{bare})
+
+		_, stdout, _ := runHelperSplit(t, home, "list", "--json")
+		for _, key := range []string{`"release_id"`, `"artist"`, `"title"`, `"year"`, `"label"`, `"catno"`, `"genres"`, `"formats"`} {
+			if !strings.Contains(stdout, key) {
+				t.Errorf("payload is missing %s:\n%s", key, stdout)
+			}
+		}
+		if !strings.Contains(stdout, `"genres": []`) {
+			t.Errorf("absent genres should be [], not null:\n%s", stdout)
+		}
+	})
+
+	t.Run("history is most recent first with a count", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, historyFile := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+		base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+		mustSaveHistory(t, historyFile, []HistoryEntry{
+			{Album: Album{Artist: "oldest", Title: "1"}, Timestamp: base},
+			{Album: Album{Artist: "middle", Title: "2"}, Timestamp: base.Add(time.Hour)},
+			{Album: Album{Artist: "newest", Title: "3"}, Timestamp: base.Add(2 * time.Hour)},
+		})
+
+		code, stdout, _ := runHelperSplit(t, home, "history", "--json", "2")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0", code)
+		}
+		var got historyPayload
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Fatalf("stdout does not parse: %v\n%s", err, stdout)
+		}
+		if got.Count != 2 {
+			t.Errorf("count = %d, want 2 (what was emitted, not what the file holds)", got.Count)
+		}
+		if len(got.Entries) != 2 || got.Entries[0].Album.Artist != "newest" {
+			t.Fatalf("entries not most-recent-first: %+v", got.Entries)
+		}
+	})
+}
+
+// TestJSONDoesNotChangeSemantics is the load-bearing test of this task.
+// --json is a formatting flag: every exit code and every stream stays as it
+// was, so anyone scripting today keeps working.
+func TestJSONDoesNotChangeSemantics(t *testing.T) {
+	miles := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+
+	t.Run("list matching nothing still exits 1 with an empty stdout", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		code, stdout, stderr := runHelperSplit(t, home, "list", "--json", "--year", "1899")
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+		if stdout != "" {
+			t.Errorf("stdout = %q, want empty -- no partial payload on a failing exit", stdout)
+		}
+		if !strings.Contains(stderr, "No albums match the specified filters") {
+			t.Errorf("stderr = %q, want the no-match message", stderr)
+		}
+	})
+
+	t.Run("pick matching nothing still exits 1 with an empty stdout", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		code, stdout, _ := runHelperSplit(t, home, "pick", "--json", "--year", "1899")
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+		if stdout != "" {
+			t.Errorf("stdout = %q, want empty", stdout)
+		}
+	})
+
+	// history and list disagree about whether an empty result is a failure.
+	// That predates this task; the JSON mirrors it rather than reconciling
+	// it, because changing either would be a silent change to a scripted
+	// exit code.
+	t.Run("history on an empty history exits 0 with an empty payload", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, historyFile := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveHistory(t, historyFile, nil)
+
+		code, stdout, _ := runHelperSplit(t, home, "history", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0", code)
+		}
+		var got historyPayload
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Fatalf("stdout does not parse: %v\n%s", err, stdout)
+		}
+		if got.Count != 0 || len(got.Entries) != 0 {
+			t.Errorf("want an empty payload, got %+v", got)
+		}
+	})
+
+	// An ANSI escape inside a JSON string would be a parse hazard, so the
+	// colour mode has no effect on this path.
+	t.Run("--color=always injects no escapes", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, _ := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+
+		for _, cmd := range [][]string{
+			{"pick", "--json", "--color", "always"},
+			{"list", "--json", "--color", "always"},
+			{"history", "--json", "--color", "always"},
+		} {
+			_, stdout, _ := runHelperSplit(t, home, cmd...)
+			if strings.ContainsRune(stdout, 0x1b) {
+				t.Errorf("%v: stdout contains an ANSI escape:\n%q", cmd, stdout)
+			}
+		}
+	})
 }
