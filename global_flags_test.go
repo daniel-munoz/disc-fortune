@@ -151,6 +151,20 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 	}
 }
 
+// buildFilterFlagHelp generates filterFlagHelp from filterFields, and every
+// usage block appends it straight after a line already ending in "\n". A
+// trailing newline left on the generated block would double up with that
+// "\n" (and with globalFlagHelp's own leading "\n\n"), adding a stray blank
+// line to every help and usage-error screen. Three consecutive newlines
+// anywhere in a usage block is that regression.
+func TestUsageBlocksHaveNoDoubleBlankLines(t *testing.T) {
+	for _, c := range commands {
+		if strings.Contains(c.usage, "\n\n\n") {
+			t.Errorf("%s usage contains a doubled blank line", c.name)
+		}
+	}
+}
+
 // The commands that accept --unheard must document it, and the ones that do
 // not must not claim to. Same guard as TestFilterFlagsAreDocumented, for a
 // flag that is registered per-command rather than centrally.

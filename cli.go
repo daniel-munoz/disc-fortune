@@ -165,15 +165,15 @@ func parseYearValues(years, decades []string) ([]yearRange, error) {
 // says which record is not meant, so it narrows like any other exclusion.
 func (ff *filterFlags) anyNarrowing() bool {
 	for i := range filterFields {
-		if i != queryField && len(*ff.include[i]) > 0 {
+		if i != queryField && len(nonEmpty(*ff.include[i])) > 0 {
 			return true
 		}
-		if len(*ff.exclude[i]) > 0 {
+		if len(nonEmpty(*ff.exclude[i])) > 0 {
 			return true
 		}
 	}
-	return len(ff.year) > 0 || len(ff.noYear) > 0 ||
-		len(ff.decade) > 0 || len(ff.noDecade) > 0
+	return len(nonEmpty(ff.year)) > 0 || len(nonEmpty(ff.noYear)) > 0 ||
+		len(nonEmpty(ff.decade)) > 0 || len(nonEmpty(ff.noDecade)) > 0
 }
 
 // hasQuery reports whether --query named something to look for, which is what
@@ -548,7 +548,11 @@ func buildFilterFlagHelp() string {
 	fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", "year", "Filter by year or year range (e.g., 1975 or 1970-1980)")
 	fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", "decade", "Filter by decade (e.g., 70s or 1970s); adds to --year")
 	fmt.Fprintf(&sb, "  --%-12s N      %s\n", "release-id", "Select one exact record by its Discogs release ID")
-	return sb.String()
+	// The old hand-written constant ended without a trailing newline, and
+	// every usage block appends filterFlagHelp straight after its own line
+	// ending in "\n" -- so a trailing newline here would double up with
+	// globalFlagHelp's leading "\n\n" and add a stray blank line.
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func init() {

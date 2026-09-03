@@ -984,3 +984,40 @@ func TestEveryNarrowingFlagCountsAsNarrowing(t *testing.T) {
 		}
 	}
 }
+
+// anyNarrowing must agree with Filter()/hasQuery() about what an empty value
+// means: `--genre "$GENRE"` with an unset variable is "no genre filter", not
+// a narrowing filter that then demands a query. Filter() already routed its
+// slices through nonEmpty; this pins that anyNarrowing does too.
+func TestAnyNarrowingIgnoresEmptyValues(t *testing.T) {
+	fs, _ := newFlagSet("favorite")
+	ff := addFilterFlags(fs)
+	args := []string{
+		"--exclude-genre", "",
+		"--year", "",
+		"--decade", "",
+		"--exclude-year", "",
+		"--exclude-decade", "",
+		"--artist", "",
+		"--exclude-artist", "",
+	}
+	if _, err := parseInterspersed(fs, args); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	if ff.anyNarrowing() {
+		t.Error("anyNarrowing() = true for all-empty filter values, want false")
+	}
+}
+
+// The live regression this pins: `favorite --genre ""` used to report
+// "filters require a query" instead of falling through to favorite the last
+// pick, because anyNarrowing() counted the empty --genre value as narrowing.
+func TestParseFavoriteEmptyFilterValueDoesNotRequireQuery(t *testing.T) {
+	cfg, err := parseFavorite("favorite", []string{"--genre", ""})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if cfg.query != "" {
+		t.Errorf("query = %q, want empty (last pick)", cfg.query)
+	}
+}
