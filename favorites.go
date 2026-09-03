@@ -136,14 +136,10 @@ type FavoriteOutcome struct {
 	Matches []Album // populated when Status is FavoriteMultiMatch
 }
 
-// favoriteByQuery is the testable core of `favorite QUERY`. It applies the query+filter
-// to the provided collection and, if exactly one album matches, adds it to the
-// favorites file at favPath. The caller is responsible for loading the collection,
-// printing output, and choosing exit codes.
-func favoriteByQuery(collection []Album, query string, filter Filter, favPath string) (FavoriteOutcome, error) {
-	if query != "" {
-		filter.Query.Include = append(filter.Query.Include, query)
-	}
+// favoriteByQuery is the testable core of `favorite QUERY`. The query is
+// already part of filter (parseFavorite puts the positional QUERY and --query
+// in the same place), so this only applies it and acts on the result.
+func favoriteByQuery(collection []Album, filter Filter, favPath string) (FavoriteOutcome, error) {
 	matches := filter.Apply(collection)
 	switch len(matches) {
 	case 0:
@@ -177,15 +173,13 @@ type UnfavoriteOutcome struct {
 	Matches []Album // populated when Status is UnfavoriteMultiMatch
 }
 
-// unfavoriteByQuery is the testable core of `unfavorite QUERY`. It applies the
-// query+filter to the favorites list — not the collection, since favorites is
-// the set being removed from — and removes the album when exactly one matches.
-// An album that is already absent is reported as UnfavoriteNoMatch rather than
-// an error: removal is idempotent.
-func unfavoriteByQuery(favorites []Album, query string, filter Filter, favPath string) (UnfavoriteOutcome, error) {
-	if query != "" {
-		filter.Query.Include = append(filter.Query.Include, query)
-	}
+// unfavoriteByQuery is the testable core of `unfavorite QUERY`. The query is
+// already part of filter (parseFavorite puts the positional QUERY and --query
+// in the same place), so this applies filter to the favorites list — not the
+// collection, since favorites is the set being removed from — and removes the
+// album when exactly one matches. An album that is already absent is reported
+// as UnfavoriteNoMatch rather than an error: removal is idempotent.
+func unfavoriteByQuery(favorites []Album, filter Filter, favPath string) (UnfavoriteOutcome, error) {
 	matches := filter.Apply(favorites)
 	switch len(matches) {
 	case 0:

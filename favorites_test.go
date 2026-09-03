@@ -73,7 +73,7 @@ func TestFavoriteByQuery_SingleMatch(t *testing.T) {
 		{Artist: "John Coltrane", Title: "Giant Steps"},
 	}
 
-	outcome, err := favoriteByQuery(collection, "kind of", Filter{}, favPath)
+	outcome, err := favoriteByQuery(collection, Filter{Query: include("kind of")}, favPath)
 	if err != nil {
 		t.Fatalf("favoriteByQuery: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestFavoriteByQuery_NoMatch(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
 
-	outcome, err := favoriteByQuery(collection, "zzzz", Filter{}, favPath)
+	outcome, err := favoriteByQuery(collection, Filter{Query: include("zzzz")}, favPath)
 	if err != nil {
 		t.Fatalf("favoriteByQuery: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestFavoriteByQuery_MultiMatch(t *testing.T) {
 		{Artist: "John Coltrane", Title: "Giant Steps"},
 	}
 
-	outcome, err := favoriteByQuery(collection, "miles", Filter{}, favPath)
+	outcome, err := favoriteByQuery(collection, Filter{Query: include("miles")}, favPath)
 	if err != nil {
 		t.Fatalf("favoriteByQuery: %v", err)
 	}
@@ -150,10 +150,10 @@ func TestFavoriteByQuery_AlreadyFavorited(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
 
-	if _, err := favoriteByQuery(collection, "kind of", Filter{}, favPath); err != nil {
+	if _, err := favoriteByQuery(collection, Filter{Query: include("kind of")}, favPath); err != nil {
 		t.Fatalf("first favoriteByQuery: %v", err)
 	}
-	outcome, err := favoriteByQuery(collection, "kind of", Filter{}, favPath)
+	outcome, err := favoriteByQuery(collection, Filter{Query: include("kind of")}, favPath)
 	if err != nil {
 		t.Fatalf("second favoriteByQuery: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestFavoriteByQuery_ComposesWithFilter(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
 	}
 
-	outcome, err := favoriteByQuery(collection, "miles", Filter{Year: years(t, "1959")}, favPath)
+	outcome, err := favoriteByQuery(collection, Filter{Query: include("miles"), Year: years(t, "1959")}, favPath)
 	if err != nil {
 		t.Fatalf("favoriteByQuery: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestUnfavoriteByQuerySingleMatch(t *testing.T) {
 		t.Fatalf("loadFavorites: %v", err)
 	}
 
-	outcome, err := unfavoriteByQuery(favs, "kind of blue", Filter{}, favPath)
+	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("kind of blue")}, favPath)
 	if err != nil {
 		t.Fatalf("unfavoriteByQuery: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestUnfavoriteByQueryNoMatch(t *testing.T) {
 	}
 	favs, _ := loadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, "nonexistent", Filter{}, favPath)
+	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("nonexistent")}, favPath)
 	if err != nil {
 		t.Fatalf("unfavoriteByQuery: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestUnfavoriteByQueryMultiMatch(t *testing.T) {
 	}
 	favs, _ := loadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, "miles", Filter{}, favPath)
+	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("miles")}, favPath)
 	if err != nil {
 		t.Fatalf("unfavoriteByQuery: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestUnfavoriteByQueryNarrowedByFilter(t *testing.T) {
 	}
 	favs, _ := loadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, "miles", Filter{Year: years(t, "1959")}, favPath)
+	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("miles"), Year: years(t, "1959")}, favPath)
 	if err != nil {
 		t.Fatalf("unfavoriteByQuery: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestUnfavoriteByQueryAlreadyRemovedIsNoMatch(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 	stale := []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
 
-	outcome, err := unfavoriteByQuery(stale, "kind of blue", Filter{}, favPath)
+	outcome, err := unfavoriteByQuery(stale, Filter{Query: include("kind of blue")}, favPath)
 	if err != nil {
 		t.Fatalf("unfavoriteByQuery: %v", err)
 	}

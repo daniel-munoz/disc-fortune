@@ -1021,3 +1021,89 @@ func TestParseFavoriteEmptyFilterValueDoesNotRequireQuery(t *testing.T) {
 		t.Errorf("query = %q, want empty (last pick)", cfg.query)
 	}
 }
+
+// The positional QUERY and --query are one thing said two ways, so the filter
+// carries the value either way.
+func TestFavoritePositionalQueryLandsInTheFilter(t *testing.T) {
+	cfg, err := parseFavorite("favorite", []string{"miles"})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if len(cfg.filter.Query.Include) != 1 || cfg.filter.Query.Include[0] != "miles" {
+		t.Errorf("filter.Query.Include = %q, want [miles]", cfg.filter.Query.Include)
+	}
+	if cfg.query != "miles" {
+		t.Errorf("query = %q, want %q", cfg.query, "miles")
+	}
+}
+
+func TestFavoriteQueryFlagIsEquivalentToPositional(t *testing.T) {
+	positional, err := parseFavorite("favorite", []string{"miles"})
+	if err != nil {
+		t.Fatalf("parseFavorite positional: %v", err)
+	}
+	flagged, err := parseFavorite("favorite", []string{"--query", "miles"})
+	if err != nil {
+		t.Fatalf("parseFavorite --query: %v", err)
+	}
+	if flagged.query != positional.query {
+		t.Errorf("query = %q, want %q", flagged.query, positional.query)
+	}
+	if len(flagged.filter.Query.Include) != 1 || flagged.filter.Query.Include[0] != "miles" {
+		t.Errorf("filter.Query.Include = %q, want [miles]", flagged.filter.Query.Include)
+	}
+}
+
+// Both spellings at once is refused rather than OR-ed. The rule in the design
+// would make it an OR, but on a command that mutates favorites a surprise is
+// worse than a refusal.
+func TestFavoriteRejectsPositionalAndQueryFlagTogether(t *testing.T) {
+	for _, name := range []string{"favorite", "unfavorite"} {
+		_, err := parseFavorite(name, []string{"miles", "--query", "coltrane"})
+		if err == nil {
+			t.Errorf("%s: expected an error when both spellings are given", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "give the query once") {
+			t.Errorf("%s error = %q, want it to say the query is given once", name, err)
+		}
+	}
+}
+
+func TestFavoriteQueryFlagSatisfiesTheQueryRequirement(t *testing.T) {
+	cfg, err := parseFavorite("favorite", []string{"--query", "miles", "--year", "1959"})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if cfg.query != "miles" {
+		t.Errorf("query = %q, want miles", cfg.query)
+	}
+	if len(cfg.filter.Year.Include) != 1 {
+		t.Errorf("Year.Include = %v, want one range", cfg.filter.Year.Include)
+	}
+}
+
+// An exclusion says which record is NOT meant, so it cannot stand in for a
+// query on a command that has to pick exactly one record.
+func TestFavoriteExcludeQueryStillRequiresAQuery(t *testing.T) {
+	_, err := parseFavorite("favorite", []string{"--exclude-query", "bootleg"})
+	if err == nil {
+		t.Fatal("expected an error for --exclude-query alone")
+	}
+	if !strings.Contains(err.Error(), "filters require a query") {
+		t.Errorf("error = %q, want it to mention a query", err)
+	}
+}
+
+func TestFavoriteSeveralQueryValuesDescribeThemselves(t *testing.T) {
+	cfg, err := parseFavorite("favorite", []string{"--query", "miles", "--query", "coltrane"})
+	if err != nil {
+		t.Fatalf("parseFavorite: %v", err)
+	}
+	if cfg.query != "miles or coltrane" {
+		t.Errorf("query = %q, want %q", cfg.query, "miles or coltrane")
+	}
+	if len(cfg.filter.Query.Include) != 2 {
+		t.Errorf("filter.Query.Include = %q, want two values", cfg.filter.Query.Include)
+	}
+}

@@ -203,7 +203,7 @@ func runFavorite(cfg favoriteConfig) {
 	}
 
 	albums := loadCollectionOrExit()
-	outcome, err := favoriteByQuery(albums, cfg.query, cfg.filter, favoritesPath())
+	outcome, err := favoriteByQuery(albums, cfg.filter, favoritesPath())
 	if err != nil {
 		fatal("Error adding favorite: %v", err)
 	}
@@ -243,7 +243,7 @@ func runUnfavorite(cfg favoriteConfig) {
 		return
 	}
 
-	outcome, err := unfavoriteByQuery(favorites, cfg.query, cfg.filter, favoritesPath())
+	outcome, err := unfavoriteByQuery(favorites, cfg.filter, favoritesPath())
 	if err != nil {
 		fatal("Error removing favorite: %v", err)
 	}

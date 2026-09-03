@@ -228,8 +228,9 @@ type selection struct {
 	color  colorMode
 }
 
-// favoriteConfig is the parsed form of favorite and unfavorite. An empty query
-// means "the last pick".
+// favoriteConfig is the parsed form of favorite and unfavorite. query is the
+// human-readable description of what was asked for -- the constraint itself
+// lives in filter.Query. An empty query means "the last pick".
 type favoriteConfig struct {
 	query  string
 	filter Filter
@@ -318,19 +319,35 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 		return favoriteConfig{}, fmt.Errorf("%s: %v", name, err)
 	}
 
+	// The positional QUERY and --query are one thing said two ways. Giving
+	// both would be an OR by the grammar's own rule, but on a command that
+	// mutates favorites a surprise is worse than a refusal.
+	if len(rest) == 1 && ff.hasQuery() {
+		return favoriteConfig{}, fmt.Errorf(
+			"%s: give the query once, as an argument or --query", name)
+	}
+
 	if len(rest) == 0 {
 		// A release ID is a complete answer by itself, so it excuses the
 		// missing query -- and carries any narrowing filters along with it.
-		if ff.anyNarrowing() && !ff.identifies() {
+		if ff.anyNarrowing() && !ff.identifies() && !ff.hasQuery() {
 			return favoriteConfig{}, fmt.Errorf("%s: filters require a query", name)
 		}
-		return favoriteConfig{filter: filter, color: color}, nil
+		return favoriteConfig{
+			query:  strings.Join(ff.queryValues(), " or "),
+			filter: filter,
+			color:  color,
+		}, nil
 	}
 
 	query := strings.TrimSpace(rest[0])
 	if query == "" {
 		return favoriteConfig{}, fmt.Errorf("%s: requires a query", name)
 	}
+	// The positional query is the same constraint --query would have set, so
+	// it goes to the same place. cfg.query keeps only the description: an
+	// empty one still means "the last pick".
+	filter.Query.Include = append(filter.Query.Include, query)
 	return favoriteConfig{query: query, filter: filter, color: color}, nil
 }
 
@@ -668,7 +685,8 @@ and nothing is added; narrow it with filters, or name one with --release-id.
 Two pressings of a title can be identical in every other field -- two
 store-exclusive colours, say -- so --release-id is the one that always works.
 
-Flags (the filters narrow a QUERY; --release-id needs none):
+The QUERY can also be given as --query, which is the only difference between
+the two spellings. --release-id needs neither.
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseFavorite("favorite", args)
@@ -688,7 +706,8 @@ With no QUERY, unfavorites the last pick. With a QUERY, removes the one
 favorite whose "Artist - Title" contains it, case-insensitively. Removing
 something that is not favorited succeeds quietly.
 
-Flags (the filters narrow a QUERY; --release-id needs none):
+The QUERY can also be given as --query, which is the only difference between
+the two spellings. --release-id needs neither.
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseFavorite("unfavorite", args)
