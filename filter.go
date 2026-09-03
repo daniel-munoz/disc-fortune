@@ -122,6 +122,40 @@ func parseYearValue(s string) (yearRange, error) {
 	return yearRange{year, year}, nil
 }
 
+// parseDecadeValue parses one --decade value into the ten years it names.
+// Accepted: 1970s, 1970, any year within a decade, and the two-digit forms
+// 30s through 90s -- unambiguous because there are no 2030s pressings yet.
+// Refused: 00s, 10s and 20s, which could name either century.
+//
+// The alternatives were "two digits always mean 19xx", which puts the 2020s
+// permanently out of reach of a two-digit value, and "the most recent decade
+// that has begun", which silently changes what --decade 30s means in 2030 and
+// forces every test onto a fixed clock. Refusing the three genuinely
+// ambiguous inputs is the only rule that is both stable and honest.
+func parseDecadeValue(s string) (yearRange, error) {
+	badFormat := fmt.Errorf("invalid decade %q. Use --decade 70s or --decade 1970s", s)
+
+	v := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(s)), "s")
+	if len(v) != 2 && len(v) != 4 {
+		return yearRange{}, badFormat
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return yearRange{}, badFormat
+	}
+
+	if len(v) == 2 {
+		d := n - n%10
+		if d < 30 {
+			return yearRange{}, fmt.Errorf("ambiguous decade %q: write 19%02ds or 20%02ds", s, d, d)
+		}
+		n = 1900 + d
+	}
+
+	start := n - n%10
+	return yearRange{start, start + 9}, nil
+}
+
 // Filter represents album filtering criteria.
 type Filter struct {
 	Query string

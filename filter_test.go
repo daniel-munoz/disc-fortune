@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -335,5 +336,69 @@ func TestYearFilterMatches(t *testing.T) {
 				t.Errorf("matches(%d) = %v, want %v", tt.year, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseDecadeValue(t *testing.T) {
+	tests := []struct {
+		in   string
+		want yearRange
+	}{
+		{"70s", yearRange{1970, 1979}},
+		{"1970s", yearRange{1970, 1979}},
+		{"1970", yearRange{1970, 1979}},
+		{"2020s", yearRange{2020, 2029}},
+		{"30s", yearRange{1930, 1939}},
+		{"90s", yearRange{1990, 1999}},
+		{"70S", yearRange{1970, 1979}}, // case-insensitive
+		{" 70s ", yearRange{1970, 1979}},
+		{"1975", yearRange{1970, 1979}}, // any year names its decade
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := parseDecadeValue(tt.in)
+			if err != nil {
+				t.Fatalf("parseDecadeValue(%q): %v", tt.in, err)
+			}
+			if got != tt.want {
+				t.Errorf("parseDecadeValue(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// The three two-digit decades that could mean either century are refused
+// outright, with a message naming both spellings. A rule that guesses would
+// either put 2020s permanently out of reach or change what --decade 30s means
+// in 2030.
+func TestParseDecadeValueRejectsAmbiguous(t *testing.T) {
+	for in, both := range map[string][2]string{
+		"00s": {"1900s", "2000s"},
+		"10s": {"1910s", "2010s"},
+		"20s": {"1920s", "2020s"},
+		"25s": {"1920s", "2020s"},
+	} {
+		_, err := parseDecadeValue(in)
+		if err == nil {
+			t.Errorf("parseDecadeValue(%q) succeeded, want an ambiguity error", in)
+			continue
+		}
+		if !strings.Contains(err.Error(), "ambiguous") {
+			t.Errorf("parseDecadeValue(%q) error = %q, want it to say ambiguous", in, err)
+		}
+		for _, spelling := range both {
+			if !strings.Contains(err.Error(), spelling) {
+				t.Errorf("parseDecadeValue(%q) error = %q, want it to name %s", in, err, spelling)
+			}
+		}
+	}
+}
+
+func TestParseDecadeValueRejectsGarbage(t *testing.T) {
+	for _, in := range []string{"", "s", "7s", "197s", "abc", "-5", "19700s"} {
+		if got, err := parseDecadeValue(in); err == nil {
+			t.Errorf("parseDecadeValue(%q) = %v, want an error", in, got)
+		}
 	}
 }
