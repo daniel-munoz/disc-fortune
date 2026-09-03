@@ -55,56 +55,136 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-// filterFlags holds the four filter flags shared by pick, list, favorite, and
+// filterFlags holds the filter flags shared by pick, list, favorite and
 // unfavorite. Registering them in one place keeps their names and help text
 // from drifting apart between commands.
+//
+// Every narrowing filter is repeatable and has an --exclude-NAME twin;
+// include and exclude are indexed by position in filterFields. --release-id
+// is the exception, because it identifies one record rather than narrowing a
+// query.
 type filterFlags struct {
-	year      *string
-	genre     *string
-	label     *string
-	format    *string
+	include []*arrayFlags
+	exclude []*arrayFlags
+	// year and decade are two spellings of one constraint, kept apart
+	// only long enough to parse them differently.
+	year      arrayFlags
+	noYear    arrayFlags
+	decade    arrayFlags
+	noDecade  arrayFlags
 	releaseID *int
 }
 
 func addFilterFlags(fs *flag.FlagSet) *filterFlags {
-	return &filterFlags{
-		year:      fs.String("year", "", "Filter by year or year range (e.g., 1975 or 1970-1980)"),
-		genre:     fs.String("genre", "", "Filter by genre (case-insensitive substring match)"),
-		label:     fs.String("label", "", "Filter by label (case-insensitive substring match)"),
-		format:    fs.String("format", "", "Filter by format or colour (case-insensitive substring match)"),
-		releaseID: fs.Int("release-id", 0, "Select one exact record by its Discogs release ID"),
+	ff := &filterFlags{
+		include: make([]*arrayFlags, len(filterFields)),
+		exclude: make([]*arrayFlags, len(filterFields)),
 	}
+	for i, field := range filterFields {
+		inc, exc := new(arrayFlags), new(arrayFlags)
+		fs.Var(inc, field.name, field.help+" (repeatable)")
+		fs.Var(exc, "exclude-"+field.name, "Exclude matches of "+field.name+" (repeatable)")
+		ff.include[i], ff.exclude[i] = inc, exc
+	}
+	fs.Var(&ff.year, "year", "Filter by year or year range (e.g., 1975 or 1970-1980)")
+	fs.Var(&ff.noYear, "exclude-year", "Exclude a year or year range (repeatable)")
+	fs.Var(&ff.decade, "decade", "Filter by decade (e.g., 70s or 1970s); adds to --year")
+	fs.Var(&ff.noDecade, "exclude-decade", "Exclude a decade (repeatable)")
+	ff.releaseID = fs.Int("release-id", 0, "Select one exact record by its Discogs release ID")
+	return ff
 }
 
-// Filter builds a Filter from the parsed flags, validating the year format.
+// Filter builds a Filter from the parsed flags, validating year and decade
+// values.
 func (ff *filterFlags) Filter() (Filter, error) {
 	f := Filter{ReleaseID: *ff.releaseID}
+	for i, field := range filterFields {
+		p := field.part(&f)
+		p.Include = nonEmpty(*ff.include[i])
+		p.Exclude = nonEmpty(*ff.exclude[i])
+	}
 
-	if *ff.year != "" {
-		r, err := parseYearValue(*ff.year)
-		if err != nil {
-			return Filter{}, err
-		}
-		f.Year.Include = append(f.Year.Include, r)
+	var err error
+	if f.Year.Include, err = parseYearValues(ff.year, ff.decade); err != nil {
+		return Filter{}, err
 	}
-	if *ff.genre != "" {
-		f.Genre.Include = []string{*ff.genre}
-	}
-	if *ff.label != "" {
-		f.Label.Include = []string{*ff.label}
-	}
-	if *ff.format != "" {
-		f.Format.Include = []string{*ff.format}
+	if f.Year.Exclude, err = parseYearValues(ff.noYear, ff.noDecade); err != nil {
+		return Filter{}, err
 	}
 	return f, nil
 }
 
+// nonEmpty drops empty values, so `--genre "$GENRE"` with an unset variable
+// keeps meaning "no genre filter" as it always has. It matters more for
+// exclusions: every string contains "", so an empty --exclude-genre reaching
+// the matcher would exclude the entire collection.
+func nonEmpty(vals []string) []string {
+	var out []string
+	for _, v := range vals {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// parseYearValues turns --year and --decade values into one list of ranges.
+// They feed a single constraint on purpose: --year 1959 --decade 70s means
+// "1959 or the 70s", not the empty intersection two AND-ed fields would give.
+func parseYearValues(years, decades []string) ([]yearRange, error) {
+	var out []yearRange
+	for _, v := range years {
+		if v == "" {
+			continue
+		}
+		r, err := parseYearValue(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	for _, v := range decades {
+		if v == "" {
+			continue
+		}
+		r, err := parseDecadeValue(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
 // anyNarrowing reports whether a filter that only *refines* a query was set.
 // Those cannot stand alone: --year 1959 does not say which record is meant.
-// --release-id is deliberately excluded, because it identifies one exact
-// record and needs nothing beside it.
+//
+// Two deliberate exclusions from the count. --release-id identifies one exact
+// record and needs nothing beside it. A --query *inclusion* is itself a
+// query, so it is reported by hasQuery instead -- but an --exclude-query only
+// says which record is not meant, so it narrows like any other exclusion.
 func (ff *filterFlags) anyNarrowing() bool {
-	return *ff.year != "" || *ff.genre != "" || *ff.label != "" || *ff.format != ""
+	for i := range filterFields {
+		if i != queryField && len(*ff.include[i]) > 0 {
+			return true
+		}
+		if len(*ff.exclude[i]) > 0 {
+			return true
+		}
+	}
+	return len(ff.year) > 0 || len(ff.noYear) > 0 ||
+		len(ff.decade) > 0 || len(ff.noDecade) > 0
+}
+
+// hasQuery reports whether --query named something to look for, which is what
+// lets it satisfy favorite's "requires a query" rule.
+func (ff *filterFlags) hasQuery() bool {
+	return len(nonEmpty(*ff.include[queryField])) > 0
+}
+
+// queryValues returns the --query values, empty ones dropped.
+func (ff *filterFlags) queryValues() []string {
+	return nonEmpty(*ff.include[queryField])
 }
 
 // identifies reports whether the flags name one exact record on their own.
@@ -452,11 +532,24 @@ Global flags (accepted by every command):
   --color WHEN     Colorize output: auto (default), always, or never.
                    auto colorizes only a terminal, and honors NO_COLOR.`
 
-const filterFlagHelp = `  --year VALUE     Filter by year or year range (e.g., 1975 or 1970-1980)
-  --genre VALUE    Filter by genre (case-insensitive substring match)
-  --label VALUE    Filter by label (case-insensitive substring match)
-  --format VALUE   Filter by format or colour (case-insensitive substring match)
-  --release-id N   Select one exact record by its Discogs release ID`
+// filterFlagHelp is the shared help block for the filter flags, generated
+// from filterFields so a new filter cannot ship undocumented. The
+// --exclude-NAME twins are named once by the heading rather than listed:
+// sixteen near-identical lines would bury the eight that matter.
+// TestFilterFlagsAreDocumented enforces both halves of that bargain.
+var filterFlagHelp = buildFilterFlagHelp()
+
+func buildFilterFlagHelp() string {
+	var sb strings.Builder
+	sb.WriteString("\nFilters (all repeatable; each has an --exclude-NAME twin that removes matches):\n")
+	for _, field := range filterFields {
+		fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", field.name, field.help)
+	}
+	fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", "year", "Filter by year or year range (e.g., 1975 or 1970-1980)")
+	fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", "decade", "Filter by decade (e.g., 70s or 1970s); adds to --year")
+	fmt.Fprintf(&sb, "  --%-12s N      %s\n", "release-id", "Select one exact record by its Discogs release ID")
+	return sb.String()
+}
 
 func init() {
 	commands = []command{

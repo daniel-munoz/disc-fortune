@@ -744,3 +744,243 @@ func TestParseFavoriteRejectsUnheardFlag(t *testing.T) {
 		t.Fatal("expected favorite to reject --unheard")
 	}
 }
+
+func TestFilterFlagsRepeatAndOR(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	args := []string{"--genre", "jazz", "--genre", "funk"}
+	if _, err := parseInterspersed(fs, args); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	filter, err := ff.Filter()
+	if err != nil {
+		t.Fatalf("Filter: %v", err)
+	}
+	if len(filter.Genre.Include) != 2 ||
+		filter.Genre.Include[0] != "jazz" || filter.Genre.Include[1] != "funk" {
+		t.Errorf("Genre.Include = %q, want [jazz funk]", filter.Genre.Include)
+	}
+}
+
+func TestFilterFlagsExcludeTwins(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	args := []string{
+		"--exclude-query", "bootleg",
+		"--exclude-artist", "davis",
+		"--exclude-title", "live",
+		"--exclude-genre", "rock",
+		"--exclude-label", "columbia",
+		"--exclude-format", "cd",
+	}
+	if _, err := parseInterspersed(fs, args); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	filter, err := ff.Filter()
+	if err != nil {
+		t.Fatalf("Filter: %v", err)
+	}
+	for name, got := range map[string][]string{
+		"query":  filter.Query.Exclude,
+		"artist": filter.Artist.Exclude,
+		"title":  filter.Title.Exclude,
+		"genre":  filter.Genre.Exclude,
+		"label":  filter.Label.Exclude,
+		"format": filter.Format.Exclude,
+	} {
+		if len(got) != 1 {
+			t.Errorf("%s: Exclude = %q, want one value", name, got)
+		}
+	}
+}
+
+func TestFilterFlagsNewNarrowingFields(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	args := []string{"--query", "kind of", "--artist", "miles", "--title", "blue"}
+	if _, err := parseInterspersed(fs, args); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	filter, err := ff.Filter()
+	if err != nil {
+		t.Fatalf("Filter: %v", err)
+	}
+	if len(filter.Query.Include) != 1 || filter.Query.Include[0] != "kind of" {
+		t.Errorf("Query.Include = %q, want [kind of]", filter.Query.Include)
+	}
+	if len(filter.Artist.Include) != 1 || filter.Artist.Include[0] != "miles" {
+		t.Errorf("Artist.Include = %q, want [miles]", filter.Artist.Include)
+	}
+	if len(filter.Title.Include) != 1 || filter.Title.Include[0] != "blue" {
+		t.Errorf("Title.Include = %q, want [blue]", filter.Title.Include)
+	}
+}
+
+// --year and --decade are two spellings of one field, so they OR rather than
+// AND. The naive reading -- two separate fields intersected -- would make
+// this combination return nothing at all.
+func TestYearAndDecadeFeedOneConstraint(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	if _, err := parseInterspersed(fs, []string{"--year", "1959", "--decade", "70s"}); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	filter, err := ff.Filter()
+	if err != nil {
+		t.Fatalf("Filter: %v", err)
+	}
+	if len(filter.Year.Include) != 2 {
+		t.Fatalf("Year.Include = %v, want two ranges", filter.Year.Include)
+	}
+	albums := []Album{
+		{Artist: "A", Year: 1959},
+		{Artist: "B", Year: 1975},
+		{Artist: "C", Year: 1985},
+	}
+	if got := filter.Apply(albums); len(got) != 2 {
+		t.Errorf("matched %d albums, want 2 (1959 and 1975)", len(got))
+	}
+}
+
+func TestExcludeYearAndDecadeFeedOneExclusion(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	args := []string{"--exclude-year", "1959", "--exclude-decade", "70s"}
+	if _, err := parseInterspersed(fs, args); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	filter, err := ff.Filter()
+	if err != nil {
+		t.Fatalf("Filter: %v", err)
+	}
+	if len(filter.Year.Exclude) != 2 {
+		t.Errorf("Year.Exclude = %v, want two ranges", filter.Year.Exclude)
+	}
+	if len(filter.Year.Include) != 0 {
+		t.Errorf("Year.Include = %v, want none", filter.Year.Include)
+	}
+}
+
+func TestFilterFlagsRejectsAmbiguousDecade(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	if _, err := parseInterspersed(fs, []string{"--decade", "20s"}); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	_, err := ff.Filter()
+	if err == nil {
+		t.Fatal("expected an error for --decade 20s")
+	}
+	if !strings.Contains(err.Error(), "1920s") || !strings.Contains(err.Error(), "2020s") {
+		t.Errorf("error = %q, want it to name both spellings", err)
+	}
+}
+
+// `--genre "$GENRE"` with an unset variable has always meant "no genre
+// filter", and must keep meaning that. It also matters for exclusions: every
+// string contains "", so an empty exclusion reaching the matcher would
+// exclude the whole collection.
+func TestEmptyFilterValuesAreDropped(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	ff := addFilterFlags(fs)
+	args := []string{"--genre", "", "--exclude-genre", "", "--year", "", "--decade", ""}
+	if _, err := parseInterspersed(fs, args); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	filter, err := ff.Filter()
+	if err != nil {
+		t.Fatalf("Filter: %v", err)
+	}
+	if filter.any() {
+		t.Errorf("filter = %+v, want nothing set", filter)
+	}
+
+	albums := []Album{{Artist: "A", Genres: []string{"Jazz"}}, {Artist: "B"}}
+	if got := filter.Apply(albums); len(got) != 2 {
+		t.Errorf("matched %d albums, want all 2", len(got))
+	}
+}
+
+func TestHasQueryIgnoresExclusions(t *testing.T) {
+	fs, _ := newFlagSet("favorite")
+	ff := addFilterFlags(fs)
+	if _, err := parseInterspersed(fs, []string{"--exclude-query", "bootleg"}); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	if ff.hasQuery() {
+		t.Error("hasQuery() = true for --exclude-query; an exclusion says which record is NOT meant")
+	}
+	if !ff.anyNarrowing() {
+		t.Error("anyNarrowing() = false for --exclude-query, want true")
+	}
+}
+
+func TestHasQueryAndNarrowing(t *testing.T) {
+	fs, _ := newFlagSet("favorite")
+	ff := addFilterFlags(fs)
+	if _, err := parseInterspersed(fs, []string{"--query", "miles"}); err != nil {
+		t.Fatalf("parseInterspersed: %v", err)
+	}
+	if !ff.hasQuery() {
+		t.Error("hasQuery() = false for --query, want true")
+	}
+	if ff.anyNarrowing() {
+		t.Error("anyNarrowing() = true for --query alone; a query is not a narrowing filter")
+	}
+}
+
+// pick and list have never had a free-text search: they reject positional
+// arguments, and --query did not exist. This is the acceptance criterion for
+// that gap.
+func TestParseSelectionAcceptsQueryAndTheNewFilters(t *testing.T) {
+	for _, name := range []string{"pick", "list"} {
+		args := []string{
+			"--query", "miles",
+			"--artist", "davis",
+			"--title", "blue",
+			"--decade", "70s",
+			"--exclude-genre", "rock",
+		}
+		cfg, err := parseSelection(name, args)
+		if err != nil {
+			t.Fatalf("parseSelection(%s): %v", name, err)
+		}
+		if len(cfg.filter.Query.Include) != 1 || cfg.filter.Query.Include[0] != "miles" {
+			t.Errorf("%s: Query.Include = %q, want [miles]", name, cfg.filter.Query.Include)
+		}
+		if len(cfg.filter.Artist.Include) != 1 || len(cfg.filter.Title.Include) != 1 {
+			t.Errorf("%s: artist/title not parsed: %+v", name, cfg.filter)
+		}
+		if len(cfg.filter.Year.Include) != 1 || cfg.filter.Year.Include[0] != (yearRange{1970, 1979}) {
+			t.Errorf("%s: Year.Include = %v, want [{1970 1979}]", name, cfg.filter.Year.Include)
+		}
+		if len(cfg.filter.Genre.Exclude) != 1 || cfg.filter.Genre.Exclude[0] != "rock" {
+			t.Errorf("%s: Genre.Exclude = %q, want [rock]", name, cfg.filter.Genre.Exclude)
+		}
+	}
+}
+
+func TestEveryNarrowingFlagCountsAsNarrowing(t *testing.T) {
+	for _, args := range [][]string{
+		{"--artist", "miles"},
+		{"--title", "blue"},
+		{"--genre", "jazz"},
+		{"--label", "columbia"},
+		{"--format", "vinyl"},
+		{"--year", "1959"},
+		{"--decade", "70s"},
+		{"--exclude-artist", "miles"},
+		{"--exclude-genre", "rock"},
+		{"--exclude-year", "1959"},
+		{"--exclude-decade", "70s"},
+	} {
+		fs, _ := newFlagSet("favorite")
+		ff := addFilterFlags(fs)
+		if _, err := parseInterspersed(fs, args); err != nil {
+			t.Fatalf("parseInterspersed(%v): %v", args, err)
+		}
+		if !ff.anyNarrowing() {
+			t.Errorf("anyNarrowing() = false for %v, want true", args)
+		}
+	}
+}
