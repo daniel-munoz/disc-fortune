@@ -34,7 +34,7 @@ disc-fortune
 Filters follow one rule: **values within a field OR together, different fields
 AND together, and any `--exclude-` match removes the record outright.**
 
-```bash
+```sh
 # Filter by year, decade, or range
 disc-fortune --year 1975
 disc-fortune --year 1970-1980
@@ -56,7 +56,7 @@ disc-fortune --title "kind of blue"
 # Repeat a flag for "either" -- these are the same records, in one command
 disc-fortune --genre jazz --genre funk
 
-# Every filter has an --exclude- twin
+# Every narrowing filter has an --exclude- twin (--release-id has none)
 disc-fortune --exclude-genre rock
 disc-fortune list --decade 70s --exclude-label "blue note"
 
@@ -75,6 +75,11 @@ year or label blank on plenty of releases, and those records survive
 Two-digit decades from `30s` to `90s` mean the twentieth century. `--decade
 20s` is refused, because it could mean either the 1920s or the 2020s — write
 whichever you meant in full.
+
+`--decade` also accepts any year, not just one already aligned to a decade:
+`--decade 1975` and `--decade 75s` both mean the 1970s, the same range as
+`--decade 1970s`. If you meant one specific year, use `--year` instead —
+`--decade` always widens to the full ten years.
 
 ```sh
 # Two pressings of one title can be identical in every field -- two
@@ -211,6 +216,11 @@ disc-fortune favorite
 
 # Favorite a specific album (case-insensitive substring of "Artist - Title")
 disc-fortune favorite "kind of blue"
+
+# The query can also be given as --query -- the two spellings are
+# equivalent, and giving both at once is refused rather than guessed at
+disc-fortune favorite --query "kind of blue"
+disc-fortune favorite "kind of blue" --query coltrane   # error: give the query once
 
 # Narrow an ambiguous query with filters
 disc-fortune favorite "miles" --year 1959

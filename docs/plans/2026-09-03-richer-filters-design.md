@@ -185,13 +185,20 @@ Filters (all repeatable; each has an --exclude-NAME twin that removes matches):
   --query VALUE    Filter by "Artist - Title" (case-insensitive substring)
   --artist VALUE   Filter by artist
   --title VALUE    Filter by title
-  --year VALUE     Filter by year or range (e.g., 1975 or 1970-1980)
-  --decade VALUE   Filter by decade (e.g., 70s or 1970s); adds to --year
   --genre VALUE    Filter by genre
   --label VALUE    Filter by label
   --format VALUE   Filter by format or colour
-  --release-id N   Select one exact record by its Discogs release ID
+  --year VALUE     Filter by year or year range (e.g., 1975 or 1970-1980) (repeatable)
+  --decade VALUE   Filter by decade (e.g., 70s or 1970s); adds to --year (repeatable)
+  --release-id N   Select one exact record by its Discogs release ID (single-valued, no twin)
 ```
+
+`--release-id` is listed under the same heading for completeness, since it is
+still a filter flag every filter-taking command accepts, but the heading's
+"all repeatable ... each has a twin" claim does not hold for it: it identifies
+one exact record rather than narrowing a query, so it takes one value and has
+no `--exclude-release-id`. Its own line says so, rather than the heading
+carving out an exception that is easy to stop noticing.
 
 `TestFilterFlagsAreDocumented` gets **stricter**, not weaker. It walks the
 registered flag set and requires each flag to be either documented literally in
