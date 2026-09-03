@@ -102,6 +102,9 @@ func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
 		return "No history yet\n"
 	}
 
+	// newHistoryPayload (json.go) mirrors this clamp and reverse. Change both
+	// together, or the --json and text views will disagree about "the last N
+	// picks".
 	if limit <= 0 || limit > len(entries) {
 		limit = len(entries)
 	}

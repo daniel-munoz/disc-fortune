@@ -3,15 +3,18 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
-// The golden tests below pin the exact bytes of the wire format. They are
-// what stops it drifting when Album changes: a field added to storage
-// without a decision about the output fails here rather than silently
-// altering what every script sees.
+// The golden tests below pin the exact bytes of the wire format. They catch
+// drift within jsonAlbum -- rename a key, reorder a field, change what null
+// means -- immediately. They do NOT catch a field added to Album with no
+// jsonAlbum counterpart: that omission never touches these bytes, so the
+// suite would stay green. TestEveryAlbumFieldHasAWireDecision, below, is what
+// catches that.
 
 func TestJSONAlbumGoldenFullyPopulated(t *testing.T) {
 	album := Album{
@@ -198,16 +201,45 @@ func TestHistoryPayloadEmptyIsAnEmptyArray(t *testing.T) {
 
 // The timestamp on the wire and the timestamp in history.json must be the
 // same string, so no rounding can make them disagree.
+//
+// addToHistory stamps with time.Now(), which is local, so real output is not
+// always the UTC "Z" form these fixtures might suggest: it carries whatever
+// UTC offset the machine was in, and Go prints fractional seconds at
+// whatever length they actually have -- trailing zeros dropped, and no dot at
+// all when there is no fraction. Both cases are exercised here so a fixed
+// UTC assumption cannot creep back in undetected.
 func TestHistoryPayloadTimestampIsRFC3339AsStored(t *testing.T) {
-	ts := time.Date(2026, 9, 3, 21, 45, 6, 123456789, time.UTC)
-	entries := []HistoryEntry{{Album: Album{Artist: "a", Title: "1"}, Timestamp: ts}}
-
-	var buf bytes.Buffer
-	if err := writeJSON(&buf, newHistoryPayload(entries, 1)); err != nil {
-		t.Fatalf("writeJSON: %v", err)
+	tests := []struct {
+		name string
+		ts   time.Time
+		want string
+	}{
+		{
+			name: "UTC",
+			ts:   time.Date(2026, 9, 3, 21, 45, 6, 123456789, time.UTC),
+			want: `"2026-09-03T21:45:06.123456789Z"`,
+		},
+		{
+			// A local offset, and a fractional-second length (6 digits, no
+			// trailing zero) matching what addToHistory actually produces.
+			name: "local offset with variable-length fraction",
+			ts:   time.Date(2026, 9, 3, 18, 58, 59, 262156000, time.FixedZone("", -4*60*60)),
+			want: `"2026-09-03T18:58:59.262156-04:00"`,
+		},
 	}
-	if !strings.Contains(buf.String(), `"2026-09-03T21:45:06.123456789Z"`) {
-		t.Errorf("timestamp not RFC 3339 as stored:\n%s", buf.String())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entries := []HistoryEntry{{Album: Album{Artist: "a", Title: "1"}, Timestamp: tt.ts}}
+
+			var buf bytes.Buffer
+			if err := writeJSON(&buf, newHistoryPayload(entries, 1)); err != nil {
+				t.Fatalf("writeJSON: %v", err)
+			}
+			if !strings.Contains(buf.String(), tt.want) {
+				t.Errorf("timestamp not RFC 3339 as stored: want %s in:\n%s", tt.want, buf.String())
+			}
+		})
 	}
 }
 
@@ -246,5 +278,25 @@ func TestWriteJSONEndsWithExactlyOneNewline(t *testing.T) {
 	out := buf.String()
 	if !strings.HasSuffix(out, "}\n") || strings.HasSuffix(out, "\n\n") {
 		t.Errorf("want output ending in exactly one newline, got %q", out)
+	}
+}
+
+// Album and jsonAlbum are hand-kept in step. A field added to storage must be
+// a conscious decision about the wire format, not a silent omission: this test
+// is the forcing function the golden tests cannot be.
+func TestEveryAlbumFieldHasAWireDecision(t *testing.T) {
+	storage := reflect.TypeOf(Album{})
+	wire := reflect.TypeOf(jsonAlbum{})
+	if storage.NumField() != wire.NumField() {
+		t.Fatalf("Album has %d fields, jsonAlbum has %d -- decide what the new "+
+			"field does on the wire, then update this test",
+			storage.NumField(), wire.NumField())
+	}
+	for i := range storage.NumField() {
+		s, w := storage.Field(i), wire.Field(i)
+		if s.Name != w.Name {
+			t.Errorf("field %d: Album.%s vs jsonAlbum.%s -- order must match so "+
+				"the golden key order is traceable to storage", i, s.Name, w.Name)
+		}
 	}
 }

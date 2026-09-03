@@ -1007,6 +1007,27 @@ func TestJSONDoesNotChangeSemantics(t *testing.T) {
 		}
 	})
 
+	// --unheard exhausts before the JSON branch is ever reached: runList
+	// exits 1 on its plain-text stderr message the same way it does without
+	// --json. Safe by construction, but worth pinning down.
+	t.Run("list --json --unheard on a fully-heard collection exits 1 with empty stdout", func(t *testing.T) {
+		home := t.TempDir()
+		collection, _, history := fixturePaths(home)
+		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+
+		code, stdout, stderr := runHelperSplit(t, home, "list", "--json", "--unheard")
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+		if stdout != "" {
+			t.Errorf("stdout = %q, want empty -- no partial payload on a failing exit", stdout)
+		}
+		if !strings.Contains(stderr, "already been played") {
+			t.Errorf("stderr = %q, want the exhaustion message", stderr)
+		}
+	})
+
 	// An ANSI escape inside a JSON string would be a parse hazard, so the
 	// colour mode has no effect on this path.
 	t.Run("--color=always injects no escapes", func(t *testing.T) {

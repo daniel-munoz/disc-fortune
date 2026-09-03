@@ -136,6 +136,10 @@ are `null` when Discogs did not say — `release_id` is also `null` for anything
 picked before v2.2.0 — while `genres` and `formats` are `[]` rather than null,
 so a loop over them needs no guard. `artist` and `title` are always strings.
 
+Timestamps are RFC 3339 with your local UTC offset (not necessarily `Z`), and
+fractional seconds are variable-length, so parse them with a real RFC 3339
+parser rather than a fixed format string.
+
 Exit codes are unchanged, which means a script should check them: `list --json`
 matching nothing writes its message to stderr and exits 1 with an empty stdout,
 rather than emitting an empty result.

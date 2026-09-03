@@ -124,10 +124,15 @@ is the entire point. `release_id` is `omitempty` on disk (correct — an unknown
 ID should not be written as `0`) and always present on the wire (correct — a
 consumer needs the key).
 
-The cost is a conversion function that must be kept in step with `Album`. That
-is paid for by golden tests pinning the exact bytes (§6): a field added to
-`Album` without a decision about the wire format fails them loudly, which is the
-opposite of what direct serialisation would do.
+The cost is a conversion function that must be kept in step with `Album`. The
+golden tests (§6) pin the exact bytes of `jsonAlbum` itself, so a renamed key
+or a reordered field fails them immediately — but a field added to `Album`
+with no corresponding decision in `jsonAlbum` never touches those bytes, so
+the golden tests do not catch it and the suite stays green. What does catch
+it is `TestEveryAlbumFieldHasAWireDecision`, a reflection test that compares
+`Album`'s and `jsonAlbum`'s field counts and order and fails when they
+diverge, forcing a conscious choice about the wire format for every new
+`Album` field.
 
 ### 4. `--json` changes the format, never the semantics
 
@@ -201,8 +206,13 @@ behaviour change to a scripted exit code, which the Phase 3 rule forbids.
 ## Tests
 
 - **Golden tests** pinning the exact bytes of all three payloads: a fully
-  populated album, and one with everything absent. These are what stop the wire
-  format drifting when `Album` changes.
+  populated album, and one with everything absent. These stop `jsonAlbum`
+  drifting from itself -- a renamed key, a reordered field -- but not from
+  `Album`: a field added to `Album` with no `jsonAlbum` counterpart changes no
+  golden bytes.
+- **`TestEveryAlbumFieldHasAWireDecision`**, a reflection test comparing
+  `Album`'s and `jsonAlbum`'s field counts and order. This is what stops the
+  wire format silently falling out of step when `Album` changes.
 - A test that `encoding/json` round-trips what we emit, so the output is not
   merely plausible but parseable.
 - A test asserting no `0x1b` byte in `--json` output under `--color=always`.

@@ -68,10 +68,12 @@ import (
 	"time"
 )
 
-// The golden tests below pin the exact bytes of the wire format. They are
-// what stops it drifting when Album changes: a field added to storage
-// without a decision about the output fails here rather than silently
-// altering what every script sees.
+// The golden tests below pin the exact bytes of the wire format. They catch
+// drift within jsonAlbum -- rename a key, reorder a field, change what null
+// means -- immediately. They do NOT catch a field added to Album with no
+// jsonAlbum counterpart: that omission never touches these bytes, so the
+// suite would stay green. TestEveryAlbumFieldHasAWireDecision, below, is what
+// catches that.
 
 func TestJSONAlbumGoldenFullyPopulated(t *testing.T) {
 	album := Album{
@@ -486,8 +488,9 @@ with null for unknown scalars and [] for absent lists: a consumer can
 model a fixed type, and null says 'Discogs did not tell us' where 0
 would look like a real ID.
 
-Golden tests pin the exact bytes, so a storage change cannot silently
-alter what every script sees.
+Golden tests pin jsonAlbum's exact bytes, but a field silently added to
+Album with no jsonAlbum counterpart changes none of them -- that guard is
+TestEveryAlbumFieldHasAWireDecision, added in the final fix wave.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01AXsQz6D6Dg9RLvFJmdJDST"
