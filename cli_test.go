@@ -780,6 +780,9 @@ func TestFilterFlagsExcludeTwins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Filter: %v", err)
 	}
+	// Every value below is distinct, so a cross-wired index -- e.g.
+	// --exclude-title landing in filter.Label.Exclude -- fails here even
+	// though each field would still hold exactly one value.
 	for name, got := range map[string][]string{
 		"query":  filter.Query.Exclude,
 		"artist": filter.Artist.Exclude,
@@ -788,9 +791,64 @@ func TestFilterFlagsExcludeTwins(t *testing.T) {
 		"label":  filter.Label.Exclude,
 		"format": filter.Format.Exclude,
 	} {
-		if len(got) != 1 {
-			t.Errorf("%s: Exclude = %q, want one value", name, got)
+		want := map[string]string{
+			"query":  "bootleg",
+			"artist": "davis",
+			"title":  "live",
+			"genre":  "rock",
+			"label":  "columbia",
+			"format": "cd",
+		}[name]
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("%s: Exclude = %q, want [%s]", name, got, want)
 		}
+	}
+}
+
+// TestAllFilterTakingCommandsRegisterFilterFlags is the "Registration" test
+// the design spec's Tests section calls for explicitly: every table-driven
+// field and every field outside the table reaches pick, list, favorite and
+// unfavorite alike. It is structurally guaranteed today, since all four
+// route through addFilterFlags, but nothing exercised that guarantee through
+// each command's actual parser until now.
+func TestAllFilterTakingCommandsRegisterFilterFlags(t *testing.T) {
+	args := []string{
+		"--genre", "jazz", "--exclude-label", "x",
+		"--year", "1975", "--decade", "70s", "--release-id", "42",
+	}
+	check := func(t *testing.T, filter Filter) {
+		t.Helper()
+		if len(filter.Genre.Include) != 1 || filter.Genre.Include[0] != "jazz" {
+			t.Errorf("Genre.Include = %q, want [jazz]", filter.Genre.Include)
+		}
+		if len(filter.Label.Exclude) != 1 || filter.Label.Exclude[0] != "x" {
+			t.Errorf("Label.Exclude = %q, want [x]", filter.Label.Exclude)
+		}
+		if len(filter.Year.Include) != 2 {
+			t.Errorf("Year.Include = %v, want two ranges (1975 and the 70s)", filter.Year.Include)
+		}
+		if filter.ReleaseID != 42 {
+			t.Errorf("ReleaseID = %d, want 42", filter.ReleaseID)
+		}
+	}
+
+	for _, name := range []string{"pick", "list"} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := parseSelection(name, args)
+			if err != nil {
+				t.Fatalf("parseSelection(%s, %v): %v", name, args, err)
+			}
+			check(t, cfg.filter)
+		})
+	}
+	for _, name := range []string{"favorite", "unfavorite"} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := parseFavorite(name, args)
+			if err != nil {
+				t.Fatalf("parseFavorite(%s, %v): %v", name, args, err)
+			}
+			check(t, cfg.filter)
+		})
 	}
 }
 

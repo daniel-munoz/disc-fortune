@@ -21,7 +21,9 @@ func syncProgress(w io.Writer, enabled bool) progressFunc {
 	}
 }
 
-// arrayFlags collects a repeatable string flag (--folder).
+// arrayFlags collects a repeatable string flag's values. --folder was its
+// first user; every repeatable filter flag (--genre, --exclude-artist, and
+// the rest) is built on it too.
 type arrayFlags []string
 
 func (a *arrayFlags) String() string { return strings.Join(*a, ", ") }

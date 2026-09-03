@@ -75,6 +75,37 @@ type filterFlags struct {
 	releaseID *int
 }
 
+// nonSubstringFilterFlag describes one filter flag outside filterFields: it
+// parses its value rather than substring-matching, which is why the matching
+// engine's table has no room for it.
+type nonSubstringFilterFlag struct {
+	name, arg, help string
+	twin            bool
+}
+
+// registeredHelp is the one text addFilterFlags registers a flag with and
+// buildFilterFlagHelp displays for it. Before this existed, --year's help
+// string was hand-copied into both places and drifted: the copy in
+// addFilterFlags never picked up the "(repeatable)" suffix every table-driven
+// flag's registration carries. Routing both call sites through this method
+// makes that kind of drift impossible rather than merely unlikely.
+func (f nonSubstringFilterFlag) registeredHelp() string {
+	if f.twin {
+		return f.help + " (repeatable)"
+	}
+	return f.help
+}
+
+// nonSubstringFilterFlags are the filter flags outside filterFields: they
+// parse their values rather than substring-matching, which is why the
+// matching engine's table has no room for them. Their help lives here so it
+// has one source, and so shell completion can enumerate the whole surface.
+var nonSubstringFilterFlags = []nonSubstringFilterFlag{
+	{"year", "VALUE", "Filter by year or year range (e.g., 1975 or 1970-1980)", true},
+	{"decade", "VALUE", "Filter by decade (e.g., 70s or 1970s); adds to --year", true},
+	{"release-id", "N", "Select one exact record by its Discogs release ID (single-valued, no twin)", false},
+}
+
 func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 	ff := &filterFlags{
 		include: make([]*arrayFlags, len(filterFields)),
@@ -86,11 +117,18 @@ func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 		fs.Var(exc, "exclude-"+field.name, "Exclude matches of "+field.name+" (repeatable)")
 		ff.include[i], ff.exclude[i] = inc, exc
 	}
-	fs.Var(&ff.year, "year", "Filter by year or year range (e.g., 1975 or 1970-1980)")
-	fs.Var(&ff.noYear, "exclude-year", "Exclude a year or year range (repeatable)")
-	fs.Var(&ff.decade, "decade", "Filter by decade (e.g., 70s or 1970s); adds to --year")
-	fs.Var(&ff.noDecade, "exclude-decade", "Exclude a decade (repeatable)")
-	ff.releaseID = fs.Int("release-id", 0, "Select one exact record by its Discogs release ID")
+	for _, f := range nonSubstringFilterFlags {
+		switch f.name {
+		case "year":
+			fs.Var(&ff.year, f.name, f.registeredHelp())
+			fs.Var(&ff.noYear, "exclude-"+f.name, "Exclude a year or year range (repeatable)")
+		case "decade":
+			fs.Var(&ff.decade, f.name, f.registeredHelp())
+			fs.Var(&ff.noDecade, "exclude-"+f.name, "Exclude a decade (repeatable)")
+		case "release-id":
+			ff.releaseID = fs.Int(f.name, 0, f.registeredHelp())
+		}
+	}
 	return ff
 }
 
@@ -179,7 +217,7 @@ func (ff *filterFlags) anyNarrowing() bool {
 // hasQuery reports whether --query named something to look for, which is what
 // lets it satisfy favorite's "requires a query" rule.
 func (ff *filterFlags) hasQuery() bool {
-	return len(nonEmpty(*ff.include[queryField])) > 0
+	return len(ff.queryValues()) > 0
 }
 
 // queryValues returns the --query values, empty ones dropped.
@@ -550,9 +588,10 @@ Global flags (accepted by every command):
                    auto colorizes only a terminal, and honors NO_COLOR.`
 
 // filterFlagHelp is the shared help block for the filter flags, generated
-// from filterFields so a new filter cannot ship undocumented. The
-// --exclude-NAME twins are named once by the heading rather than listed:
-// sixteen near-identical lines would bury the eight that matter.
+// from filterFields and nonSubstringFilterFlags so a new filter cannot ship
+// undocumented. The --exclude-NAME twins are named once by the heading
+// rather than listed: sixteen near-identical lines would bury the eight that
+// matter -- --release-id, which has no twin, says so on its own line instead.
 // TestFilterFlagsAreDocumented enforces both halves of that bargain.
 var filterFlagHelp = buildFilterFlagHelp()
 
@@ -562,9 +601,9 @@ func buildFilterFlagHelp() string {
 	for _, field := range filterFields {
 		fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", field.name, field.help)
 	}
-	fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", "year", "Filter by year or year range (e.g., 1975 or 1970-1980)")
-	fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", "decade", "Filter by decade (e.g., 70s or 1970s); adds to --year")
-	fmt.Fprintf(&sb, "  --%-12s N      %s\n", "release-id", "Select one exact record by its Discogs release ID")
+	for _, f := range nonSubstringFilterFlags {
+		fmt.Fprintf(&sb, "  --%-12s %-7s%s\n", f.name, f.arg, f.registeredHelp())
+	}
 	// The old hand-written constant ended without a trailing newline, and
 	// every usage block appends filterFlagHelp straight after its own line
 	// ending in "\n" -- so a trailing newline here would double up with

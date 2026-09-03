@@ -182,6 +182,35 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 	}
 }
 
+// TestNonTableFilterFlagsHaveOneHelpSource closes the gap TestFilterFlagsAreDocumented
+// leaves: that test only checks that a flag *name* appears somewhere in the
+// usage text, never that the help *text* registered with the flag matches
+// what the shared help block shows for it. That gap is exactly how --year's
+// registered help fell out of sync with its documented help before
+// nonSubstringFilterFlags existed. This asserts the stronger, single-source
+// property directly: each of the three flags outside filterFields is
+// registered with, and documented with, the very same string.
+func TestNonTableFilterFlagsHaveOneHelpSource(t *testing.T) {
+	fs, _ := newFlagSet("pick")
+	addFilterFlags(fs)
+	for _, f := range nonSubstringFilterFlags {
+		flg := fs.Lookup(f.name)
+		if flg == nil {
+			t.Fatalf("addFilterFlags did not register --%s", f.name)
+		}
+		if flg.Usage != f.registeredHelp() {
+			t.Errorf("--%s registered Usage %q, want %q", f.name, flg.Usage, f.registeredHelp())
+		}
+		if !strings.Contains(filterFlagHelp, flg.Usage) {
+			t.Errorf("--%s registered Usage %q does not appear verbatim in filterFlagHelp", f.name, flg.Usage)
+		}
+		twinRegistered := fs.Lookup("exclude-"+f.name) != nil
+		if twinRegistered != f.twin {
+			t.Errorf("--%s has a registered --exclude- twin = %v, want %v", f.name, twinRegistered, f.twin)
+		}
+	}
+}
+
 // buildFilterFlagHelp generates filterFlagHelp from filterFields, and every
 // usage block appends it straight after a line already ending in "\n". A
 // trailing newline left on the generated block would double up with that
