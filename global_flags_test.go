@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"strings"
 	"testing"
 )
@@ -127,11 +128,32 @@ func TestEveryCommandRejectsInvalidColor(t *testing.T) {
 }
 
 // TestFilterFlagsAreDocumented is the drift guard the filter flags lacked.
-// Their help text is hand-written into each usage block rather than generated
-// from the FlagSet, so adding a flag silently leaves every usage block stale
-// -- which is exactly what happened when --release-id was added.
+// Their help text is assembled separately from the FlagSet, so a flag added
+// without help would otherwise leave every usage block quietly stale -- which
+// is exactly what happened when --release-id was added.
+//
+// It walks what addFilterFlags actually registers rather than a hand-written
+// list, so a filter added in future fails here without anyone remembering to
+// update the test. A flag counts as documented when it is named literally, or
+// when it is the --exclude- twin of a flag that is; the block names that
+// convention once instead of listing sixteen near-identical lines, so the
+// sentence introducing it is required too.
 func TestFilterFlagsAreDocumented(t *testing.T) {
-	filterFlagNames := []string{"--year", "--genre", "--label", "--format", "--release-id"}
+	base, _ := newFlagSet("pick")
+	global := map[string]bool{}
+	base.VisitAll(func(f *flag.Flag) { global[f.Name] = true })
+
+	fs, _ := newFlagSet("pick")
+	addFilterFlags(fs)
+	var names []string
+	fs.VisitAll(func(f *flag.Flag) {
+		if !global[f.Name] {
+			names = append(names, f.Name)
+		}
+	})
+	if len(names) == 0 {
+		t.Fatal("addFilterFlags registered nothing; the guard is not testing anything")
+	}
 
 	documented := 0
 	for _, c := range commands {
@@ -140,10 +162,19 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 			continue
 		}
 		documented++
-		for _, name := range filterFlagNames {
-			if !strings.Contains(c.usage, name) {
-				t.Errorf("%s usage does not mention %s", c.name, name)
+
+		if !strings.Contains(c.usage, "--exclude-NAME twin") {
+			t.Errorf("%s usage does not explain the --exclude-NAME twins", c.name)
+		}
+		for _, name := range names {
+			if strings.Contains(c.usage, "--"+name) {
+				continue
 			}
+			twin, isTwin := strings.CutPrefix(name, "exclude-")
+			if isTwin && strings.Contains(c.usage, "--"+twin) {
+				continue
+			}
+			t.Errorf("%s usage does not mention --%s", c.name, name)
 		}
 	}
 	if documented == 0 {
