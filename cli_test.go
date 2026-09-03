@@ -1165,3 +1165,59 @@ func TestFavoriteSeveralQueryValuesDescribeThemselves(t *testing.T) {
 		t.Errorf("filter.Query.Include = %q, want two values", cfg.filter.Query.Include)
 	}
 }
+
+func TestParseSelectionJSONFlag(t *testing.T) {
+	for _, name := range []string{"pick", "list"} {
+		cfg, err := parseSelection(name, []string{"--json"})
+		if err != nil {
+			t.Fatalf("parseSelection(%s): %v", name, err)
+		}
+		if !cfg.json {
+			t.Errorf("%s: cfg.json = false, want true", name)
+		}
+	}
+}
+
+func TestParseSelectionJSONDefaultsOff(t *testing.T) {
+	for _, name := range []string{"pick", "list"} {
+		cfg, err := parseSelection(name, nil)
+		if err != nil {
+			t.Fatalf("parseSelection(%s): %v", name, err)
+		}
+		if cfg.json {
+			t.Errorf("%s: cfg.json = true, want false by default", name)
+		}
+	}
+}
+
+func TestParseHistoryJSONFlag(t *testing.T) {
+	cfg, err := parseHistory([]string{"--json", "5"})
+	if err != nil {
+		t.Fatalf("parseHistory: %v", err)
+	}
+	if !cfg.json {
+		t.Error("cfg.json = false, want true")
+	}
+	if cfg.limit != 5 {
+		t.Errorf("limit = %d, want 5 (the positional must still work)", cfg.limit)
+	}
+}
+
+// --json is registered where it is implemented, exactly as --draw is, so a
+// command that cannot honour it says so rather than accepting and ignoring it.
+func TestJSONFlagRejectedWhereNotImplemented(t *testing.T) {
+	if _, err := parseSync([]string{"--json"}); err == nil {
+		t.Error("sync accepted --json, want an unknown-flag error")
+	}
+	if _, err := parseFavorite("favorite", []string{"miles", "--json"}); err == nil {
+		t.Error("favorite accepted --json, want an unknown-flag error")
+	}
+	if _, err := parseFavorite("unfavorite", []string{"miles", "--json"}); err == nil {
+		t.Error("unfavorite accepted --json, want an unknown-flag error")
+	}
+	for _, name := range []string{"folders", "migrate", "version"} {
+		if err := parseNoArgs(name, []string{"--json"}); err == nil {
+			t.Errorf("%s accepted --json, want an unknown-flag error", name)
+		}
+	}
+}

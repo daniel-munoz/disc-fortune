@@ -257,3 +257,26 @@ func TestDrawFlagIsDocumentedOnPickOnly(t *testing.T) {
 		t.Error("list documents --draw but does not accept it")
 	}
 }
+
+// The commands that accept --json must document it, and the ones that do not
+// must not claim to. Same guard as TestUnheardFlagIsDocumentedWhereAccepted.
+func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
+	for _, name := range []string{"pick", "list", "history"} {
+		c := lookup(name)
+		if c == nil {
+			t.Fatalf("command %q not found", name)
+		}
+		if !strings.Contains(c.usage, "--json") {
+			t.Errorf("%s usage does not mention --json", name)
+		}
+	}
+	for _, name := range []string{"favorite", "unfavorite", "sync", "folders", "migrate", "version", "help"} {
+		c := lookup(name)
+		if c == nil {
+			continue
+		}
+		if strings.Contains(c.usage, "--json") {
+			t.Errorf("%s documents --json but does not accept it", name)
+		}
+	}
+}

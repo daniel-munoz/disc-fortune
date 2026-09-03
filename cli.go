@@ -264,6 +264,10 @@ type selection struct {
 	draw   drawMode
 	filter Filter
 	color  colorMode
+	// json switches the data channel to the documented machine-readable
+	// payload. It changes the format only: exit codes, stderr advice and
+	// history side effects are identical either way.
+	json bool
 }
 
 // favoriteConfig is the parsed form of favorite and unfavorite. query is the
@@ -279,6 +283,7 @@ type favoriteConfig struct {
 type historyConfig struct {
 	limit int
 	color colorMode
+	json  bool
 }
 
 // syncConfig is the parsed form of sync.
@@ -290,6 +295,7 @@ func parseSelection(name string, args []string) (selection, error) {
 	fs, gf := newFlagSet(name)
 	favoritesOnly := fs.Bool("favorites", false, "Restrict to favorites only")
 	unheard := fs.Bool("unheard", false, "Restrict to albums never picked before")
+	asJSON := fs.Bool("json", false, "Emit machine-readable JSON instead of text")
 
 	// --draw is registered only where something is actually drawn, so
 	// `list --draw stale` fails as an unknown flag rather than being
@@ -332,6 +338,7 @@ func parseSelection(name string, args []string) (selection, error) {
 		draw:          mode,
 		filter:        filter,
 		color:         color,
+		json:          *asJSON,
 	}, nil
 }
 
@@ -391,6 +398,7 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 
 func parseHistory(args []string) (historyConfig, error) {
 	fs, gf := newFlagSet("history")
+	asJSON := fs.Bool("json", false, "Emit machine-readable JSON instead of text")
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return historyConfig{}, fmt.Errorf("history: %w", err)
@@ -413,7 +421,7 @@ func parseHistory(args []string) (historyConfig, error) {
 	if err != nil {
 		return historyConfig{}, fmt.Errorf("history: %v", err)
 	}
-	return historyConfig{limit: limit, color: color}, nil
+	return historyConfig{limit: limit, color: color, json: *asJSON}, nil
 }
 
 // parseHelp validates help's arguments (an optional topic). Routing it
@@ -631,6 +639,7 @@ Flags:
   --draw WHEN      How to draw: fresh (default), any, or stale.
                    fresh skips your recent picks; any ignores history
                    entirely; stale favors what you have left longest.
+  --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseSelection("pick", args)
@@ -651,6 +660,7 @@ Prints every album matching the filters, with a count.
 Flags:
   --favorites      List favorites only
   --unheard        List only albums you have never picked
+  --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
 			run: func(args []string) {
 				cfg, err := parseSelection("list", args)
@@ -699,9 +709,12 @@ Lists the folder names in your Discogs collection, for use with
 			name:        "history",
 			needsConfig: true,
 			summary:     "Show recent picks",
-			usage: `Usage: disc-fortune history [N]
+			usage: `Usage: disc-fortune history [N] [flags]
 
-Shows the last N picks. N defaults to 10; 0 shows all of them.`,
+Shows the last N picks. N defaults to 10; 0 shows all of them.
+
+Flags:
+  --json           Emit machine-readable JSON instead of text`,
 			run: func(args []string) {
 				cfg, err := parseHistory(args)
 				if handleParseErr("history", err) {
