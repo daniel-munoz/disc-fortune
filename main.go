@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -378,4 +380,62 @@ func unfavoriteLastPick() {
 	}
 
 	fmt.Printf("Removed from favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
+}
+
+// resolveOpenTarget picks the record to open: the last pick when nothing was
+// named, or the single match for the query. Like favorite, it exits rather
+// than returning on every empty or ambiguous outcome, because what to say
+// about each depends on what was asked.
+func resolveOpenTarget(cfg openConfig) Album {
+	// As in runFavorite: --release-id is a selection, not a missing query.
+	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
+		entries, err := loadHistory(historyPath())
+		if err != nil {
+			fatal("Error loading history: %v", err)
+		}
+		if len(entries) == 0 {
+			fatal("No history to open. Run `disc-fortune pick` first, or name a record.")
+		}
+		return entries[len(entries)-1].Album
+	}
+
+	album, matches, status := matchAlbums(loadCollectionOrExit(), cfg.filter)
+	switch status {
+	case matchedNone:
+		fatal("No albums match %s", cfg.describe())
+	case matchedMany:
+		fmt.Print(formatList(matches, stdoutColor(cfg.color), true))
+		fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
+		os.Exit(1)
+	}
+	return album
+}
+
+func runOpen(cfg openConfig) {
+	album := resolveOpenTarget(cfg)
+	if album.ReleaseID == 0 {
+		fatal("This record predates release IDs and sync could not identify it.\n" +
+			"Run `disc-fortune sync`, or name the record with --release-id.")
+	}
+	url := discogsReleaseURL(album.ReleaseID)
+
+	plan := planOpen(url, cfg.printOnly, runtime.GOOS, exec.LookPath, os.Getenv)
+	if plan.Launch == nil {
+		// The URL is the data channel's answer; the note explaining why
+		// nothing was launched is advisory and belongs on stderr. Exit 0:
+		// the user got what they asked for.
+		fmt.Println(url)
+		if plan.Note != "" {
+			fmt.Fprintln(os.Stderr, plan.Note)
+		}
+		return
+	}
+
+	if err := launchBrowser(plan.Launch); err != nil {
+		// A launcher that exists but will not start is a real failure, not a
+		// degradation -- but print the URL anyway so the user is not left
+		// with nothing.
+		fmt.Println(url)
+		fatal("disc-fortune: could not launch %s: %v", plan.Launch[0], err)
+	}
 }

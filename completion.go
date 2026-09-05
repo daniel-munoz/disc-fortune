@@ -47,6 +47,8 @@ func commandFlagSet(name string) *flag.FlagSet {
 		addHistoryFlags(fs)
 	case "stats":
 		addStatsFlags(fs)
+	case "open":
+		addOpenFlags(fs)
 	case "favorite", "unfavorite":
 		addFilterFlags(fs)
 	case "sync":

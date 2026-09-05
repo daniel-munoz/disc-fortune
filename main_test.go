@@ -1131,3 +1131,135 @@ func TestStatsFavoritesOnlyHeader(t *testing.T) {
 		t.Errorf("favorites header wrong:\n%s", stdout)
 	}
 }
+
+func TestOpenPrintsTheLastPicksURL(t *testing.T) {
+	home := t.TempDir()
+	collection, _, history := fixturePaths(home)
+	miles := Album{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue"}
+	mustSaveCollection(t, collection, []Album{miles})
+	mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+
+	code, stdout, stderr := runHelperSplit(t, home, "open", "--print")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\nstderr: %s", code, stderr)
+	}
+	if strings.TrimSpace(stdout) != "https://www.discogs.com/release/1839278" {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty under --print", stderr)
+	}
+}
+
+func TestOpenPrintsAQueriedReleasesURL(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{
+		{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
+	})
+
+	code, stdout, _ := runHelperSplit(t, home, "open", "kind of blue", "--print")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "release/1839278") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestOpenReleaseIDNeedsNoQuery(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{{ReleaseID: 42, Artist: "A", Title: "B"}})
+
+	code, stdout, _ := runHelperSplit(t, home, "open", "--release-id", "42", "--print")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "release/42") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+// Ambiguity lists the candidates with their IDs and exits 1, exactly as
+// favorite does. Nothing is launched, so --print is not needed here.
+func TestOpenAmbiguousQueryListsCandidates(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{
+		{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue"},
+		{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue"},
+	})
+
+	code, stdout, stderr := runHelperSplit(t, home, "open", "kind of blue")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stdout, "release 1") || !strings.Contains(stdout, "release 2") {
+		t.Errorf("candidates not listed with their IDs:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "--release-id") {
+		t.Errorf("stderr = %q, want the disambiguation advice", stderr)
+	}
+}
+
+func TestOpenNoMatchExitsOne(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "Ride", Title: "Nowhere"}})
+
+	code, _, stderr := runHelperSplit(t, home, "open", "kind of blue")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "No albums match") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+// A pre-v2.2 history entry the backfill could not identify has no release ID.
+// Opening a release page would be guessing which pressing was meant, which is
+// exactly what backfill refuses to do.
+func TestOpenWithoutAReleaseIDExitsOne(t *testing.T) {
+	home := t.TempDir()
+	collection, _, history := fixturePaths(home)
+	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	mustSaveCollection(t, collection, []Album{legacy})
+	mustSaveHistory(t, history, []HistoryEntry{{Album: legacy, Timestamp: time.Now()}})
+
+	code, stdout, stderr := runHelperSplit(t, home, "open", "--print")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "sync") || !strings.Contains(stderr, "--release-id") {
+		t.Errorf("stderr = %q, want it to name both remedies", stderr)
+	}
+}
+
+// --print covers every scripting case, so open has no --json. open --json
+// would have to both emit a payload and launch a browser to honour the
+// "format never semantics" rule -- true to the letter and useless in
+// practice. This pins that decision.
+func TestOpenHasNoJSONFlag(t *testing.T) {
+	if _, err := parseOpen([]string{"--json"}); err == nil {
+		t.Error("open accepted --json; --print is the scripting path")
+	}
+}
+
+func TestOpenWithNoHistoryExitsOne(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "A", Title: "B"}})
+
+	code, _, stderr := runHelperSplit(t, home, "open", "--print")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "No history") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}

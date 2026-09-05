@@ -30,6 +30,9 @@ func TestCompletionOffersOnlyFlagsTheCommandAccepts(t *testing.T) {
 			case "favorite", "unfavorite":
 				// These need a query beside a narrowing filter.
 				_, err = parseFavorite(c.name, append([]string{"miles"}, args...))
+			case "open":
+				// Shares favorite's query grammar, so it needs one too.
+				_, err = parseOpen(append([]string{"miles"}, args...))
 			case "sync":
 				_, err = parseSync(args)
 			default:
@@ -344,6 +347,7 @@ func TestEveryCommandHasACompletionDecision(t *testing.T) {
 		"stats":      true,
 		"favorite":   true,
 		"unfavorite": true,
+		"open":       true,
 		"sync":       true,
 		"folders":    false,
 		"migrate":    false,

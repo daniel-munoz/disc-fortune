@@ -931,6 +931,31 @@ the two spellings. --release-id needs neither.
 			},
 		},
 		{
+			name:        "open",
+			needsConfig: true,
+			summary:     "Open a record's Discogs page",
+			usage: `Usage: disc-fortune open [QUERY] [flags]
+
+With no QUERY, opens the last pick. With a QUERY, opens the one album in your
+collection whose "Artist - Title" contains it, case-insensitively. If the
+query matches several albums, they are listed with their release IDs and
+nothing is opened; narrow it with filters, or name one with --release-id.
+
+With no browser to launch into -- no launcher on PATH, or no display -- the
+URL is printed instead and the command still succeeds.
+
+Flags:
+  --print          Print the URL instead of opening a browser
+` + filterFlagHelp,
+			run: func(args []string) {
+				cfg, err := parseOpen(args)
+				if handleParseErr("open", err) {
+					return
+				}
+				runOpen(cfg)
+			},
+		},
+		{
 			name:        "migrate",
 			needsConfig: true,
 			summary:     "Move config to the XDG location",
