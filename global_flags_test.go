@@ -62,6 +62,10 @@ func TestEveryCommandAcceptsColorFlag(t *testing.T) {
 		"folders":    func(a []string) error { return parseNoArgs("folders", a) },
 		"version":    func(a []string) error { return parseNoArgs("version", a) },
 		"migrate":    func(a []string) error { return parseNoArgs("migrate", a) },
+		"completion": func(a []string) error {
+			_, err := parseCompletion(append([]string{"bash"}, a...))
+			return err
+		},
 	}
 	for name, parse := range parsers {
 		if err := parse([]string{"--color", "never"}); err != nil {

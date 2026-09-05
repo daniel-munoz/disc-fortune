@@ -291,21 +291,41 @@ type syncConfig struct {
 	folders []string
 }
 
-func parseSelection(name string, args []string) (selection, error) {
-	fs, gf := newFlagSet(name)
-	favoritesOnly := fs.Bool("favorites", false, "Restrict to favorites only")
-	unheard := fs.Bool("unheard", false, "Restrict to albums never picked before")
-	asJSON := fs.Bool("json", false, "Emit machine-readable JSON instead of text")
+// selectionFlags holds the flags pick and list register. Registration lives in
+// a function rather than inline so `completion` can enumerate a command's flags
+// from the same FlagSet the command parses with -- a flag cannot be accepted
+// without also being completable.
+type selectionFlags struct {
+	favoritesOnly *bool
+	unheard       *bool
+	asJSON        *bool
+	// draw is nil for list, which draws nothing.
+	draw    *string
+	filters *filterFlags
+}
+
+func addSelectionFlags(name string, fs *flag.FlagSet) *selectionFlags {
+	sf := &selectionFlags{
+		favoritesOnly: fs.Bool("favorites", false, "Restrict to favorites only"),
+		unheard:       fs.Bool("unheard", false, "Restrict to albums never picked before"),
+		asJSON:        fs.Bool("json", false, "Emit machine-readable JSON instead of text"),
+	}
 
 	// --draw is registered only where something is actually drawn, so
 	// `list --draw stale` fails as an unknown flag rather than being
 	// accepted and silently ignored. Nothing else has to check for it.
-	var draw *string
 	if name != "list" {
-		draw = fs.String("draw", "fresh", "How to draw a pick: any, fresh, or stale")
+		sf.draw = fs.String("draw", "fresh", "How to draw a pick: any, fresh, or stale")
 	}
 
-	ff := addFilterFlags(fs)
+	sf.filters = addFilterFlags(fs)
+	return sf
+}
+
+func parseSelection(name string, args []string) (selection, error) {
+	fs, gf := newFlagSet(name)
+	sf := addSelectionFlags(name, fs)
+	favoritesOnly, unheard, asJSON, draw, ff := sf.favoritesOnly, sf.unheard, sf.asJSON, sf.draw, sf.filters
 
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -396,9 +416,15 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 	return favoriteConfig{query: query, filter: filter, color: color}, nil
 }
 
+// addHistoryFlags registers history's flags. See addSelectionFlags for why
+// registration is factored out of the parse function.
+func addHistoryFlags(fs *flag.FlagSet) *bool {
+	return fs.Bool("json", false, "Emit machine-readable JSON instead of text")
+}
+
 func parseHistory(args []string) (historyConfig, error) {
 	fs, gf := newFlagSet("history")
-	asJSON := fs.Bool("json", false, "Emit machine-readable JSON instead of text")
+	asJSON := addHistoryFlags(fs)
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return historyConfig{}, fmt.Errorf("history: %w", err)
@@ -443,10 +469,17 @@ func parseHelp(args []string) (string, error) {
 	return "", nil
 }
 
+// addSyncFlags registers sync's flags. See addSelectionFlags for why
+// registration is factored out of the parse function.
+func addSyncFlags(fs *flag.FlagSet) *arrayFlags {
+	folders := new(arrayFlags)
+	fs.Var(folders, "folder", "Sync only specific folder(s) by name (repeatable)")
+	return folders
+}
+
 func parseSync(args []string) (syncConfig, error) {
 	fs, gf := newFlagSet("sync")
-	var folders arrayFlags
-	fs.Var(&folders, "folder", "Sync only specific folder(s) by name (repeatable)")
+	folders := addSyncFlags(fs)
 
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -460,7 +493,7 @@ func parseSync(args []string) (syncConfig, error) {
 	if _, err := gf.mode(); err != nil {
 		return syncConfig{}, fmt.Errorf("sync: %v", err)
 	}
-	return syncConfig{folders: folders}, nil
+	return syncConfig{folders: *folders}, nil
 }
 
 // parseNoArgs validates that a command was invoked with no flags and no arguments.
@@ -787,6 +820,39 @@ run if the destination already contains files.`,
 					return
 				}
 				runMigrate()
+			},
+		},
+		{
+			// needsConfig stays false: generating a script reads no
+			// data files, so completion must keep working on a machine
+			// with no usable home directory.
+			name:    "completion",
+			summary: "Print a shell completion script",
+			usage: `Usage: disc-fortune completion SHELL
+
+Prints a completion script for bash, zsh or fish on stdout. The script is
+generated from the commands and flags this binary actually accepts, so it
+cannot drift from them.
+
+Load it for the current shell:
+
+  bash    eval "$(disc-fortune completion bash)"
+  zsh     eval "$(disc-fortune completion zsh)"
+  fish    disc-fortune completion fish | source
+
+To make it permanent, add that line to your shell's startup file, or write the
+script into the directory your shell reads completions from.
+
+Command and flag names are completed, as are the fixed values of --draw and
+--color. Values that would have to be read from your collection, such as those
+of --genre and --label, are not: a completion should never depend on a file
+that a sync may be rewriting.`,
+			run: func(args []string) {
+				shell, err := parseCompletion(args)
+				if handleParseErr("completion", err) {
+					return
+				}
+				runCompletion(shell)
 			},
 		},
 		{
