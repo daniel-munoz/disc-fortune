@@ -300,3 +300,100 @@ func TestEveryAlbumFieldHasAWireDecision(t *testing.T) {
 		}
 	}
 }
+
+func TestStatsPayloadGolden(t *testing.T) {
+	s := Stats{
+		Count:     312,
+		Total:     1247,
+		Favorites: 28,
+		SyncedAt:  time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		Decades:   []DecadeBucket{{1970, 486}, {0, 22}},
+		Genres:    []NameCount{{"Jazz", 412}},
+		Labels:    []NameCount{{"Blue Note", 88}},
+		Picked: PickedStats{
+			Count:      78,
+			LastPicked: time.Date(2026, 9, 4, 18, 0, 0, 0, time.UTC),
+		},
+	}
+
+	want := `{
+  "count": 312,
+  "total": 1247,
+  "favorites": 28,
+  "synced_at": "2026-09-01T10:00:00Z",
+  "decades": [
+    {
+      "decade": 1970,
+      "count": 486
+    },
+    {
+      "decade": null,
+      "count": 22
+    }
+  ],
+  "genres": [
+    {
+      "name": "Jazz",
+      "count": 412
+    }
+  ],
+  "labels": [
+    {
+      "name": "Blue Note",
+      "count": 88
+    }
+  ],
+  "picked": {
+    "count": 78,
+    "share": 0.25,
+    "last_picked": "2026-09-04T18:00:00Z"
+  }
+}
+`
+
+	var buf bytes.Buffer
+	if err := writeJSON(&buf, newStatsPayload(s)); err != nil {
+		t.Fatalf("writeJSON: %v", err)
+	}
+	if got := buf.String(); got != want {
+		t.Errorf("stats wire format drifted.\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// An empty collection still carries every key, with [] rather than null for
+// the tables and null for the two timestamps.
+func TestStatsPayloadGoldenEmpty(t *testing.T) {
+	want := `{
+  "count": 0,
+  "total": 0,
+  "favorites": 0,
+  "synced_at": null,
+  "decades": [],
+  "genres": [],
+  "labels": [],
+  "picked": {
+    "count": 0,
+    "share": 0,
+    "last_picked": null
+  }
+}
+`
+
+	var buf bytes.Buffer
+	if err := writeJSON(&buf, newStatsPayload(Stats{})); err != nil {
+		t.Fatalf("writeJSON: %v", err)
+	}
+	if got := buf.String(); got != want {
+		t.Errorf("empty stats wire format drifted.\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// share is measured against the described set, not the source set. This is
+// the figure a scripted consumer is most likely to get wrong, so it is
+// pinned on its own.
+func TestStatsPayloadShareIsAgainstCount(t *testing.T) {
+	p := newStatsPayload(Stats{Count: 200, Total: 1000, Picked: PickedStats{Count: 50}})
+	if p.Picked.Share != 0.25 {
+		t.Errorf("share = %v, want 0.25 (50/200, not 50/1000)", p.Picked.Share)
+	}
+}

@@ -138,3 +138,86 @@ func writeJSON(w io.Writer, v any) error {
 	_, err = fmt.Fprintf(w, "%s\n", data)
 	return err
 }
+
+// statsPayload is `stats --json`.
+//
+// count is the described set, after filters; total is the source set before
+// them -- the collection, or favorites under --favorites. picked.count and
+// picked.share are measured against count, not total, so `stats --genre jazz`
+// reports the share of your jazz.
+type statsPayload struct {
+	Count     int             `json:"count"`
+	Total     int             `json:"total"`
+	Favorites int             `json:"favorites"`
+	SyncedAt  *time.Time      `json:"synced_at"`
+	Decades   []jsonDecade    `json:"decades"`
+	Genres    []jsonNameCount `json:"genres"`
+	Labels    []jsonNameCount `json:"labels"`
+	Picked    jsonPicked      `json:"picked"`
+}
+
+// jsonDecade is one histogram row. A null decade means the year was unknown,
+// matching jsonAlbum's convention that null says "Discogs did not tell us" --
+// something 0 cannot, since it would read as the year zero.
+type jsonDecade struct {
+	Decade *int `json:"decade"`
+	Count  int  `json:"count"`
+}
+
+// jsonNameCount is one row of the top-genres or top-labels table.
+type jsonNameCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// jsonPicked is an object rather than three flat keys so a later figure about
+// picking has somewhere to go without crowding the top level.
+type jsonPicked struct {
+	Count      int        `json:"count"`
+	Share      float64    `json:"share"`
+	LastPicked *time.Time `json:"last_picked"`
+}
+
+// timeOrNull turns a zero time into null, which says "never" in a way a zero
+// timestamp string cannot.
+func timeOrNull(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+func newStatsPayload(s Stats) statsPayload {
+	decades := make([]jsonDecade, 0, len(s.Decades))
+	for _, b := range s.Decades {
+		// intOrNull turns the unknown-year bucket's 0 into null, which is
+		// exactly what it means here.
+		decades = append(decades, jsonDecade{Decade: intOrNull(b.Decade), Count: b.Count})
+	}
+
+	return statsPayload{
+		Count:     s.Count,
+		Total:     s.Total,
+		Favorites: s.Favorites,
+		SyncedAt:  timeOrNull(s.SyncedAt),
+		Decades:   decades,
+		Genres:    nameCounts(s.Genres),
+		Labels:    nameCounts(s.Labels),
+		Picked: jsonPicked{
+			Count:      s.Picked.Count,
+			Share:      s.Share(),
+			LastPicked: timeOrNull(s.Picked.LastPicked),
+		},
+	}
+}
+
+// nameCounts converts a table to its wire form, emitting [] rather than null
+// when empty so a consumer's loop needs no nil check -- the same rule
+// listOrEmpty applies to an album's genres.
+func nameCounts(rows []NameCount) []jsonNameCount {
+	out := make([]jsonNameCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, jsonNameCount{Name: r.Name, Count: r.Count})
+	}
+	return out
+}
