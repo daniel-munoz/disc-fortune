@@ -99,8 +99,8 @@ disc-fortune pick --draw any
 
 ### JSON output
 
-`pick`, `list` and `history` accept `--json`, which replaces the human
-output with a documented payload. Nothing else changes: exit codes, the
+`pick`, `list`, `history` and `stats` accept `--json`, which replaces the
+human output with a documented payload. Nothing else changes: exit codes, the
 messages on stderr, and `pick` recording its pick are all identical either way.
 
 ```sh
@@ -150,6 +150,39 @@ if out=$(disc-fortune list --json --genre jazz); then
 fi
 ```
 
+`stats --json` emits:
+
+```json
+{
+  "count": 312,
+  "total": 1247,
+  "favorites": 28,
+  "synced_at": "2026-09-01T10:00:00Z",
+  "decades": [
+    {"decade": 1970, "count": 486},
+    {"decade": null, "count": 22}
+  ],
+  "genres": [{"name": "Jazz", "count": 412}],
+  "labels": [{"name": "Blue Note", "count": 88}],
+  "picked": {
+    "count": 78,
+    "share": 0.25,
+    "last_picked": "2026-09-04T18:00:00Z"
+  }
+}
+```
+
+- `count` — albums described, after filters
+- `total` — the source set before filters (the collection, or favorites under `--favorites`)
+- `favorites` — how many of the described set are favorited
+- `synced_at` — RFC 3339, or `null` if never synced
+- `decades` — `{"decade": 1970, "count": 486}` rows; `"decade": null` is the unknown-year bucket
+- `genres`, `labels` — `{"name": ..., "count": ...}` rows, at most five each
+- `picked` — `count`, `share` (an unrounded fraction of `count`, not of `total`), and `last_picked` or `null`
+
+Every key is always present, and the three arrays are `[]` rather than `null`
+when empty.
+
 ### Shell completion
 
 `completion` prints a script for bash, zsh or fish. It is generated from the
@@ -182,8 +215,10 @@ on a file that a `sync` may be rewriting.
 | `sync` | Fetch your collection from Discogs. |
 | `folders` | List your Discogs folder names. |
 | `history` | Show recent picks. |
+| `stats` | Summarize your collection, or whatever a filter describes. |
 | `favorite` | Add an album to favorites. |
 | `unfavorite` | Remove an album from favorites. |
+| `open` | Open a record's Discogs page in a browser. |
 | `migrate` | Move your data to the `XDG_CONFIG_HOME` location. |
 | `version` | Print the version. |
 | `help` | Show help for a command. |
@@ -276,6 +311,30 @@ disc-fortune list --unheard --genre jazz
 If everything matching your other filters has already been played,
 `pick --unheard` exits 1 and says so rather than picking a repeat.
 
+### Statistics
+
+```bash
+# Summarize the whole collection
+disc-fortune stats
+
+# Summarize whatever a filter describes
+disc-fortune stats --genre jazz
+disc-fortune stats --decade 70s
+
+# Summarize your favorites
+disc-fortune stats --favorites
+```
+
+`stats` reads only files already on disk — it never contacts Discogs. It
+reports a decade histogram, your five most common genres and labels, and how
+much of the set you have ever played.
+
+The share-ever-played figure is measured against the set being described, so
+`stats --genre jazz` reports the share of your *jazz*, not of your collection.
+
+`stats` takes the filter flags but not `--unheard`: that flag is defined by
+history, and the share of an unheard-only set is always zero.
+
 ### History
 
 ```sh
@@ -313,14 +372,44 @@ disc-fortune unfavorite "kind of blue"
 [Discovery](#discovery) for how the default anti-repeat draw applies to the
 pool it produces, and how to turn that off with `--draw any`.
 
+### Opening a release on Discogs
+
+```bash
+# Open the last pick
+disc-fortune open
+
+# Open a specific record
+disc-fortune open "kind of blue"
+disc-fortune open --release-id 1839278
+
+# Print the URL instead of opening anything
+disc-fortune open --print
+```
+
+`open` uses the same grammar as `favorite`: no query means the last pick, and
+an ambiguous query lists the candidates with their release IDs rather than
+guessing.
+
+With nothing to launch into — no `xdg-open` on `PATH`, or no display — the URL
+is printed instead and the command still succeeds, so it stays useful over SSH
+and in scripts.
+
+A record with no release ID cannot be opened. That only happens for a pick
+recorded before v2.2.0 that `sync` could not identify; run `disc-fortune sync`,
+or name the record with `--release-id`.
+
 ### Exit codes
 
 `disc-fortune` exits 0 when the command produced what you asked for, and 1 when
 it could not — no collection synced yet, no albums matching your filters, an
-ambiguous `favorite` or `unfavorite` query, or a usage error. Removing a
-favorite that is not there exits 0, since the end state you asked for already
-holds. `history` on an empty log also exits 0: a log report succeeds even when
-the log has nothing in it.
+ambiguous `favorite`, `unfavorite` or `open` query, a record with no release ID
+for `open` to point at, or a usage error. Removing a favorite that is not there
+exits 0, since the end state you asked for already holds. `history` on an empty
+log also exits 0: a log report succeeds even when the log has nothing in it.
+
+`open` exits 0 whether it launched a browser or fell back to printing the URL.
+Printing is a degradation, not a failure: you still got the address you asked
+for.
 
 ## Features
 
@@ -332,8 +421,10 @@ the log has nothing in it.
 - **Offline operation** - All data stored locally after initial sync
 - **Crash-safe writes** - Every data file is written atomically, so an interrupted write cannot corrupt your collection or history
 - **Resilient syncing** - Rate limits and server hiccups are retried with backoff, and long syncs report progress
-- **Scriptable** - `--json` on `pick`, `list` and `history` emits a documented payload with a fixed key set
+- **Scriptable** - `--json` on `pick`, `list`, `history` and `stats` emits a documented payload with a fixed key set
 - **Shell completion** - `completion bash|zsh|fish` generates a script from the commands and flags the binary accepts, so it cannot drift from them
+- **Collection statistics** - `stats` reports a decade histogram, your most common genres and labels, and how much of any filtered set you have ever played
+- **Straight to Discogs** - `open` takes the last pick, or any record you can name, to its Discogs page
 
 ## Data
 
