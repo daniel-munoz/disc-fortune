@@ -370,10 +370,15 @@ func parseSelection(name string, args []string) (selection, error) {
 	}, nil
 }
 
-func parseFavorite(name string, args []string) (favoriteConfig, error) {
-	fs, gf := newFlagSet(name)
-	ff := addFilterFlags(fs)
-
+// parseQueryCommand is the grammar favorite, unfavorite and open share: an
+// optional positional QUERY that sets the same constraint --query does, with
+// a release ID excusing its absence. The flag set arrives already built so
+// each command can register its own flags on it first.
+//
+// It exists so a third command with this grammar cannot drift from the first
+// two. Copying forty lines to get one is how a CLI ends up with three
+// slightly different answers to "what does a bare filter mean?".
+func parseQueryCommand(name string, fs *flag.FlagSet, gf *globalFlags, ff *filterFlags, args []string) (favoriteConfig, error) {
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return favoriteConfig{}, fmt.Errorf("%s: %w", name, err)
@@ -394,7 +399,7 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 
 	// The positional QUERY and --query are one thing said two ways. Giving
 	// both would be an OR by the grammar's own rule, but on a command that
-	// mutates favorites a surprise is worse than a refusal.
+	// acts on one record a surprise is worse than a refusal.
 	if len(rest) == 1 && ff.hasQuery() {
 		return favoriteConfig{}, fmt.Errorf(
 			"%s: give the query once, as an argument or --query", name)
@@ -422,6 +427,44 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 	// empty one still means "the last pick".
 	filter.Query.Include = append(filter.Query.Include, query)
 	return favoriteConfig{query: query, filter: filter, color: color}, nil
+}
+
+func parseFavorite(name string, args []string) (favoriteConfig, error) {
+	fs, gf := newFlagSet(name)
+	ff := addFilterFlags(fs)
+	return parseQueryCommand(name, fs, gf, ff, args)
+}
+
+// openConfig is the parsed form of open. As with favoriteConfig, an empty
+// query means "the last pick".
+type openConfig struct {
+	query     string
+	filter    Filter
+	color     colorMode
+	printOnly bool
+}
+
+// addOpenFlags registers open's flags. See addSelectionFlags for why
+// registration is factored out of the parse function.
+func addOpenFlags(fs *flag.FlagSet) (*bool, *filterFlags) {
+	printOnly := fs.Bool("print", false, "Print the URL instead of opening a browser")
+	return printOnly, addFilterFlags(fs)
+}
+
+func parseOpen(args []string) (openConfig, error) {
+	fs, gf := newFlagSet("open")
+	printOnly, ff := addOpenFlags(fs)
+
+	cfg, err := parseQueryCommand("open", fs, gf, ff, args)
+	if err != nil {
+		return openConfig{}, err
+	}
+	return openConfig{
+		query:     cfg.query,
+		filter:    cfg.filter,
+		color:     cfg.color,
+		printOnly: *printOnly,
+	}, nil
 }
 
 // addHistoryFlags registers history's flags. See addSelectionFlags for why

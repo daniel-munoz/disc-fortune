@@ -253,14 +253,22 @@ func runStats(cfg statsConfig) {
 	fmt.Print(formatStats(s, stdoutColor(cfg.color)))
 }
 
-// describe names what the user actually asked for, for messages about
-// finding nothing. Without it a query-less --release-id is reported as an
-// empty query.
-func (cfg favoriteConfig) describe() string {
-	if cfg.query == "" && cfg.filter.ReleaseID != 0 {
-		return fmt.Sprintf("release %d", cfg.filter.ReleaseID)
+// describeSelection names what the user actually asked for, for messages
+// about finding nothing. Without it a query-less --release-id is reported as
+// an empty query.
+func describeSelection(query string, releaseID int) string {
+	if query == "" && releaseID != 0 {
+		return fmt.Sprintf("release %d", releaseID)
 	}
-	return fmt.Sprintf("%q", cfg.query)
+	return fmt.Sprintf("%q", query)
+}
+
+func (cfg favoriteConfig) describe() string {
+	return describeSelection(cfg.query, cfg.filter.ReleaseID)
+}
+
+func (cfg openConfig) describe() string {
+	return describeSelection(cfg.query, cfg.filter.ReleaseID)
 }
 
 func runFavorite(cfg favoriteConfig) {

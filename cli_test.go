@@ -1258,3 +1258,79 @@ func TestParseStatsFlags(t *testing.T) {
 		t.Errorf("cfg = %+v, want favoritesOnly and json set", cfg)
 	}
 }
+
+// open inherits favorite's grammar exactly. These mirror the favorite cases
+// deliberately: the point is that the two commands cannot drift.
+func TestParseOpenGrammar(t *testing.T) {
+	t.Run("no query means the last pick", func(t *testing.T) {
+		cfg, err := parseOpen(nil)
+		if err != nil {
+			t.Fatalf("parseOpen: %v", err)
+		}
+		if cfg.query != "" {
+			t.Errorf("query = %q, want empty", cfg.query)
+		}
+	})
+
+	t.Run("positional query", func(t *testing.T) {
+		cfg, err := parseOpen([]string{"kind of blue"})
+		if err != nil {
+			t.Fatalf("parseOpen: %v", err)
+		}
+		if cfg.query != "kind of blue" {
+			t.Errorf("query = %q", cfg.query)
+		}
+		if len(cfg.filter.Query.Include) != 1 {
+			t.Errorf("query filter = %+v, want the query in it", cfg.filter.Query.Include)
+		}
+	})
+
+	t.Run("release id needs no query", func(t *testing.T) {
+		cfg, err := parseOpen([]string{"--release-id", "1839278"})
+		if err != nil {
+			t.Fatalf("parseOpen: %v", err)
+		}
+		if cfg.filter.ReleaseID != 1839278 {
+			t.Errorf("ReleaseID = %d", cfg.filter.ReleaseID)
+		}
+	})
+
+	t.Run("filters require a query", func(t *testing.T) {
+		if _, err := parseOpen([]string{"--genre", "jazz"}); err == nil {
+			t.Error("parseOpen accepted a narrowing filter with no query")
+		}
+	})
+
+	t.Run("query given twice is refused", func(t *testing.T) {
+		if _, err := parseOpen([]string{"miles", "--query", "davis"}); err == nil {
+			t.Error("parseOpen accepted both spellings of the query")
+		}
+	})
+
+	t.Run("too many arguments", func(t *testing.T) {
+		if _, err := parseOpen([]string{"kind", "of", "blue"}); err == nil {
+			t.Error("parseOpen accepted three positional arguments")
+		}
+	})
+}
+
+func TestParseOpenPrintFlag(t *testing.T) {
+	cfg, err := parseOpen([]string{"--print"})
+	if err != nil {
+		t.Fatalf("parseOpen: %v", err)
+	}
+	if !cfg.printOnly {
+		t.Error("printOnly = false, want true")
+	}
+}
+
+// The extraction in this task must not change favorite's behaviour.
+func TestParseFavoriteUnchangedByExtraction(t *testing.T) {
+	if _, err := parseFavorite("favorite", []string{"--genre", "jazz"}); err == nil {
+		t.Error("favorite accepted a narrowing filter with no query")
+	}
+	cfg, err := parseFavorite("favorite", []string{"miles"})
+	if err != nil || cfg.query != "miles" {
+		t.Errorf("parseFavorite = %+v, %v", cfg, err)
+	}
+}
