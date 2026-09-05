@@ -173,7 +173,6 @@ Values that would have to be read from your collection — those of `--genre`
 and `--label` — are deliberately not completed. A tab-press should never depend
 on a file that a `sync` may be rewriting.
 
-
 ### Commands
 
 | Command | What it does |

@@ -28,9 +28,14 @@ type completionFlag struct {
 }
 
 // commandFlagSet builds the FlagSet a command parses with, without parsing
-// anything. It is the single source completion enumerates and the parse
-// functions register through, so a flag cannot be accepted by a command
-// without also being offered for it.
+// anything. Completion enumerates it and the parse functions register through
+// the same add*Flags calls, so a flag added to one of those functions is
+// offered for that command without anyone remembering to update a list.
+//
+// What that does NOT cover is a new *command*: the switch below is a second
+// place to teach, and a command registering flags without a case here would
+// silently offer only the globals. TestEveryCommandHasACompletionDecision is
+// the forcing function for that, because no other test would fail.
 func commandFlagSet(name string) *flag.FlagSet {
 	// newFlagSet registers the global flags, so every command gets those
 	// even when the switch below adds nothing.
@@ -137,8 +142,9 @@ _disc_fortune() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    # The first non-flag word is the subcommand; everything before it is a
-    # global flag, and there may be none at all.
+    # The first non-flag word is the subcommand. There may be none: a leading
+    # flag means the implicit pick command, which is why the fallback below
+    # completes pick's flags rather than only the global ones.
     cmd=""
     for ((i = 1; i < COMP_CWORD; i++)); do
         case "${COMP_WORDS[i]}" in
@@ -176,7 +182,7 @@ _disc_fortune() {
 }
 
 complete -F _disc_fortune disc-fortune
-`, shellQuote(flagNames("")), shellQuote(strings.Join(commandNames(), " ")))
+`, shellQuote(flagNames("pick")), shellQuote(strings.Join(commandNames(), " ")))
 
 	return sb.String()
 }
@@ -233,10 +239,32 @@ _disc_fortune() {
     fi
 }
 
-compdef _disc_fortune disc-fortune
-`, flagNames(""))
+# Sourced (eval) this registers the function; autoloaded from fpath, zsh calls
+# the file *as* the completion function, so it must run rather than re-register.
+if [ "$funcstack[1]" = "_disc_fortune" ]; then
+    _disc_fortune "$@"
+else
+    compdef _disc_fortune disc-fortune
+fi
+`, flagNames("pick"))
 
 	return sb.String()
+}
+
+// fishValueSpec renders what fish should offer after a flag.
+//
+// -x is load-bearing: -r means only "this option takes an argument" and leaves
+// fish's default filename completion in place, so `--genre <TAB>` offered the
+// working directory. The file-scoped `complete -c disc-fortune -f` does not
+// reach an option's argument. -x is -r plus "offer nothing else".
+func fishValueSpec(f completionFlag) string {
+	switch {
+	case len(f.values) > 0:
+		return " -x -a " + shellQuote(strings.Join(f.values, " "))
+	case !f.isBool:
+		return " -x"
+	}
+	return ""
 }
 
 func fishCompletion() string {
@@ -258,28 +286,18 @@ func fishCompletion() string {
 	sb.WriteString("\n# Flags, scoped to the commands that accept them.\n")
 	for _, c := range commands {
 		for _, f := range commandFlags(c.name) {
-			line := fmt.Sprintf("complete -c disc-fortune -n %s -l %s",
-				shellQuote("__fish_seen_subcommand_from "+c.name), f.name)
-			switch {
-			case len(f.values) > 0:
-				// -x takes a value and offers only these.
-				line += " -x -a " + shellQuote(strings.Join(f.values, " "))
-			case !f.isBool:
-				// Takes a value fish cannot guess: -r stops it
-				// offering filenames as if the flag were a path.
-				line += " -r"
-			}
-			sb.WriteString(line + "\n")
+			fmt.Fprintf(&sb, "complete -c disc-fortune -n %s -l %s%s\n",
+				shellQuote("__fish_seen_subcommand_from "+c.name), f.name, fishValueSpec(f))
 		}
 	}
 
-	sb.WriteString("\n# Global flags, accepted before a subcommand is typed too.\n")
-	for _, f := range commandFlags("") {
-		line := "complete -c disc-fortune -n __fish_use_subcommand -l " + f.name
-		if len(f.values) > 0 {
-			line += " -x -a " + shellQuote(strings.Join(f.values, " "))
-		}
-		sb.WriteString(line + "\n")
+	// A bare `disc-fortune --genre jazz` is a pick: resolve treats a leading
+	// flag as the default command. So the no-subcommand position takes pick's
+	// flags, not merely the global ones.
+	sb.WriteString("\n# Before a subcommand is typed, a flag means the implicit `pick`.\n")
+	for _, f := range commandFlags("pick") {
+		fmt.Fprintf(&sb, "complete -c disc-fortune -n __fish_use_subcommand -l %s%s\n",
+			f.name, fishValueSpec(f))
 	}
 
 	return sb.String()

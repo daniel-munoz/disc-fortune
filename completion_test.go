@@ -181,6 +181,11 @@ func TestGeneratedScriptsAreSyntacticallyValid(t *testing.T) {
 		"fish": {"fish", "--no-execute"},
 	}
 
+	if len(checks) != len(completionShells) {
+		t.Fatalf("%d shells are generated but %d are syntax-checked; add the new one",
+			len(completionShells), len(checks))
+	}
+
 	for shell, check := range checks {
 		t.Run(shell, func(t *testing.T) {
 			bin, err := exec.LookPath(check[0])
@@ -233,6 +238,47 @@ func TestCompletionOffersCommandsNotFilenames(t *testing.T) {
 		}
 	})
 
+	// The subtler half of the same bug: -f stops fish offering files for the
+	// command, but not for an option's argument. Only -x does that, and
+	// --genre is exactly where we promise to offer nothing rather than
+	// something wrong.
+	t.Run("fish offers nothing for a collection-derived value", func(t *testing.T) {
+		fish, err := exec.LookPath("fish")
+		if err != nil {
+			t.Skip("fish not installed")
+		}
+		for _, flag := range []string{"--genre", "--label"} {
+			out, err := exec.Command(fish, "-c",
+				bin+" completion fish | source; complete -C 'disc-fortune list "+flag+" '").CombinedOutput()
+			if err != nil {
+				t.Fatalf("fish: %v\n%s", err, out)
+			}
+			if got := strings.TrimSpace(string(out)); got != "" {
+				t.Errorf("%s should complete nothing, got:\n%s", flag, got)
+			}
+		}
+	})
+
+	// A leading flag means the implicit pick, so the no-subcommand position
+	// must offer pick's flags rather than only the globals.
+	t.Run("bash completes the implicit pick", func(t *testing.T) {
+		bash, err := exec.LookPath("bash")
+		if err != nil {
+			t.Skip("bash not installed")
+		}
+		script := `eval "$(` + bin + ` completion bash)"
+COMP_WORDS=(disc-fortune --); COMP_CWORD=1; _disc_fortune; echo "${COMPREPLY[@]}"`
+		out, err := exec.Command(bash, "-c", script).CombinedOutput()
+		if err != nil {
+			t.Fatalf("bash: %v\n%s", err, out)
+		}
+		for _, want := range []string{"--draw", "--favorites", "--genre"} {
+			if !strings.Contains(string(out), want) {
+				t.Errorf("a leading flag is a pick, so %s should be offered:\n%s", want, out)
+			}
+		}
+	})
+
 	t.Run("bash", func(t *testing.T) {
 		bash, err := exec.LookPath("bash")
 		if err != nil {
@@ -280,4 +326,44 @@ func buildForCompletion(t *testing.T) string {
 		t.Fatalf("building the binary: %v\n%s", err, out)
 	}
 	return bin
+}
+
+// commandFlagSet's switch is a second place that has to learn about a new
+// command. Nothing else forces that: a command registering flags without a
+// case there would offer only the global flags, and every other test would
+// still pass. This map is the forcing function -- adding a command fails it
+// until someone decides what completion should offer for it.
+func TestEveryCommandHasACompletionDecision(t *testing.T) {
+	// true when the command registers flags of its own beyond the globals.
+	hasOwnFlags := map[string]bool{
+		"pick":       true,
+		"list":       true,
+		"history":    true,
+		"favorite":   true,
+		"unfavorite": true,
+		"sync":       true,
+		"folders":    false,
+		"migrate":    false,
+		"version":    false,
+		"help":       false,
+		"completion": false,
+	}
+	if len(hasOwnFlags) != len(commands) {
+		t.Fatalf("this test covers %d commands but there are %d; decide what "+
+			"completion offers for the new one, then add it here",
+			len(hasOwnFlags), len(commands))
+	}
+
+	// A name no command has, so commandFlagSet's switch adds nothing.
+	globals := len(commandFlags("\x00none"))
+	for name, own := range hasOwnFlags {
+		got := len(commandFlags(name))
+		switch {
+		case own && got <= globals:
+			t.Errorf("%s registers flags of its own, but completion offers only "+
+				"the %d global ones -- missing from commandFlagSet's switch?", name, globals)
+		case !own && got != globals:
+			t.Errorf("%s should offer only the %d global flags, got %d", name, globals, got)
+		}
+	}
 }
