@@ -150,6 +150,30 @@ if out=$(disc-fortune list --json --genre jazz); then
 fi
 ```
 
+### Shell completion
+
+`completion` prints a script for bash, zsh or fish. It is generated from the
+commands and flags this binary actually accepts, so it cannot drift from them.
+
+```sh
+# try it for the current shell
+eval "$(disc-fortune completion bash)"
+eval "$(disc-fortune completion zsh)"
+disc-fortune completion fish | source
+```
+
+To keep it, add that line to your shell's startup file, or write the script
+into the directory your shell reads completions from.
+
+Command names, flag names, and the fixed values of `--draw` and `--color` are
+completed. Flags are scoped to the command that takes them, so `list --<TAB>`
+offers `--json` but not `--draw`, which `list` rejects.
+
+Values that would have to be read from your collection — those of `--genre`
+and `--label` — are deliberately not completed. A tab-press should never depend
+on a file that a `sync` may be rewriting.
+
+
 ### Commands
 
 | Command | What it does |
@@ -310,6 +334,7 @@ the log has nothing in it.
 - **Crash-safe writes** - Every data file is written atomically, so an interrupted write cannot corrupt your collection or history
 - **Resilient syncing** - Rate limits and server hiccups are retried with backoff, and long syncs report progress
 - **Scriptable** - `--json` on `pick`, `list` and `history` emits a documented payload with a fixed key set
+- **Shell completion** - `completion bash|zsh|fish` generates a script from the commands and flags the binary accepts, so it cannot drift from them
 
 ## Data
 
