@@ -25,6 +25,8 @@ func TestCompletionOffersOnlyFlagsTheCommandAccepts(t *testing.T) {
 				_, err = parseSelection(c.name, args)
 			case "history":
 				_, err = parseHistory(args)
+			case "stats":
+				_, err = parseStats(args)
 			case "favorite", "unfavorite":
 				// These need a query beside a narrowing filter.
 				_, err = parseFavorite(c.name, append([]string{"miles"}, args...))
@@ -339,6 +341,7 @@ func TestEveryCommandHasACompletionDecision(t *testing.T) {
 		"pick":       true,
 		"list":       true,
 		"history":    true,
+		"stats":      true,
 		"favorite":   true,
 		"unfavorite": true,
 		"sync":       true,

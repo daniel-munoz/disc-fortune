@@ -207,6 +207,52 @@ func runHistory(cfg historyConfig) {
 	fmt.Print(formatHistory(entries, limit, stdoutColor(cfg.color)))
 }
 
+func runStats(cfg statsConfig) {
+	var source []Album
+	if cfg.favoritesOnly {
+		source = loadFavoritesOrExit()
+	} else {
+		source = loadCollectionOrExit()
+	}
+	pool := cfg.filter.Apply(source)
+	if len(pool) == 0 {
+		// Same as list: an empty match has always been a failure, on stderr
+		// with exit 1, and --json changes the format rather than that.
+		fmt.Fprintln(os.Stderr, "No albums match the specified filters")
+		os.Exit(1)
+	}
+
+	// A stats run is read-only and advisory: neither an unreadable history
+	// nor unreadable metadata should sink it. History failing loudly would
+	// be the exception, since it feeds a headline figure.
+	entries, err := loadHistory(historyPath())
+	if err != nil {
+		fatal("Error loading history: %v", err)
+	}
+
+	// Favorites are counted, not required. Someone with none gets a zero,
+	// not an error.
+	favorites, err := loadFavorites(favoritesPath())
+	if err != nil {
+		fatal("Error loading favorites: %v", err)
+	}
+
+	m, err := loadMeta(metaPath())
+	if err != nil {
+		m = Meta{}
+	}
+
+	s := computeStats(pool, favorites, entries, len(source), m, cfg.favoritesOnly)
+
+	if cfg.json {
+		if err := writeJSON(os.Stdout, newStatsPayload(s)); err != nil {
+			fatal("Error writing JSON: %v", err)
+		}
+		return
+	}
+	fmt.Print(formatStats(s, stdoutColor(cfg.color)))
+}
+
 // describe names what the user actually asked for, for messages about
 // finding nothing. Without it a query-less --release-id is reported as an
 // empty query.

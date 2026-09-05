@@ -1221,3 +1221,40 @@ func TestJSONFlagRejectedWhereNotImplemented(t *testing.T) {
 		}
 	}
 }
+
+// stats is set-oriented like list and pick, so a filter stands on its own.
+// The "filters require a query" rule belongs to favorite, unfavorite and
+// open, which each act on exactly one record.
+func TestParseStatsAcceptsFiltersWithoutAQuery(t *testing.T) {
+	cfg, err := parseStats([]string{"--genre", "jazz"})
+	if err != nil {
+		t.Fatalf("parseStats: %v", err)
+	}
+	if len(cfg.filter.Genre.Include) != 1 || cfg.filter.Genre.Include[0] != "jazz" {
+		t.Errorf("genre filter = %+v, want [jazz]", cfg.filter.Genre.Include)
+	}
+}
+
+func TestParseStatsRejectsUnheardAndDraw(t *testing.T) {
+	for _, arg := range []string{"--unheard", "--draw"} {
+		if _, err := parseStats([]string{arg}); err == nil {
+			t.Errorf("parseStats accepted %s; stats filters no history and draws nothing", arg)
+		}
+	}
+}
+
+func TestParseStatsRejectsPositionalArguments(t *testing.T) {
+	if _, err := parseStats([]string{"jazz"}); err == nil {
+		t.Error("parseStats accepted a positional argument")
+	}
+}
+
+func TestParseStatsFlags(t *testing.T) {
+	cfg, err := parseStats([]string{"--favorites", "--json"})
+	if err != nil {
+		t.Fatalf("parseStats: %v", err)
+	}
+	if !cfg.favoritesOnly || !cfg.json {
+		t.Errorf("cfg = %+v, want favoritesOnly and json set", cfg)
+	}
+}

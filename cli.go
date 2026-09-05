@@ -286,6 +286,14 @@ type historyConfig struct {
 	json  bool
 }
 
+// statsConfig is the parsed form of stats.
+type statsConfig struct {
+	favoritesOnly bool
+	filter        Filter
+	color         colorMode
+	json          bool
+}
+
 // syncConfig is the parsed form of sync.
 type syncConfig struct {
 	folders []string
@@ -448,6 +456,61 @@ func parseHistory(args []string) (historyConfig, error) {
 		return historyConfig{}, fmt.Errorf("history: %v", err)
 	}
 	return historyConfig{limit: limit, color: color, json: *asJSON}, nil
+}
+
+// statsFlags holds the flags stats registers. See addSelectionFlags for why
+// registration is factored out of the parse function.
+//
+// No --unheard: that flag is defined by history, and "share ever picked" over
+// an unheard-only set is 0% by construction, so its only effect would be to
+// make one of the headline figures meaningless. No --draw either: that is a
+// draw strategy and stats draws nothing.
+type statsFlags struct {
+	favoritesOnly *bool
+	asJSON        *bool
+	filters       *filterFlags
+}
+
+func addStatsFlags(fs *flag.FlagSet) *statsFlags {
+	return &statsFlags{
+		favoritesOnly: fs.Bool("favorites", false, "Describe favorites only"),
+		asJSON:        fs.Bool("json", false, "Emit machine-readable JSON instead of text"),
+		filters:       addFilterFlags(fs),
+	}
+}
+
+// parseStats parses stats's arguments.
+//
+// Unlike favorite, unfavorite and open, it does not apply the
+// "filters require a query" rule. Those commands act on exactly one record,
+// and a filter alone does not say which; stats is set-oriented like list and
+// pick, so `stats --genre jazz` is a complete request.
+func parseStats(args []string) (statsConfig, error) {
+	fs, gf := newFlagSet("stats")
+	sf := addStatsFlags(fs)
+
+	rest, err := parseInterspersed(fs, args)
+	if err != nil {
+		return statsConfig{}, fmt.Errorf("stats: %w", err)
+	}
+	if len(rest) > 0 {
+		return statsConfig{}, fmt.Errorf("stats: unexpected argument %q", rest[0])
+	}
+	filter, err := sf.filters.Filter()
+	if err != nil {
+		return statsConfig{}, fmt.Errorf("stats: %v", err)
+	}
+	color, err := gf.mode()
+	if err != nil {
+		return statsConfig{}, fmt.Errorf("stats: %v", err)
+	}
+
+	return statsConfig{
+		favoritesOnly: *sf.favoritesOnly,
+		filter:        filter,
+		color:         color,
+		json:          *sf.asJSON,
+	}, nil
 }
 
 // parseHelp validates help's arguments (an optional topic). Routing it
@@ -754,6 +817,28 @@ Flags:
 					return
 				}
 				runHistory(cfg)
+			},
+		},
+		{
+			name:        "stats",
+			needsConfig: true,
+			summary:     "Summarize your collection",
+			usage: `Usage: disc-fortune stats [flags]
+
+Summarizes whatever the filters describe: a decade histogram, your most
+common genres and labels, and how much of the set you have ever played.
+Reads only files already on disk.
+
+Flags:
+  --favorites      Describe favorites only
+  --json           Emit machine-readable JSON instead of text
+` + filterFlagHelp,
+			run: func(args []string) {
+				cfg, err := parseStats(args)
+				if handleParseErr("stats", err) {
+					return
+				}
+				runStats(cfg)
 			},
 		},
 		{

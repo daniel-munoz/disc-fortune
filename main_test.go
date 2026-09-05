@@ -1047,3 +1047,87 @@ func TestJSONDoesNotChangeSemantics(t *testing.T) {
 		}
 	})
 }
+
+func TestStatsEndToEnd(t *testing.T) {
+	home := t.TempDir()
+	collection, favorites, history := fixturePaths(home)
+
+	miles := Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}}
+	ride := Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere", Year: 1990, Label: "Creation", Genres: []string{"Shoegaze"}}
+	mustSaveCollection(t, collection, []Album{miles, ride})
+	mustSaveFavorites(t, favorites, []Album{miles})
+	mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+
+	code, stdout, _ := runHelperSplit(t, home, "stats")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, stdout)
+	}
+	for _, want := range []string{"2 albums · 1 favorite", "1950s", "1990s", "Top genres", "Top labels", "1 of 2 albums picked at least once (50%)"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stats output missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestStatsJSONParses(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{
+		{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Genres: []string{"Jazz"}},
+	})
+
+	code, stdout, _ := runHelperSplit(t, home, "stats", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, stdout)
+	}
+
+	var payload struct {
+		Count  int `json:"count"`
+		Picked struct {
+			Share float64 `json:"share"`
+		} `json:"picked"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("stdout is not one JSON value: %v\n%s", err, stdout)
+	}
+	if payload.Count != 1 {
+		t.Errorf("count = %d, want 1", payload.Count)
+	}
+}
+
+// --json changes the format, never the semantics: an empty match is still a
+// failure, on stderr, with exit 1 and nothing on stdout.
+func TestStatsEmptyMatchExitsOneInBothFormats(t *testing.T) {
+	home := t.TempDir()
+	collection, _, _ := fixturePaths(home)
+	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "Ride", Title: "Nowhere", Year: 1990}})
+
+	for _, args := range [][]string{{"stats", "--genre", "polka"}, {"stats", "--genre", "polka", "--json"}} {
+		code, stdout, stderr := runHelperSplit(t, home, args...)
+		if code != 1 {
+			t.Errorf("%v: exit = %d, want 1", args, code)
+		}
+		if stdout != "" {
+			t.Errorf("%v: stdout = %q, want empty", args, stdout)
+		}
+		if !strings.Contains(stderr, "No albums match") {
+			t.Errorf("%v: stderr = %q, want a no-match message", args, stderr)
+		}
+	}
+}
+
+func TestStatsFavoritesOnlyHeader(t *testing.T) {
+	home := t.TempDir()
+	collection, favorites, _ := fixturePaths(home)
+	miles := Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	mustSaveCollection(t, collection, []Album{miles, {ReleaseID: 2, Artist: "Ride", Title: "Nowhere", Year: 1990}})
+	mustSaveFavorites(t, favorites, []Album{miles})
+
+	code, stdout, _ := runHelperSplit(t, home, "stats", "--favorites")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, "1 favorite\n") {
+		t.Errorf("favorites header wrong:\n%s", stdout)
+	}
+}
