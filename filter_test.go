@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -569,6 +570,48 @@ func artistsOf(albums []Album) []string {
 		out[i] = a.Artist
 	}
 	return out
+}
+
+func TestMatchAlbumsClassifies(t *testing.T) {
+	miles := Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue"}
+	milesAlt := Album{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue"}
+	ride := Album{ReleaseID: 3, Artist: "Ride", Title: "Nowhere"}
+	pool := []Album{miles, milesAlt, ride}
+
+	t.Run("one", func(t *testing.T) {
+		album, matches, status := matchAlbums(pool, Filter{ReleaseID: 3})
+		if status != matchedOne {
+			t.Fatalf("status = %v, want matchedOne", status)
+		}
+		if album.ReleaseID != 3 {
+			t.Errorf("album = %+v, want release 3", album)
+		}
+		if matches != nil {
+			t.Errorf("matches = %v, want nil for a single match", matches)
+		}
+	})
+
+	t.Run("none", func(t *testing.T) {
+		_, _, status := matchAlbums(pool, Filter{ReleaseID: 999})
+		if status != matchedNone {
+			t.Errorf("status = %v, want matchedNone", status)
+		}
+	})
+
+	t.Run("many", func(t *testing.T) {
+		f := Filter{}
+		f.Query.Include = []string{"miles"}
+		album, matches, status := matchAlbums(pool, f)
+		if status != matchedMany {
+			t.Fatalf("status = %v, want matchedMany", status)
+		}
+		if len(matches) != 2 {
+			t.Errorf("matches = %d, want 2", len(matches))
+		}
+		if !reflect.DeepEqual(album, Album{}) {
+			t.Errorf("album = %+v, want the zero Album for matchedMany", album)
+		}
+	})
 }
 
 // An unset filter returns the input untouched, which is what keeps `list`

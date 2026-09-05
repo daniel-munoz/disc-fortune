@@ -140,21 +140,21 @@ type FavoriteOutcome struct {
 // already part of filter (parseFavorite puts the positional QUERY and --query
 // in the same place), so this only applies it and acts on the result.
 func favoriteByQuery(collection []Album, filter Filter, favPath string) (FavoriteOutcome, error) {
-	matches := filter.Apply(collection)
-	switch len(matches) {
-	case 0:
+	album, matches, status := matchAlbums(collection, filter)
+	switch status {
+	case matchedNone:
 		return FavoriteOutcome{Status: FavoriteNoMatch}, nil
-	case 1:
-		if err := addFavorite(favPath, matches[0]); err != nil {
-			if errors.Is(err, ErrAlreadyInFavorites) {
-				return FavoriteOutcome{Status: FavoriteAlreadyFav, Album: matches[0]}, nil
-			}
-			return FavoriteOutcome{}, err
-		}
-		return FavoriteOutcome{Status: FavoriteAdded, Album: matches[0]}, nil
-	default:
+	case matchedMany:
 		return FavoriteOutcome{Status: FavoriteMultiMatch, Matches: matches}, nil
 	}
+
+	if err := addFavorite(favPath, album); err != nil {
+		if errors.Is(err, ErrAlreadyInFavorites) {
+			return FavoriteOutcome{Status: FavoriteAlreadyFav, Album: album}, nil
+		}
+		return FavoriteOutcome{}, err
+	}
+	return FavoriteOutcome{Status: FavoriteAdded, Album: album}, nil
 }
 
 // UnfavoriteStatus represents the outcome of attempting to unfavorite an album by query.
@@ -180,21 +180,21 @@ type UnfavoriteOutcome struct {
 // album when exactly one matches. An album that is already absent is reported
 // as UnfavoriteNoMatch rather than an error: removal is idempotent.
 func unfavoriteByQuery(favorites []Album, filter Filter, favPath string) (UnfavoriteOutcome, error) {
-	matches := filter.Apply(favorites)
-	switch len(matches) {
-	case 0:
+	album, matches, status := matchAlbums(favorites, filter)
+	switch status {
+	case matchedNone:
 		return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
-	case 1:
-		if err := removeFavorite(favPath, matches[0]); err != nil {
-			if errors.Is(err, ErrNotInFavorites) {
-				return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
-			}
-			return UnfavoriteOutcome{}, err
-		}
-		return UnfavoriteOutcome{Status: UnfavoriteRemoved, Album: matches[0]}, nil
-	default:
+	case matchedMany:
 		return UnfavoriteOutcome{Status: UnfavoriteMultiMatch, Matches: matches}, nil
 	}
+
+	if err := removeFavorite(favPath, album); err != nil {
+		if errors.Is(err, ErrNotInFavorites) {
+			return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
+		}
+		return UnfavoriteOutcome{}, err
+	}
+	return UnfavoriteOutcome{Status: UnfavoriteRemoved, Album: album}, nil
 }
 
 // errNoFavorites means the favorites list is empty or absent.

@@ -273,3 +273,31 @@ func (f Filter) matches(album Album) bool {
 	}
 	return f.Year.matches(album.Year)
 }
+
+// matchStatus classifies what a filter selected: exactly one record, none, or
+// several. favorite, unfavorite and open all act on a single record and all
+// need the same three-way answer, so the classification lives here rather
+// than being spelled out at each call site.
+type matchStatus int
+
+const (
+	matchedOne matchStatus = iota
+	matchedNone
+	matchedMany
+)
+
+// matchAlbums applies filter and classifies the result. The returned Album is
+// meaningful only for matchedOne, and the slice only for matchedMany; the
+// other is left at its zero value so a caller reading the wrong one gets
+// nothing rather than something plausible.
+func matchAlbums(albums []Album, filter Filter) (Album, []Album, matchStatus) {
+	matches := filter.Apply(albums)
+	switch len(matches) {
+	case 0:
+		return Album{}, nil, matchedNone
+	case 1:
+		return matches[0], nil, matchedOne
+	default:
+		return Album{}, matches, matchedMany
+	}
+}
