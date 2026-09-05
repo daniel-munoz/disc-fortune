@@ -224,9 +224,9 @@ func runStats(cfg statsConfig) {
 		os.Exit(1)
 	}
 
-	// A stats run is read-only and advisory: neither an unreadable history
-	// nor unreadable metadata should sink it. History failing loudly would
-	// be the exception, since it feeds a headline figure.
+	// Metadata is advisory and never sinks the run. History is the
+	// exception: it feeds a headline figure, so an unreadable history fails
+	// loudly.
 	entries, err := loadHistory(historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
@@ -273,6 +273,17 @@ func (cfg openConfig) describe() string {
 	return describeSelection(cfg.query, cfg.filter.ReleaseID)
 }
 
+// reportAmbiguous prints the candidates a query matched and exits 1. It is
+// the one piece favorite, unfavorite and open's ambiguous-match branches
+// share verbatim; everything around it -- what counts as a match, what
+// happens when there is none, what exit code that path takes -- differs per
+// command and stays local to each.
+func reportAmbiguous(matches []Album, color colorMode) {
+	fmt.Print(formatList(matches, stdoutColor(color), true))
+	fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
+	os.Exit(1)
+}
+
 func runFavorite(cfg favoriteConfig) {
 	// An empty query means "the last pick" -- unless --release-id already
 	// names a record, which is a selection in its own right.
@@ -295,9 +306,7 @@ func runFavorite(cfg favoriteConfig) {
 	case FavoriteNoMatch:
 		fatal("No albums match %s", cfg.describe())
 	case FavoriteMultiMatch:
-		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color), true))
-		fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
-		os.Exit(1)
+		reportAmbiguous(outcome.Matches, cfg.color)
 	}
 }
 
@@ -334,9 +343,7 @@ func runUnfavorite(cfg favoriteConfig) {
 		// Removal is idempotent: nothing to remove is a success.
 		fmt.Printf("No favorites match %s - nothing to remove.\n", cfg.describe())
 	case UnfavoriteMultiMatch:
-		fmt.Print(formatList(outcome.Matches, stdoutColor(cfg.color), true))
-		fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
-		os.Exit(1)
+		reportAmbiguous(outcome.Matches, cfg.color)
 	}
 }
 
@@ -404,9 +411,7 @@ func resolveOpenTarget(cfg openConfig) Album {
 	case matchedNone:
 		fatal("No albums match %s", cfg.describe())
 	case matchedMany:
-		fmt.Print(formatList(matches, stdoutColor(cfg.color), true))
-		fmt.Fprintln(os.Stderr, "Be more specific, add filters, or use --release-id.")
-		os.Exit(1)
+		reportAmbiguous(matches, cfg.color)
 	}
 	return album
 }
