@@ -237,7 +237,12 @@ func TestUsageBlocksHaveNoDoubleBlankLines(t *testing.T) {
 // not must not claim to. Same guard as TestFilterFlagsAreDocumented, for a
 // flag that is registered per-command rather than centrally.
 func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
-	for _, name := range []string{"pick", "list"} {
+	accepts := []string{"pick", "list"}
+	rejects := []string{
+		"favorite", "unfavorite", "stats", "open", "history", "sync",
+		"folders", "migrate", "version", "help", "completion",
+	}
+	for _, name := range accepts {
 		c := lookup(name)
 		if c == nil {
 			t.Fatalf("command %q not found", name)
@@ -246,7 +251,7 @@ func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
 			t.Errorf("%s usage does not mention --unheard", name)
 		}
 	}
-	for _, name := range []string{"favorite", "unfavorite"} {
+	for _, name := range rejects {
 		c := lookup(name)
 		if c == nil {
 			t.Fatalf("command %q not found", name)
@@ -254,6 +259,17 @@ func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
 		if strings.Contains(c.usage, "--unheard") {
 			t.Errorf("%s documents --unheard but does not accept it", name)
 		}
+	}
+
+	// The two lists above are a manual enumeration of every command's stance
+	// on --unheard. Nothing forces them to grow with commands, so a new
+	// command could accept or reject it silently. This is the same guard as
+	// TestEveryCommandHasACompletionDecision in completion_test.go: decide
+	// what the new command does with --unheard, then add it to one of the
+	// two lists above.
+	if got := len(accepts) + len(rejects); got != len(commands) {
+		t.Fatalf("this test covers %d commands but there are %d; decide whether "+
+			"the new command accepts --unheard, then add it here", got, len(commands))
 	}
 }
 
@@ -269,7 +285,12 @@ func TestDrawFlagIsDocumentedOnPickOnly(t *testing.T) {
 // The commands that accept --json must document it, and the ones that do not
 // must not claim to. Same guard as TestUnheardFlagIsDocumentedWhereAccepted.
 func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
-	for _, name := range []string{"pick", "list", "history"} {
+	accepts := []string{"pick", "list", "history", "stats"}
+	rejects := []string{
+		"favorite", "unfavorite", "sync", "folders", "migrate", "version",
+		"help", "open", "completion",
+	}
+	for _, name := range accepts {
 		c := lookup(name)
 		if c == nil {
 			t.Fatalf("command %q not found", name)
@@ -278,7 +299,7 @@ func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
 			t.Errorf("%s usage does not mention --json", name)
 		}
 	}
-	for _, name := range []string{"favorite", "unfavorite", "sync", "folders", "migrate", "version", "help"} {
+	for _, name := range rejects {
 		c := lookup(name)
 		if c == nil {
 			continue
@@ -286,5 +307,13 @@ func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
 		if strings.Contains(c.usage, "--json") {
 			t.Errorf("%s documents --json but does not accept it", name)
 		}
+	}
+
+	// Same guard as TestUnheardFlagIsDocumentedWhereAccepted, for --json:
+	// the two lists above must together cover every command, or a new one
+	// could slip past with no stance on --json recorded here at all.
+	if got := len(accepts) + len(rejects); got != len(commands) {
+		t.Fatalf("this test covers %d commands but there are %d; decide whether "+
+			"the new command accepts --json, then add it here", got, len(commands))
 	}
 }

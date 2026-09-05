@@ -87,12 +87,12 @@ func TestCompletionScopesFlagsPerCommand(t *testing.T) {
 	if hasFlag(commandFlags("list"), "draw") {
 		t.Error("list should not complete --draw: it draws nothing")
 	}
-	for _, name := range []string{"pick", "list", "history"} {
+	for _, name := range []string{"pick", "list", "history", "stats"} {
 		if !hasFlag(commandFlags(name), "json") {
 			t.Errorf("%s should complete --json", name)
 		}
 	}
-	for _, name := range []string{"sync", "folders", "migrate"} {
+	for _, name := range []string{"sync", "folders", "migrate", "open"} {
 		if hasFlag(commandFlags(name), "json") {
 			t.Errorf("%s should not complete --json: it does not accept it", name)
 		}
