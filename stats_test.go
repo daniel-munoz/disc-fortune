@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -153,5 +154,140 @@ func TestStatsShareOfEmptySetIsZero(t *testing.T) {
 	var s Stats
 	if got := s.Share(); got != 0 {
 		t.Errorf("Share() = %v, want 0 for an empty set", got)
+	}
+}
+
+// The golden test pins a Stats with no timestamps, so no relative-time line
+// appears and the bytes are stable. The two relative lines are covered
+// separately below.
+func TestFormatStatsGolden(t *testing.T) {
+	s := Stats{
+		Count:     4,
+		Total:     4,
+		Favorites: 1,
+		Decades: []DecadeBucket{
+			{1950, 1}, {1960, 0}, {1970, 2}, {0, 1},
+		},
+		Genres: []NameCount{{"Shoegaze", 2}, {"Jazz", 1}},
+		Labels: []NameCount{{"Creation", 2}, {"Columbia", 1}},
+		Picked: PickedStats{Count: 1},
+	}
+
+	want := `4 albums · 1 favorite
+
+Decades
+  1950s    1  ████████████
+  1960s    0
+  1970s    2  ████████████████████████
+  unknown  1  ████████████
+
+Top genres
+  Shoegaze  2
+  Jazz      1
+
+Top labels
+  Creation  2
+  Columbia  1
+
+1 of 4 albums picked at least once (25%)
+`
+
+	if got := formatStats(s, false); got != want {
+		t.Errorf("formatStats drifted.\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestFormatStatsHeaderVariants(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Stats
+		want string
+	}{
+		{"unfiltered", Stats{Count: 1247, Total: 1247, Favorites: 84}, "1247 albums · 84 favorites"},
+		{"filtered", Stats{Count: 312, Total: 1247, Favorites: 28}, "312 of 1247 albums · 28 favorites"},
+		{"favorites only", Stats{Count: 84, Total: 84, FavoritesOnly: true}, "84 favorites"},
+		{"favorites filtered", Stats{Count: 12, Total: 84, FavoritesOnly: true}, "12 of 84 favorites"},
+		{"singular album", Stats{Count: 1, Total: 1, Favorites: 1}, "1 album · 1 favorite"},
+		{"singular favorite set", Stats{Count: 1, Total: 1, FavoritesOnly: true}, "1 favorite"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.SplitN(formatStats(tc.s, false), "\n", 2)[0]
+			if got != tc.want {
+				t.Errorf("header = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormatStatsRelativeLines(t *testing.T) {
+	s := Stats{
+		Count:    2,
+		Total:    2,
+		SyncedAt: time.Now().Add(-3 * 24 * time.Hour),
+		Picked:   PickedStats{Count: 1, LastPicked: time.Now().Add(-2 * time.Hour)},
+	}
+	out := formatStats(s, false)
+	if !strings.Contains(out, "last synced 3 days ago") {
+		t.Errorf("missing sync line:\n%s", out)
+	}
+	if !strings.Contains(out, "last picked 2 hours ago") {
+		t.Errorf("missing last-picked line:\n%s", out)
+	}
+}
+
+func TestFormatStatsOmitsAbsentLines(t *testing.T) {
+	out := formatStats(Stats{Count: 1, Total: 1}, false)
+	if strings.Contains(out, "last synced") {
+		t.Errorf("sync line present with a zero SyncedAt:\n%s", out)
+	}
+	if strings.Contains(out, "last picked") {
+		t.Errorf("last-picked line present with nothing picked:\n%s", out)
+	}
+	if strings.Contains(out, "Top genres") {
+		t.Errorf("empty genre section rendered:\n%s", out)
+	}
+}
+
+func TestFormatStatsColorsHeadingsAndBars(t *testing.T) {
+	s := Stats{Count: 1, Total: 1, Decades: []DecadeBucket{{1970, 1}}}
+	out := formatStats(s, true)
+	if !strings.Contains(out, colorBoldWhite+"Decades"+colorReset) {
+		t.Errorf("heading not bold:\n%q", out)
+	}
+	if !strings.Contains(out, colorDim) {
+		t.Errorf("bar not dimmed:\n%q", out)
+	}
+}
+
+// A bucket too small to earn a whole eighth still exists, and must not read
+// as zero.
+func TestFormatStatsTinyBucketStillDrawsABar(t *testing.T) {
+	s := Stats{Count: 1000, Total: 1000, Decades: []DecadeBucket{{1970, 1000}, {1980, 1}}}
+	lines := strings.Split(formatStats(s, false), "\n")
+	var got string
+	for _, l := range lines {
+		if strings.Contains(l, "1980s") {
+			got = l
+		}
+	}
+	if !strings.Contains(got, "▏") {
+		t.Errorf("tiny bucket drew no bar: %q", got)
+	}
+}
+
+// No line may end in whitespace: a zero-count row has no bar, and padding it
+// out to the bar column would put trailing spaces in every golden file.
+func TestFormatStatsHasNoTrailingWhitespace(t *testing.T) {
+	s := Stats{
+		Count:   3,
+		Total:   3,
+		Decades: []DecadeBucket{{1950, 1}, {1960, 0}, {1970, 2}},
+		Genres:  []NameCount{{"Jazz", 1}},
+	}
+	for i, line := range strings.Split(formatStats(s, false), "\n") {
+		if line != strings.TrimRight(line, " \t") {
+			t.Errorf("line %d has trailing whitespace: %q", i, line)
+		}
 	}
 }
