@@ -409,7 +409,8 @@ log also exits 0: a log report succeeds even when the log has nothing in it.
 
 `open` exits 0 whether it launched a browser or fell back to printing the URL.
 Printing is a degradation, not a failure: you still got the address you asked
-for.
+for. A launcher that exists but fails to start is a real failure, though: `open`
+prints the URL anyway, so you are not left with nothing, but exits 1.
 
 ## Features
 
