@@ -66,6 +66,13 @@ Per the v2.4.0 decision, flag registration lives in an `add*Flags` function so
 cannot be accepted without also being completable. `filterFlagHelp` is
 appended to the usage block, which `TestFilterFlagsAreDocumented` enforces.
 
+**A new command is not automatic.** `commandFlagSet` (`completion.go:41`)
+switches on the command name, and its own doc comment says so: a command
+registering flags without a case there silently offers only the globals.
+`stats` and `open` each need a case, and each needs a row in
+`TestEveryCommandHasACompletionDecision`'s `hasOwnFlags` map, which fails
+loudly on a count mismatch when they are missing.
+
 ### Shape
 
 New `stats.go`:
@@ -73,10 +80,20 @@ New `stats.go`:
 ```go
 // computeStats is pure: it takes everything it needs and touches no files.
 func computeStats(pool, favorites []Album, entries []HistoryEntry,
-                  total int, m Meta, now time.Time) Stats
+                  total int, m Meta, favoritesOnly bool) Stats
 
 func formatStats(s Stats, useColor bool) string
 ```
+
+No `now` parameter: the only time-relative text is the two `formatTimestamp`
+lines, and that helper reads the clock itself — as it already does for
+`formatHistory`. The golden tests therefore pin a `Stats` with a zero
+`SyncedAt` and `LastPicked`, where both lines are omitted, and cover the two
+relative lines separately against a fixed offset from `time.Now()`.
+
+`favoritesOnly` is carried on `Stats` rather than passed to `formatStats`,
+because it changes only how the header reads and both views should agree
+about which set they are describing.
 
 and in `json.go`:
 
