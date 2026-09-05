@@ -79,7 +79,7 @@ func isBoolFlag(f *flag.Flag) bool {
 
 // parseCompletion validates completion's single argument, the shell name.
 func parseCompletion(args []string) (string, error) {
-	fs, _ := newFlagSet("completion")
+	fs, gf := newFlagSet("completion")
 	rest, err := parseInterspersed(fs, args)
 	if err != nil {
 		return "", fmt.Errorf("completion: %w", err)
@@ -89,6 +89,11 @@ func parseCompletion(args []string) (string, error) {
 	}
 	if len(rest) > 1 {
 		return "", fmt.Errorf("completion: too many arguments")
+	}
+	// completion colorizes nothing, but it still accepts --color, so it must
+	// still reject a bad value for it -- as every other command does.
+	if _, err := gf.mode(); err != nil {
+		return "", fmt.Errorf("completion: %v", err)
 	}
 	return rest[0], nil
 }
@@ -160,11 +165,17 @@ _disc_fortune() {
 		fmt.Fprintf(&sb, "        --%s)\n            COMPREPLY=( $(compgen -W %s -- \"$cur\") )\n            return\n            ;;\n",
 			name, shellQuote(strings.Join(flagValues[name], " ")))
 	}
-	sb.WriteString(`    esac
+	fmt.Fprintf(&sb, `        %s)
+            # Takes a value we cannot complete. Return empty rather than
+            # falling through to the subcommand list.
+            COMPREPLY=()
+            return
+            ;;
+    esac
 
     if [[ "$cur" == -* ]]; then
         case "$cmd" in
-`)
+`, strings.Join(freeValueFlags("pick"), "|"))
 	for _, c := range commands {
 		fmt.Fprintf(&sb, "            %s)\n                COMPREPLY=( $(compgen -W %s -- \"$cur\") )\n                ;;\n",
 			c.name, shellQuote(flagNames(c.name)))
@@ -219,12 +230,16 @@ _disc_fortune() {
 		fmt.Fprintf(&sb, "        --%s)\n            _values %s %s\n            return\n            ;;\n",
 			name, shellQuote(name), strings.Join(flagValues[name], " "))
 	}
-	sb.WriteString(`    esac
+	fmt.Fprintf(&sb, `        %s)
+            # Takes a value we cannot complete.
+            return
+            ;;
+    esac
 
     if [[ ${words[CURRENT]} == -* ]]; then
         local -a flags
         case $cmd in
-`)
+`, strings.Join(freeValueFlags("pick"), "|"))
 	for _, c := range commands {
 		fmt.Fprintf(&sb, "            %s) flags=(%s) ;;\n", c.name, flagNames(c.name))
 	}
@@ -249,6 +264,20 @@ fi
 `, flagNames("pick"))
 
 	return sb.String()
+}
+
+// freeValueFlags are the flags that take a value completion cannot supply --
+// the collection-derived ones. bash and zsh need them named explicitly: their
+// scripts fall through to the subcommand list otherwise, offering command
+// names as the value of --genre. fish gets this for free from -x.
+func freeValueFlags(command string) []string {
+	var out []string
+	for _, f := range commandFlags(command) {
+		if !f.isBool && len(f.values) == 0 {
+			out = append(out, "--"+f.name)
+		}
+	}
+	return out
 }
 
 // fishValueSpec renders what fish should offer after a flag.

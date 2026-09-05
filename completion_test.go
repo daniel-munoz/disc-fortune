@@ -367,3 +367,43 @@ func TestEveryCommandHasACompletionDecision(t *testing.T) {
 		}
 	}
 }
+
+// bash and zsh fall through to the subcommand list when a flag's value cannot
+// be completed, so `disc-fortune --genre <TAB>` offered command names as the
+// value of --genre. fish gets this right for free via -x; the other two need
+// the flags named explicitly.
+func TestCompletionOffersNothingForAFreeFormValue(t *testing.T) {
+	bin := buildForCompletion(t)
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not installed")
+	}
+
+	for _, words := range []string{
+		`COMP_WORDS=(disc-fortune --genre ""); COMP_CWORD=2`,
+		`COMP_WORDS=(disc-fortune --label ""); COMP_CWORD=2`,
+		`COMP_WORDS=(disc-fortune list --genre ""); COMP_CWORD=3`,
+	} {
+		script := `eval "$(` + bin + ` completion bash)"
+` + words + `; _disc_fortune; echo "${COMPREPLY[@]}"`
+		out, err := exec.Command(bash, "-c", script).CombinedOutput()
+		if err != nil {
+			t.Fatalf("bash: %v\n%s", err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != "" {
+			t.Errorf("%s should complete nothing, got: %s", words, got)
+		}
+	}
+}
+
+// completion colorizes nothing, but it accepts --color like every command, so
+// it must reject a bad value like every command. TestEveryCommandAcceptsColorFlag
+// covers the accepting half; this covers the rejecting half.
+func TestCompletionRejectsInvalidColor(t *testing.T) {
+	if _, err := parseCompletion([]string{"--color", "sometimes", "bash"}); err == nil {
+		t.Error("completion accepted --color=sometimes, want an error")
+	}
+	if _, err := parseCompletion([]string{"--color", "never", "bash"}); err != nil {
+		t.Errorf("completion rejected a valid --color: %v", err)
+	}
+}
