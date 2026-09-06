@@ -431,7 +431,7 @@ func TestFilterFieldsAreWiredDistinctly(t *testing.T) {
 			t.Errorf("%s and %s point at the same FieldFilter", field.Name, other)
 		}
 		seen[p] = field.Name
-		if field.AlbumValue == nil {
+		if field.albumValue == nil {
 			t.Errorf("%s: albumValue is nil", field.Name)
 		}
 		if field.Help == "" {
@@ -461,7 +461,7 @@ func TestFilterFieldsReadTheRightAlbumValues(t *testing.T) {
 	}
 
 	for _, field := range Fields {
-		got := field.AlbumValue(album)
+		got := field.albumValue(album)
 		exp := want[field.Name]
 		if len(got) != len(exp) {
 			t.Errorf("%s: albumValue = %q, want %q", field.Name, got, exp)

@@ -168,7 +168,7 @@ func ParseDecadeValue(s string) (YearRange, error) {
 type filterField struct {
 	Name       string
 	Help       string
-	AlbumValue func(Album) []string
+	albumValue func(Album) []string
 	Part       func(*Filter) *FieldFilter
 }
 
@@ -183,31 +183,31 @@ var Fields = []filterField{
 	{
 		Name:       "query",
 		Help:       `Filter by "Artist - Title" (case-insensitive substring)`,
-		AlbumValue: func(a Album) []string { return []string{a.Key()} },
+		albumValue: func(a Album) []string { return []string{a.Key()} },
 		Part:       func(f *Filter) *FieldFilter { return &f.Query },
 	},
 	{
 		Name:       "artist",
 		Help:       "Filter by artist",
-		AlbumValue: func(a Album) []string { return []string{a.Artist} },
+		albumValue: func(a Album) []string { return []string{a.Artist} },
 		Part:       func(f *Filter) *FieldFilter { return &f.Artist },
 	},
 	{
 		Name:       "title",
 		Help:       "Filter by title",
-		AlbumValue: func(a Album) []string { return []string{a.Title} },
+		albumValue: func(a Album) []string { return []string{a.Title} },
 		Part:       func(f *Filter) *FieldFilter { return &f.Title },
 	},
 	{
 		Name:       "genre",
 		Help:       "Filter by genre",
-		AlbumValue: func(a Album) []string { return a.Genres },
+		albumValue: func(a Album) []string { return a.Genres },
 		Part:       func(f *Filter) *FieldFilter { return &f.Genre },
 	},
 	{
 		Name:       "label",
 		Help:       "Filter by label",
-		AlbumValue: func(a Album) []string { return []string{a.Label} },
+		albumValue: func(a Album) []string { return []string{a.Label} },
 		Part:       func(f *Filter) *FieldFilter { return &f.Label },
 	},
 	{
@@ -216,7 +216,7 @@ var Fields = []filterField{
 		// format name, its descriptions, and its free text -- the last
 		// being where Discogs records a pressing's colour.
 		Help:       "Filter by format or colour",
-		AlbumValue: func(a Album) []string { return a.Formats },
+		albumValue: func(a Album) []string { return a.Formats },
 		Part:       func(f *Filter) *FieldFilter { return &f.Format },
 	},
 }
@@ -268,7 +268,7 @@ func (f Filter) matches(album Album) bool {
 		return false
 	}
 	for _, field := range Fields {
-		if !field.Part(&f).matches(field.AlbumValue(album)) {
+		if !field.Part(&f).matches(field.albumValue(album)) {
 			return false
 		}
 	}

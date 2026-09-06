@@ -30,7 +30,7 @@ func TestWriteFileAtomicCreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestWriteFileAtomicAppliesPerms(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -64,8 +64,8 @@ func TestWriteFileAtomicAppliesPerms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != FilePerms {
-		t.Errorf("perm = %o, want %o", got, FilePerms)
+	if got := info.Mode().Perm(); got != collectionFilePerms {
+		t.Errorf("perm = %o, want %o", got, collectionFilePerms)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestWriteFileAtomicRespectsUmaskOnNewFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -99,14 +99,14 @@ func TestWriteFileAtomicPreservesAnExistingFilesMode(t *testing.T) {
 	withUmask(t, 0o022)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "history.json")
-	if err := os.WriteFile(path, []byte("old"), FilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("old"), collectionFilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	if err := writeFileAtomic(path, []byte("new"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -133,7 +133,7 @@ func TestWriteFileAtomicPreservesAWidenedMode(t *testing.T) {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	if err := writeFileAtomic(path, []byte("new"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -150,11 +150,11 @@ func TestWriteFileAtomicPreservesAWidenedMode(t *testing.T) {
 func TestWriteFileAtomicOverwrites(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
-	if err := os.WriteFile(path, []byte("old"), FilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("old"), collectionFilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 
-	if err := writeFileAtomic(path, []byte("new"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestWriteFileAtomicLeavesNoResidueOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -186,11 +186,11 @@ func TestWriteFileAtomicLeavesNoResidueOnSuccess(t *testing.T) {
 func TestWriteFileAtomicPreservesOriginalOnRenameFailure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
-	if err := os.Mkdir(path, DirPerms); err != nil {
+	if err := os.Mkdir(path, configDirPerms); err != nil {
 		t.Fatalf("seeding directory: %v", err)
 	}
 
-	err := writeFileAtomic(path, []byte("new"), FilePerms)
+	err := writeFileAtomic(path, []byte("new"), collectionFilePerms)
 	if err == nil {
 		t.Fatal("writeFileAtomic succeeded renaming over a directory, want error")
 	}
@@ -210,7 +210,7 @@ func TestWriteFileAtomicPreservesOriginalOnRenameFailure(t *testing.T) {
 func TestWriteFileAtomicPreservesOriginalWhenTempCannotBeCreated(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
-	if err := os.WriteFile(path, []byte("original"), FilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("original"), collectionFilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 	// A read-only directory blocks the temp file, standing in for a full disk.
@@ -219,7 +219,7 @@ func TestWriteFileAtomicPreservesOriginalWhenTempCannotBeCreated(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
 
-	if err := writeFileAtomic(path, []byte("new"), FilePerms); err == nil {
+	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err == nil {
 		t.Fatal("writeFileAtomic succeeded in a read-only directory, want error")
 	}
 

@@ -42,14 +42,14 @@ func LoadMeta(path string) (Meta, error) {
 
 // saveMeta writes meta.json atomically.
 func saveMeta(path string, m Meta) error {
-	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding meta: %w", err)
 	}
-	return writeFileAtomic(path, data, FilePerms)
+	return writeFileAtomic(path, data, collectionFilePerms)
 }
 
 // RecordSync stamps the time of a completed sync, preserving whatever other

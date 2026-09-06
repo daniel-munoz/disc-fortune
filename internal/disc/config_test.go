@@ -13,14 +13,14 @@ import (
 // cannot share an unexported test helper.
 func seedCollectionAt(t *testing.T, dir string, album Album) {
 	t.Helper()
-	if err := os.MkdirAll(dir, DirPerms); err != nil {
+	if err := os.MkdirAll(dir, configDirPerms); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
 	data, err := json.Marshal([]Album{album})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "collection.json"), data, FilePerms); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "collection.json"), data, collectionFilePerms); err != nil {
 		t.Fatalf("seeding collection: %v", err)
 	}
 }
@@ -165,7 +165,7 @@ func TestConfigDirIgnoresAnEmptyXDGDirectory(t *testing.T) {
 	xdg := t.TempDir()
 	legacy := filepath.Join(home, ".config", "disc-fortune")
 	seedCollectionAt(t, legacy, Album{Artist: "Alice Coltrane", Title: "Ptah, the El Daoud"})
-	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), DirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), configDirPerms); err != nil {
 		t.Fatalf("seeding empty xdg dir: %v", err)
 	}
 
@@ -188,10 +188,10 @@ func TestConfigDirTreatsAnyDataFileAsInUse(t *testing.T) {
 			home := t.TempDir()
 			xdg := t.TempDir()
 			xdgDir := filepath.Join(xdg, "disc-fortune")
-			if err := os.MkdirAll(xdgDir, DirPerms); err != nil {
+			if err := os.MkdirAll(xdgDir, configDirPerms); err != nil {
 				t.Fatalf("mkdir: %v", err)
 			}
-			if err := os.WriteFile(filepath.Join(xdgDir, name), []byte("[]"), FilePerms); err != nil {
+			if err := os.WriteFile(filepath.Join(xdgDir, name), []byte("[]"), collectionFilePerms); err != nil {
 				t.Fatalf("seeding: %v", err)
 			}
 			seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "A", Title: "B"})

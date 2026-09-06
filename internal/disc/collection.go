@@ -9,11 +9,9 @@ import (
 	"strconv"
 )
 
-// DirPerms and FilePerms are the modes the config directory and the data
-// files inside it are created with, before the process umask is applied.
 const (
-	DirPerms  = 0755
-	FilePerms = 0644
+	configDirPerms      = 0755
+	collectionFilePerms = 0644
 )
 
 // Album represents a single record with metadata.
@@ -79,14 +77,14 @@ func LoadCollectionFrom(path string) ([]Album, error) {
 }
 
 func SaveCollectionTo(path string, albums []Album) error {
-	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(albums, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding collection: %w", err)
 	}
-	return writeFileAtomic(path, data, FilePerms)
+	return writeFileAtomic(path, data, collectionFilePerms)
 }
 
 var (

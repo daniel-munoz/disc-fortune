@@ -38,7 +38,7 @@ func TestSaveAndLoadCollection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(path, data, FilePerms); err != nil {
+	if err := os.WriteFile(path, data, collectionFilePerms); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -67,7 +67,7 @@ func TestLoadCollectionMissing(t *testing.T) {
 
 func TestLoadCollectionInvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.json")
-	if err := os.WriteFile(path, []byte("{not json"), FilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), collectionFilePerms); err != nil {
 		t.Fatal(err)
 	}
 	_, err := LoadCollectionFrom(path)

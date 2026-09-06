@@ -59,7 +59,7 @@ func TestRecordSyncOverwritesEarlierTimestamp(t *testing.T) {
 // able to fail a sync that otherwise succeeded.
 func TestRecordSyncRepairsCorruptFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
-	if err := os.WriteFile(path, []byte("{not json"), FilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), collectionFilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 	when := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
@@ -133,7 +133,7 @@ func TestSyncNoticeReportsStaleCollection(t *testing.T) {
 // A pick must succeed even if meta.json is unreadable garbage.
 func TestSyncNoticeSilentOnUnreadableMeta(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
-	if err := os.WriteFile(path, []byte("{not json"), FilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), collectionFilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 

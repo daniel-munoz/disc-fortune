@@ -54,7 +54,7 @@ func TestMigrationNoticeShowsOnlyOnce(t *testing.T) {
 // seedConfigDir creates a config directory holding the three data files.
 func seedConfigDir(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, DirPerms); err != nil {
+	if err := os.MkdirAll(dir, configDirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	for name, body := range map[string]string{
@@ -62,7 +62,7 @@ func seedConfigDir(t *testing.T, dir string) {
 		"favorites.json":  `[]`,
 		"history.json":    `[]`,
 	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), FilePerms); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), collectionFilePerms); err != nil {
 			t.Fatalf("seeding %s: %v", name, err)
 		}
 	}
@@ -108,8 +108,8 @@ func TestMigrateConfigPreservesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != FilePerms {
-		t.Errorf("perm = %o, want %o", got, FilePerms)
+	if got := info.Mode().Perm(); got != collectionFilePerms {
+		t.Errorf("perm = %o, want %o", got, collectionFilePerms)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestMigrateConfigAcceptsAnEmptyDestination(t *testing.T) {
 	from := filepath.Join(root, "legacy", "disc-fortune")
 	to := filepath.Join(root, "xdg", "disc-fortune")
 	seedConfigDir(t, from)
-	if err := os.MkdirAll(to, DirPerms); err != nil {
+	if err := os.MkdirAll(to, configDirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestMigrateConfigCleansUpAfterAPartialFailure(t *testing.T) {
 	if err := os.Chmod(unreadable, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(unreadable, FilePerms) })
+	t.Cleanup(func() { _ = os.Chmod(unreadable, collectionFilePerms) })
 
 	if _, err := Migrate(from, to); err == nil {
 		t.Fatal("Migrate succeeded despite an unreadable source file")
@@ -231,14 +231,14 @@ func TestMigrateConfigKeepsAPreexistingEmptyDestination(t *testing.T) {
 	from := filepath.Join(root, "legacy", "disc-fortune")
 	to := filepath.Join(root, "xdg", "disc-fortune")
 	seedConfigDir(t, from)
-	if err := os.MkdirAll(to, DirPerms); err != nil {
+	if err := os.MkdirAll(to, configDirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	unreadable := filepath.Join(from, "history.json")
 	if err := os.Chmod(unreadable, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(unreadable, FilePerms) })
+	t.Cleanup(func() { _ = os.Chmod(unreadable, collectionFilePerms) })
 
 	if _, err := Migrate(from, to); err == nil {
 		t.Fatal("Migrate succeeded despite an unreadable source file")

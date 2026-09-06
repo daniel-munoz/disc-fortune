@@ -13,14 +13,14 @@ import (
 // seedCollectionAt writes a one-album collection.json into dir.
 func seedCollectionAt(t *testing.T, dir string, album disc.Album) {
 	t.Helper()
-	if err := os.MkdirAll(dir, disc.DirPerms); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
 	data, err := json.Marshal([]disc.Album{album})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "collection.json"), data, disc.FilePerms); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "collection.json"), data, 0o644); err != nil {
 		t.Fatalf("seeding collection: %v", err)
 	}
 }
@@ -194,7 +194,7 @@ func TestBinarySurvivesAnEmptyXDGDirectory(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
 	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Don Cherry", Title: "Brown Rice"})
-	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), disc.DirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	env := []string{"XDG_CONFIG_HOME=" + xdg}

@@ -35,14 +35,14 @@ func LoadHistory(path string) ([]HistoryEntry, error) {
 
 // SaveHistory saves history entries to disk.
 func SaveHistory(path string, entries []HistoryEntry) error {
-	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding history: %w", err)
 	}
-	return writeFileAtomic(path, data, FilePerms)
+	return writeFileAtomic(path, data, collectionFilePerms)
 }
 
 // AddToHistory appends an album to history.

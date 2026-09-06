@@ -64,7 +64,7 @@ func Migrate(from, to string) (int, error) {
 	} else if os.IsNotExist(err) {
 		createdDir = true
 	}
-	if err := os.MkdirAll(to, DirPerms); err != nil {
+	if err := os.MkdirAll(to, configDirPerms); err != nil {
 		return 0, fmt.Errorf("creating %s: %w", to, err)
 	}
 
@@ -99,7 +99,7 @@ func Migrate(from, to string) (int, error) {
 		if err != nil {
 			return rollback(fmt.Errorf("reading %s: %w", src, err))
 		}
-		perm := os.FileMode(FilePerms)
+		perm := os.FileMode(collectionFilePerms)
 		if info, err := e.Info(); err == nil {
 			perm = info.Mode().Perm()
 		}

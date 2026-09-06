@@ -33,14 +33,14 @@ func LoadFavorites(path string) ([]Album, error) {
 
 // SaveFavorites saves favorite albums to disk.
 func SaveFavorites(path string, albums []Album) error {
-	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(albums, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding favorites: %w", err)
 	}
-	return writeFileAtomic(path, data, FilePerms)
+	return writeFileAtomic(path, data, collectionFilePerms)
 }
 
 // AddFavorite adds an album to favorites if not already present.
