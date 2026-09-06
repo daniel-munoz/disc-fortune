@@ -1,4 +1,4 @@
-package main
+package stats
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ import (
 const topN = 5
 
 // Stats is everything `stats` reports, computed once and rendered twice.
-// formatStats and newStatsPayload both read from this value, which is what
+// Format and newStatsPayload both read from this value, which is what
 // keeps the text and JSON views from disagreeing about a figure -- unlike
 // disc.FormatHistory and newHistoryPayload, which duplicate their clamp and
 // need a test to stay in step.
@@ -76,12 +76,12 @@ func (s Stats) Share() float64 {
 	return float64(s.Picked.Count) / float64(s.Count)
 }
 
-// computeStats derives every figure from values already in memory. It reads
+// Compute derives every figure from values already in memory. It reads
 // no files and no clock, which is what makes it testable without fixtures.
 //
 // total arrives separately because pool has already been filtered by the time
 // it gets here, and the header needs both numbers to say "312 of 1247".
-func computeStats(pool, favorites []disc.Album, entries []disc.HistoryEntry, total int, m disc.Meta, favoritesOnly bool) Stats {
+func Compute(pool, favorites []disc.Album, entries []disc.HistoryEntry, total int, m disc.Meta, favoritesOnly bool) Stats {
 	s := Stats{
 		Count:         len(pool),
 		Total:         total,
@@ -210,9 +210,9 @@ func topNames(counts map[string]int) []NameCount {
 // is not.
 const maxBarWidth = 24
 
-// formatStats renders the text view. Headings are bold and bars are dim;
+// Format renders the text view. Headings are bold and bars are dim;
 // nothing else is coloured, and the JSON view is never coloured at all.
-func formatStats(s Stats, useColor bool) string {
+func Format(s Stats, useColor bool) string {
 	var sb strings.Builder
 
 	sb.WriteString(statsHeader(s))

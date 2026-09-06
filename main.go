@@ -11,6 +11,7 @@ import (
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/stats"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -283,7 +284,7 @@ func (a app) runStats(cfg statsConfig) error {
 		m = disc.Meta{}
 	}
 
-	s := computeStats(pool, favorites, entries, len(source), m, cfg.favoritesOnly)
+	s := stats.Compute(pool, favorites, entries, len(source), m, cfg.favoritesOnly)
 
 	if cfg.json {
 		if err := writeJSON(a.stdout, newStatsPayload(s)); err != nil {
@@ -291,7 +292,7 @@ func (a app) runStats(cfg statsConfig) error {
 		}
 		return nil
 	}
-	fmt.Fprint(a.stdout, formatStats(s, a.stdoutColor(cfg.color)))
+	fmt.Fprint(a.stdout, stats.Format(s, a.stdoutColor(cfg.color)))
 	return nil
 }
 

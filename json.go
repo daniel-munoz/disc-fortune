@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/stats"
 )
 
 // jsonAlbum is the wire representation of an Album. It is deliberately a
@@ -190,7 +191,7 @@ func timeOrNull(t time.Time) *time.Time {
 	return &t
 }
 
-func newStatsPayload(s Stats) statsPayload {
+func newStatsPayload(s stats.Stats) statsPayload {
 	decades := make([]jsonDecade, 0, len(s.Decades))
 	for _, b := range s.Decades {
 		// intOrNull turns the unknown-year bucket's 0 into null, which is
@@ -217,7 +218,7 @@ func newStatsPayload(s Stats) statsPayload {
 // nameCounts converts a table to its wire form, emitting [] rather than null
 // when empty so a consumer's loop needs no nil check -- the same rule
 // listOrEmpty applies to an album's genres.
-func nameCounts(rows []NameCount) []jsonNameCount {
+func nameCounts(rows []stats.NameCount) []jsonNameCount {
 	out := make([]jsonNameCount, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, jsonNameCount{Name: r.Name, Count: r.Count})

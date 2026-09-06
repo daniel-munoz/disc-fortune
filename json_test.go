@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/stats"
 )
 
 // The golden tests below pin the exact bytes of the wire format. They catch
@@ -305,15 +306,15 @@ func TestEveryAlbumFieldHasAWireDecision(t *testing.T) {
 }
 
 func TestStatsPayloadGolden(t *testing.T) {
-	s := Stats{
+	s := stats.Stats{
 		Count:     312,
 		Total:     1247,
 		Favorites: 28,
 		SyncedAt:  time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
-		Decades:   []DecadeBucket{{1970, 486}, {0, 22}},
-		Genres:    []NameCount{{"Jazz", 412}},
-		Labels:    []NameCount{{"Blue Note", 88}},
-		Picked: PickedStats{
+		Decades:   []stats.DecadeBucket{{Decade: 1970, Count: 486}, {Decade: 0, Count: 22}},
+		Genres:    []stats.NameCount{{Name: "Jazz", Count: 412}},
+		Labels:    []stats.NameCount{{Name: "Blue Note", Count: 88}},
+		Picked: stats.PickedStats{
 			Count:      78,
 			LastPicked: time.Date(2026, 9, 4, 18, 0, 0, 0, time.UTC),
 		},
@@ -383,7 +384,7 @@ func TestStatsPayloadGoldenEmpty(t *testing.T) {
 `
 
 	var buf bytes.Buffer
-	if err := writeJSON(&buf, newStatsPayload(Stats{})); err != nil {
+	if err := writeJSON(&buf, newStatsPayload(stats.Stats{})); err != nil {
 		t.Fatalf("writeJSON: %v", err)
 	}
 	if got := buf.String(); got != want {
@@ -395,7 +396,7 @@ func TestStatsPayloadGoldenEmpty(t *testing.T) {
 // the figure a scripted consumer is most likely to get wrong, so it is
 // pinned on its own.
 func TestStatsPayloadShareIsAgainstCount(t *testing.T) {
-	p := newStatsPayload(Stats{Count: 200, Total: 1000, Picked: PickedStats{Count: 50}})
+	p := newStatsPayload(stats.Stats{Count: 200, Total: 1000, Picked: stats.PickedStats{Count: 50}})
 	if p.Picked.Share != 0.25 {
 		t.Errorf("share = %v, want 0.25 (50/200, not 50/1000)", p.Picked.Share)
 	}
