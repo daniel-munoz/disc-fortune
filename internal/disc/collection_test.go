@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"encoding/json"
@@ -38,13 +38,13 @@ func TestSaveAndLoadCollection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(path, data, collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, data, FilePerms); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
-	got, err := loadCollectionFrom(path)
+	got, err := LoadCollectionFrom(path)
 	if err != nil {
-		t.Fatalf("loadCollectionFrom: %v", err)
+		t.Fatalf("LoadCollectionFrom: %v", err)
 	}
 	if len(got) != 2 {
 		t.Fatalf("got %d albums, want 2", len(got))
@@ -56,7 +56,7 @@ func TestSaveAndLoadCollection(t *testing.T) {
 
 func TestLoadCollectionMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nonexistent.json")
-	_, err := loadCollectionFrom(path)
+	_, err := LoadCollectionFrom(path)
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -67,10 +67,10 @@ func TestLoadCollectionMissing(t *testing.T) {
 
 func TestLoadCollectionInvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.json")
-	if err := os.WriteFile(path, []byte("{not json"), collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), FilePerms); err != nil {
 		t.Fatal(err)
 	}
-	_, err := loadCollectionFrom(path)
+	_, err := LoadCollectionFrom(path)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -81,13 +81,13 @@ func TestSaveCollectionCreatesDir(t *testing.T) {
 	path := filepath.Join(dir, "collection.json")
 
 	albums := []Album{{Artist: "Deafheaven", Title: "Sunbather"}}
-	if err := saveCollectionTo(path, albums); err != nil {
-		t.Fatalf("saveCollectionTo: %v", err)
+	if err := SaveCollectionTo(path, albums); err != nil {
+		t.Fatalf("SaveCollectionTo: %v", err)
 	}
 
-	got, err := loadCollectionFrom(path)
+	got, err := LoadCollectionFrom(path)
 	if err != nil {
-		t.Fatalf("loadCollectionFrom: %v", err)
+		t.Fatalf("LoadCollectionFrom: %v", err)
 	}
 	if len(got) != 1 || got[0].Artist != "Deafheaven" {
 		t.Errorf("unexpected: %+v", got)
@@ -96,31 +96,31 @@ func TestSaveCollectionCreatesDir(t *testing.T) {
 
 func TestLoadCollectionCheckedMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "collection.json")
-	_, err := loadCollectionChecked(path)
-	if !errors.Is(err, errNoCollection) {
-		t.Errorf("err = %v, want errNoCollection", err)
+	_, err := LoadCollectionChecked(path)
+	if !errors.Is(err, ErrNoCollection) {
+		t.Errorf("err = %v, want ErrNoCollection", err)
 	}
 }
 
 func TestLoadCollectionCheckedEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "collection.json")
-	if err := saveCollectionTo(path, []Album{}); err != nil {
-		t.Fatalf("saveCollectionTo: %v", err)
+	if err := SaveCollectionTo(path, []Album{}); err != nil {
+		t.Fatalf("SaveCollectionTo: %v", err)
 	}
-	_, err := loadCollectionChecked(path)
-	if !errors.Is(err, errEmptyCollection) {
-		t.Errorf("err = %v, want errEmptyCollection", err)
+	_, err := LoadCollectionChecked(path)
+	if !errors.Is(err, ErrEmptyCollection) {
+		t.Errorf("err = %v, want ErrEmptyCollection", err)
 	}
 }
 
 func TestLoadCollectionCheckedPopulated(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "collection.json")
-	if err := saveCollectionTo(path, []Album{{Artist: "Ride", Title: "Nowhere"}}); err != nil {
-		t.Fatalf("saveCollectionTo: %v", err)
+	if err := SaveCollectionTo(path, []Album{{Artist: "Ride", Title: "Nowhere"}}); err != nil {
+		t.Fatalf("SaveCollectionTo: %v", err)
 	}
-	albums, err := loadCollectionChecked(path)
+	albums, err := LoadCollectionChecked(path)
 	if err != nil {
-		t.Fatalf("loadCollectionChecked: %v", err)
+		t.Fatalf("LoadCollectionChecked: %v", err)
 	}
 	if len(albums) != 1 {
 		t.Errorf("got %d albums, want 1", len(albums))
@@ -188,8 +188,8 @@ func TestSameAlbum(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := sameAlbum(tt.a, tt.b); got != tt.want {
-				t.Errorf("sameAlbum() = %v, want %v", got, tt.want)
+			if got := SameAlbum(tt.a, tt.b); got != tt.want {
+				t.Errorf("SameAlbum() = %v, want %v", got, tt.want)
 			}
 		})
 	}

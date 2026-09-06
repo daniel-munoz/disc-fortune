@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -36,12 +37,12 @@ var (
 
 // collection loads the collection, turning "nothing to work with" into the
 // guidance error that explains what to do about it.
-func (a app) collection() ([]Album, error) {
-	albums, err := loadCollectionChecked(a.collectionPath())
+func (a app) collection() ([]disc.Album, error) {
+	albums, err := disc.LoadCollectionChecked(a.collectionPath())
 	switch {
-	case errors.Is(err, errNoCollection):
+	case errors.Is(err, disc.ErrNoCollection):
 		return nil, errNoCollectionGuidance
-	case errors.Is(err, errEmptyCollection):
+	case errors.Is(err, disc.ErrEmptyCollection):
 		return nil, errEmptyCollectionGuidance
 	case err != nil:
 		return nil, fmt.Errorf("Error loading collection: %v", err)
@@ -51,10 +52,10 @@ func (a app) collection() ([]Album, error) {
 
 // favorites loads favorites, turning "there are none" into the guidance error
 // that explains what to do about it.
-func (a app) favorites() ([]Album, error) {
-	favorites, err := loadFavoritesChecked(a.favoritesPath())
+func (a app) favorites() ([]disc.Album, error) {
+	favorites, err := disc.LoadFavoritesChecked(a.favoritesPath())
 	switch {
-	case errors.Is(err, errNoFavorites):
+	case errors.Is(err, disc.ErrNoFavorites):
 		return nil, errNoFavoritesGuidance
 	case err != nil:
 		return nil, fmt.Errorf("Error loading favorites: %v", err)
@@ -71,9 +72,9 @@ func (a app) stdoutColor(mode term.Mode) bool {
 }
 
 // selectAlbums loads the collection or favorites per cfg and applies its filter.
-func (a app) selectAlbums(cfg selection) ([]Album, error) {
+func (a app) selectAlbums(cfg selection) ([]disc.Album, error) {
 	var (
-		albums []Album
+		albums []disc.Album
 		err    error
 	)
 	if cfg.favoritesOnly {
@@ -92,7 +93,7 @@ func (a app) selectAlbums(cfg selection) ([]Album, error) {
 // identical in artist, title, year, label, catalogue number and genre -- two
 // store-exclusive colours, say -- and then the ID is the only thing that
 // tells them apart, as well as the only thing --release-id can act on.
-func formatMatch(album Album, useColor bool) string {
+func formatMatch(album disc.Album, useColor bool) string {
 	out := formatAlbum(album, useColor)
 	if album.ReleaseID == 0 {
 		return out
@@ -109,7 +110,7 @@ func formatMatch(album Album, useColor bool) string {
 //
 // showIDs is set only where the user has to choose between candidates. Plain
 // `list` leaves it off, so everyday output is unchanged.
-func formatList(albums []Album, useColor, showIDs bool) string {
+func formatList(albums []disc.Album, useColor, showIDs bool) string {
 	if len(albums) == 0 {
 		return "No albums match the specified filters\n"
 	}
@@ -141,10 +142,10 @@ func (a app) runPick(cfg selection) error {
 		return errors.New("No albums match the specified filters")
 	}
 
-	// History is read for the decision and then read again by addToHistory,
+	// History is read for the decision and then read again by disc.AddToHistory,
 	// which takes its own lock. Deciding from a marginally stale history is
 	// harmless, and it means no lock is held across the decision.
-	entries, err := loadHistory(a.historyPath())
+	entries, err := disc.LoadHistory(a.historyPath())
 	if err != nil {
 		return fmt.Errorf("Error loading history: %v", err)
 	}
@@ -159,7 +160,7 @@ func (a app) runPick(cfg selection) error {
 
 	album := pickAlbum(albums, entries, cfg.draw, newRNG())
 
-	if err := addToHistory(a.historyPath(), album); err != nil {
+	if err := disc.AddToHistory(a.historyPath(), album); err != nil {
 		return fmt.Errorf("Error saving history: %v", err)
 	}
 
@@ -173,7 +174,7 @@ func (a app) runPick(cfg selection) error {
 
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
-	fmt.Fprint(a.stderr, syncNotice(a.metaPath(), time.Now(), term.IsTTY(os.Stderr)))
+	fmt.Fprint(a.stderr, disc.SyncNotice(a.metaPath(), time.Now(), term.IsTTY(os.Stderr)))
 	return nil
 }
 
@@ -186,7 +187,7 @@ func (a app) runList(cfg selection) error {
 	// Only load history when it is actually needed: `list` has never
 	// required a readable history.json and must not start now.
 	if cfg.unheard && len(albums) > 0 {
-		entries, err := loadHistory(a.historyPath())
+		entries, err := disc.LoadHistory(a.historyPath())
 		if err != nil {
 			return fmt.Errorf("Error loading history: %v", err)
 		}
@@ -217,7 +218,7 @@ func (a app) runList(cfg selection) error {
 }
 
 func (a app) runHistory(cfg historyConfig) error {
-	entries, err := loadHistory(a.historyPath())
+	entries, err := disc.LoadHistory(a.historyPath())
 	if err != nil {
 		return fmt.Errorf("Error loading history: %v", err)
 	}
@@ -234,13 +235,13 @@ func (a app) runHistory(cfg historyConfig) error {
 		return nil
 	}
 
-	fmt.Fprint(a.stdout, formatHistory(entries, limit, a.stdoutColor(cfg.color)))
+	fmt.Fprint(a.stdout, disc.FormatHistory(entries, limit, a.stdoutColor(cfg.color)))
 	return nil
 }
 
 func (a app) runStats(cfg statsConfig) error {
 	var (
-		source []Album
+		source []disc.Album
 		err    error
 	)
 	if cfg.favoritesOnly {
@@ -261,21 +262,21 @@ func (a app) runStats(cfg statsConfig) error {
 	// Metadata is advisory and never sinks the run. History is the
 	// exception: it feeds a headline figure, so an unreadable history fails
 	// loudly.
-	entries, err := loadHistory(a.historyPath())
+	entries, err := disc.LoadHistory(a.historyPath())
 	if err != nil {
 		return fmt.Errorf("Error loading history: %v", err)
 	}
 
 	// Favorites are counted, not required. Someone with none gets a zero,
 	// not an error.
-	favorites, err := loadFavorites(a.favoritesPath())
+	favorites, err := disc.LoadFavorites(a.favoritesPath())
 	if err != nil {
 		return fmt.Errorf("Error loading favorites: %v", err)
 	}
 
-	m, err := loadMeta(a.metaPath())
+	m, err := disc.LoadMeta(a.metaPath())
 	if err != nil {
-		m = Meta{}
+		m = disc.Meta{}
 	}
 
 	s := computeStats(pool, favorites, entries, len(source), m, cfg.favoritesOnly)
@@ -318,7 +319,7 @@ func (cfg openConfig) describe() string {
 // answer to the query, and only the trailing advice belongs on stderr. So the
 // list is printed here and just the advice is carried by the error, which
 // dispatch prints to stderr before exiting 1.
-func (a app) reportAmbiguous(matches []Album, color term.Mode) error {
+func (a app) reportAmbiguous(matches []disc.Album, color term.Mode) error {
 	fmt.Fprint(a.stdout, formatList(matches, a.stdoutColor(color), true))
 	return errors.New("Be more specific, add filters, or use --release-id.")
 }
@@ -334,19 +335,19 @@ func (a app) runFavorite(cfg favoriteConfig) error {
 	if err != nil {
 		return err
 	}
-	outcome, err := favoriteByQuery(albums, cfg.filter, a.favoritesPath())
+	outcome, err := disc.FavoriteByQuery(albums, cfg.filter, a.favoritesPath())
 	if err != nil {
 		return fmt.Errorf("Error adding favorite: %v", err)
 	}
 
 	switch outcome.Status {
-	case FavoriteAdded:
+	case disc.FavoriteAdded:
 		fmt.Fprintf(a.stdout, "Added to favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
-	case FavoriteAlreadyFav:
+	case disc.FavoriteAlreadyFav:
 		fmt.Fprintln(a.stdout, "Already in favorites")
-	case FavoriteNoMatch:
+	case disc.FavoriteNoMatch:
 		return fmt.Errorf("No albums match %s", cfg.describe())
-	case FavoriteMultiMatch:
+	case disc.FavoriteMultiMatch:
 		return a.reportAmbiguous(outcome.Matches, cfg.color)
 	}
 	return nil
@@ -363,34 +364,34 @@ func (a app) runUnfavorite(cfg favoriteConfig) error {
 	// list that has nothing in it (or nothing matching) is a no-op, not an
 	// error. Load directly rather than through the favorites helper so that
 	// case reaches UnfavoriteNoMatch instead of failing.
-	favorites, err := loadFavoritesChecked(a.favoritesPath())
-	if err != nil && !errors.Is(err, errNoFavorites) {
+	favorites, err := disc.LoadFavoritesChecked(a.favoritesPath())
+	if err != nil && !errors.Is(err, disc.ErrNoFavorites) {
 		return fmt.Errorf("Error loading favorites: %v", err)
 	}
-	if errors.Is(err, errNoFavorites) {
+	if errors.Is(err, disc.ErrNoFavorites) {
 		fmt.Fprintf(a.stdout, "No favorites match %s - nothing to remove.\n", cfg.describe())
 		return nil
 	}
 
-	outcome, err := unfavoriteByQuery(favorites, cfg.filter, a.favoritesPath())
+	outcome, err := disc.UnfavoriteByQuery(favorites, cfg.filter, a.favoritesPath())
 	if err != nil {
 		return fmt.Errorf("Error removing favorite: %v", err)
 	}
 
 	switch outcome.Status {
-	case UnfavoriteRemoved:
+	case disc.UnfavoriteRemoved:
 		fmt.Fprintf(a.stdout, "Removed from favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
-	case UnfavoriteNoMatch:
+	case disc.UnfavoriteNoMatch:
 		// Removal is idempotent: nothing to remove is a success.
 		fmt.Fprintf(a.stdout, "No favorites match %s - nothing to remove.\n", cfg.describe())
-	case UnfavoriteMultiMatch:
+	case disc.UnfavoriteMultiMatch:
 		return a.reportAmbiguous(outcome.Matches, cfg.color)
 	}
 	return nil
 }
 
 func (a app) favoriteLastPick() error {
-	entries, err := loadHistory(a.historyPath())
+	entries, err := disc.LoadHistory(a.historyPath())
 	if err != nil {
 		return fmt.Errorf("Error loading history: %v", err)
 	}
@@ -399,8 +400,8 @@ func (a app) favoriteLastPick() error {
 	}
 
 	lastAlbum := entries[len(entries)-1].Album
-	if err := addFavorite(a.favoritesPath(), lastAlbum); err != nil {
-		if errors.Is(err, ErrAlreadyInFavorites) {
+	if err := disc.AddFavorite(a.favoritesPath(), lastAlbum); err != nil {
+		if errors.Is(err, disc.ErrAlreadyInFavorites) {
 			fmt.Fprintln(a.stdout, "Already in favorites")
 			return nil
 		}
@@ -412,7 +413,7 @@ func (a app) favoriteLastPick() error {
 }
 
 func (a app) unfavoriteLastPick() error {
-	entries, err := loadHistory(a.historyPath())
+	entries, err := disc.LoadHistory(a.historyPath())
 	if err != nil {
 		return fmt.Errorf("Error loading history: %v", err)
 	}
@@ -421,8 +422,8 @@ func (a app) unfavoriteLastPick() error {
 	}
 
 	lastAlbum := entries[len(entries)-1].Album
-	if err := removeFavorite(a.favoritesPath(), lastAlbum); err != nil {
-		if errors.Is(err, ErrNotInFavorites) {
+	if err := disc.RemoveFavorite(a.favoritesPath(), lastAlbum); err != nil {
+		if errors.Is(err, disc.ErrNotInFavorites) {
 			fmt.Fprintln(a.stdout, "Last pick was not in favorites")
 			return nil
 		}
@@ -437,29 +438,29 @@ func (a app) unfavoriteLastPick() error {
 // named, or the single match for the query. Like favorite, it fails rather
 // than returning a record on every empty or ambiguous outcome, because what
 // to say about each depends on what was asked.
-func resolveOpenTarget(a app, cfg openConfig) (Album, error) {
+func resolveOpenTarget(a app, cfg openConfig) (disc.Album, error) {
 	// As in runFavorite: --release-id is a selection, not a missing query.
 	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
-		entries, err := loadHistory(a.historyPath())
+		entries, err := disc.LoadHistory(a.historyPath())
 		if err != nil {
-			return Album{}, fmt.Errorf("Error loading history: %v", err)
+			return disc.Album{}, fmt.Errorf("Error loading history: %v", err)
 		}
 		if len(entries) == 0 {
-			return Album{}, errors.New("No history to open. Run `disc-fortune pick` first, or name a record.")
+			return disc.Album{}, errors.New("No history to open. Run `disc-fortune pick` first, or name a record.")
 		}
 		return entries[len(entries)-1].Album, nil
 	}
 
 	albums, err := a.collection()
 	if err != nil {
-		return Album{}, err
+		return disc.Album{}, err
 	}
-	album, matches, status := matchAlbums(albums, cfg.filter)
+	album, matches, status := disc.MatchAlbums(albums, cfg.filter)
 	switch status {
-	case matchedNone:
-		return Album{}, fmt.Errorf("No albums match %s", cfg.describe())
-	case matchedMany:
-		return Album{}, a.reportAmbiguous(matches, cfg.color)
+	case disc.MatchedNone:
+		return disc.Album{}, fmt.Errorf("No albums match %s", cfg.describe())
+	case disc.MatchedMany:
+		return disc.Album{}, a.reportAmbiguous(matches, cfg.color)
 	}
 	return album, nil
 }
@@ -495,5 +496,26 @@ func (a app) runOpen(cfg openConfig) error {
 		fmt.Fprintln(a.stdout, url)
 		return fmt.Errorf("disc-fortune: could not launch %s: %v", plan.Launch[0], err)
 	}
+	return nil
+}
+
+// runMigrate moves the data directory to its XDG-preferred location.
+func (a app) runMigrate() error {
+	if a.loc.Preferred == "" {
+		fmt.Fprintf(a.stdout, "Nothing to migrate: disc-fortune is already using %s\n", a.loc.Dir)
+		return nil
+	}
+
+	from, to := a.loc.Dir, a.loc.Preferred
+	moved, err := disc.Migrate(from, to)
+	if err != nil {
+		return fmt.Errorf("Error migrating: %v", err)
+	}
+
+	noun := "files"
+	if moved == 1 {
+		noun = "file"
+	}
+	fmt.Fprintf(a.stdout, "Moved %d %s from %s to %s\n", moved, noun, from, to)
 	return nil
 }

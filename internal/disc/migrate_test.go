@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"os"
@@ -9,27 +9,27 @@ import (
 
 func TestMigrationNoticeSilentWhenNothingToMigrate(t *testing.T) {
 	meta := filepath.Join(t.TempDir(), "meta.json")
-	loc := configLocation{Dir: "/somewhere/disc-fortune"}
+	loc := Location{Dir: "/somewhere/disc-fortune"}
 
-	if got := migrationNotice(loc, meta, true); got != "" {
-		t.Errorf("migrationNotice = %q, want empty when Dir is already correct", got)
+	if got := MigrationNotice(loc, meta, true); got != "" {
+		t.Errorf("MigrationNotice = %q, want empty when Dir is already correct", got)
 	}
 }
 
 func TestMigrationNoticeSilentWhenDisabled(t *testing.T) {
 	meta := filepath.Join(t.TempDir(), "meta.json")
-	loc := configLocation{Dir: "/legacy/disc-fortune", Preferred: "/xdg/disc-fortune"}
+	loc := Location{Dir: "/legacy/disc-fortune", Preferred: "/xdg/disc-fortune"}
 
-	if got := migrationNotice(loc, meta, false); got != "" {
-		t.Errorf("migrationNotice = %q, want empty when notices are off", got)
+	if got := MigrationNotice(loc, meta, false); got != "" {
+		t.Errorf("MigrationNotice = %q, want empty when notices are off", got)
 	}
 }
 
 func TestMigrationNoticeNamesBothPathsAndTheCommand(t *testing.T) {
 	meta := filepath.Join(t.TempDir(), "meta.json")
-	loc := configLocation{Dir: "/legacy/disc-fortune", Preferred: "/xdg/disc-fortune"}
+	loc := Location{Dir: "/legacy/disc-fortune", Preferred: "/xdg/disc-fortune"}
 
-	got := migrationNotice(loc, meta, true)
+	got := MigrationNotice(loc, meta, true)
 	for _, want := range []string{"/legacy/disc-fortune", "/xdg/disc-fortune", "disc-fortune migrate"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("notice %q is missing %q", got, want)
@@ -41,12 +41,12 @@ func TestMigrationNoticeNamesBothPathsAndTheCommand(t *testing.T) {
 // noise, and the user would learn to ignore it.
 func TestMigrationNoticeShowsOnlyOnce(t *testing.T) {
 	meta := filepath.Join(t.TempDir(), "meta.json")
-	loc := configLocation{Dir: "/legacy/disc-fortune", Preferred: "/xdg/disc-fortune"}
+	loc := Location{Dir: "/legacy/disc-fortune", Preferred: "/xdg/disc-fortune"}
 
-	if first := migrationNotice(loc, meta, true); first == "" {
+	if first := MigrationNotice(loc, meta, true); first == "" {
 		t.Fatal("first call produced no notice")
 	}
-	if second := migrationNotice(loc, meta, true); second != "" {
+	if second := MigrationNotice(loc, meta, true); second != "" {
 		t.Errorf("second call produced %q, want empty", second)
 	}
 }
@@ -54,7 +54,7 @@ func TestMigrationNoticeShowsOnlyOnce(t *testing.T) {
 // seedConfigDir creates a config directory holding the three data files.
 func seedConfigDir(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, configDirPerms); err != nil {
+	if err := os.MkdirAll(dir, DirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	for name, body := range map[string]string{
@@ -62,7 +62,7 @@ func seedConfigDir(t *testing.T, dir string) {
 		"favorites.json":  `[]`,
 		"history.json":    `[]`,
 	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), collectionFilePerms); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), FilePerms); err != nil {
 			t.Fatalf("seeding %s: %v", name, err)
 		}
 	}
@@ -74,9 +74,9 @@ func TestMigrateConfigMovesEveryDataFile(t *testing.T) {
 	to := filepath.Join(root, "xdg", "disc-fortune")
 	seedConfigDir(t, from)
 
-	moved, err := migrateConfig(from, to)
+	moved, err := Migrate(from, to)
 	if err != nil {
-		t.Fatalf("migrateConfig: %v", err)
+		t.Fatalf("Migrate: %v", err)
 	}
 	if moved != 3 {
 		t.Errorf("moved = %d, want 3", moved)
@@ -100,16 +100,16 @@ func TestMigrateConfigPreservesPermissions(t *testing.T) {
 	to := filepath.Join(root, "xdg", "disc-fortune")
 	seedConfigDir(t, from)
 
-	if _, err := migrateConfig(from, to); err != nil {
-		t.Fatalf("migrateConfig: %v", err)
+	if _, err := Migrate(from, to); err != nil {
+		t.Fatalf("Migrate: %v", err)
 	}
 
 	info, err := os.Stat(filepath.Join(to, "collection.json"))
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != collectionFilePerms {
-		t.Errorf("perm = %o, want %o", got, collectionFilePerms)
+	if got := info.Mode().Perm(); got != FilePerms {
+		t.Errorf("perm = %o, want %o", got, FilePerms)
 	}
 }
 
@@ -122,8 +122,8 @@ func TestMigrateConfigRefusesToOverwriteExistingData(t *testing.T) {
 	seedConfigDir(t, from)
 	seedConfigDir(t, to)
 
-	if _, err := migrateConfig(from, to); err == nil {
-		t.Fatal("migrateConfig overwrote a populated destination")
+	if _, err := Migrate(from, to); err == nil {
+		t.Fatal("Migrate overwrote a populated destination")
 	}
 	if _, err := os.Stat(filepath.Join(from, "collection.json")); err != nil {
 		t.Errorf("source was disturbed by a refused migration: %v", err)
@@ -135,11 +135,11 @@ func TestMigrateConfigAcceptsAnEmptyDestination(t *testing.T) {
 	from := filepath.Join(root, "legacy", "disc-fortune")
 	to := filepath.Join(root, "xdg", "disc-fortune")
 	seedConfigDir(t, from)
-	if err := os.MkdirAll(to, configDirPerms); err != nil {
+	if err := os.MkdirAll(to, DirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	if _, err := migrateConfig(from, to); err != nil {
+	if _, err := Migrate(from, to); err != nil {
 		t.Fatalf("an empty destination directory is not a conflict: %v", err)
 	}
 }
@@ -149,8 +149,8 @@ func TestMigrateConfigErrorsWhenSourceMissing(t *testing.T) {
 	from := filepath.Join(root, "nope")
 	to := filepath.Join(root, "xdg", "disc-fortune")
 
-	if _, err := migrateConfig(from, to); err == nil {
-		t.Fatal("migrateConfig succeeded with no source directory")
+	if _, err := Migrate(from, to); err == nil {
+		t.Fatal("Migrate succeeded with no source directory")
 	}
 }
 
@@ -168,8 +168,8 @@ func TestMigrateConfigPreservesSourceModeUnderStrictUmask(t *testing.T) {
 	}
 	withUmask(t, 0o077)
 
-	if _, err := migrateConfig(from, to); err != nil {
-		t.Fatalf("migrateConfig: %v", err)
+	if _, err := Migrate(from, to); err != nil {
+		t.Fatalf("Migrate: %v", err)
 	}
 
 	info, err := os.Stat(filepath.Join(to, "collection.json"))
@@ -199,10 +199,10 @@ func TestMigrateConfigCleansUpAfterAPartialFailure(t *testing.T) {
 	if err := os.Chmod(unreadable, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(unreadable, collectionFilePerms) })
+	t.Cleanup(func() { _ = os.Chmod(unreadable, FilePerms) })
 
-	if _, err := migrateConfig(from, to); err == nil {
-		t.Fatal("migrateConfig succeeded despite an unreadable source file")
+	if _, err := Migrate(from, to); err == nil {
+		t.Fatal("Migrate succeeded despite an unreadable source file")
 	}
 
 	if _, err := os.Stat(to); !os.IsNotExist(err) {
@@ -231,17 +231,17 @@ func TestMigrateConfigKeepsAPreexistingEmptyDestination(t *testing.T) {
 	from := filepath.Join(root, "legacy", "disc-fortune")
 	to := filepath.Join(root, "xdg", "disc-fortune")
 	seedConfigDir(t, from)
-	if err := os.MkdirAll(to, configDirPerms); err != nil {
+	if err := os.MkdirAll(to, DirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	unreadable := filepath.Join(from, "history.json")
 	if err := os.Chmod(unreadable, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(unreadable, collectionFilePerms) })
+	t.Cleanup(func() { _ = os.Chmod(unreadable, FilePerms) })
 
-	if _, err := migrateConfig(from, to); err == nil {
-		t.Fatal("migrateConfig succeeded despite an unreadable source file")
+	if _, err := Migrate(from, to); err == nil {
+		t.Fatal("Migrate succeeded despite an unreadable source file")
 	}
 
 	if _, err := os.Stat(to); err != nil {
@@ -265,9 +265,9 @@ func TestMigrateSkipsLockSidecars(t *testing.T) {
 		t.Fatalf("writing lock sidecar: %v", err)
 	}
 
-	n, err := migrateConfig(from, to)
+	n, err := Migrate(from, to)
 	if err != nil {
-		t.Fatalf("migrateConfig: %v", err)
+		t.Fatalf("Migrate: %v", err)
 	}
 	if n != 1 {
 		t.Errorf("moved %d files, want 1 (the sidecar must not count)", n)

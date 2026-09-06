@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -62,7 +63,7 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 // from drifting apart between commands.
 //
 // Every narrowing filter is repeatable and has an --exclude-NAME twin;
-// include and exclude are indexed by position in filterFields. --release-id
+// include and exclude are indexed by position in disc.Fields. --release-id
 // is the exception, because it identifies one record rather than narrowing a
 // query.
 type filterFlags struct {
@@ -77,7 +78,7 @@ type filterFlags struct {
 	releaseID *int
 }
 
-// nonSubstringFilterFlag describes one filter flag outside filterFields: it
+// nonSubstringFilterFlag describes one filter flag outside disc.Fields: it
 // parses its value rather than substring-matching, which is why the matching
 // engine's table has no room for it.
 type nonSubstringFilterFlag struct {
@@ -98,7 +99,7 @@ func (f nonSubstringFilterFlag) registeredHelp() string {
 	return f.help
 }
 
-// nonSubstringFilterFlags are the filter flags outside filterFields: they
+// nonSubstringFilterFlags are the filter flags outside disc.Fields: they
 // parse their values rather than substring-matching, which is why the
 // matching engine's table has no room for them. Their help lives here so it
 // has one source, and so shell completion can enumerate the whole surface.
@@ -110,13 +111,13 @@ var nonSubstringFilterFlags = []nonSubstringFilterFlag{
 
 func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 	ff := &filterFlags{
-		include: make([]*arrayFlags, len(filterFields)),
-		exclude: make([]*arrayFlags, len(filterFields)),
+		include: make([]*arrayFlags, len(disc.Fields)),
+		exclude: make([]*arrayFlags, len(disc.Fields)),
 	}
-	for i, field := range filterFields {
+	for i, field := range disc.Fields {
 		inc, exc := new(arrayFlags), new(arrayFlags)
-		fs.Var(inc, field.name, field.help+" (repeatable)")
-		fs.Var(exc, "exclude-"+field.name, "Exclude matches of "+field.name+" (repeatable)")
+		fs.Var(inc, field.Name, field.Help+" (repeatable)")
+		fs.Var(exc, "exclude-"+field.Name, "Exclude matches of "+field.Name+" (repeatable)")
 		ff.include[i], ff.exclude[i] = inc, exc
 	}
 	for _, f := range nonSubstringFilterFlags {
@@ -136,20 +137,20 @@ func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 
 // Filter builds a Filter from the parsed flags, validating year and decade
 // values.
-func (ff *filterFlags) Filter() (Filter, error) {
-	f := Filter{ReleaseID: *ff.releaseID}
-	for i, field := range filterFields {
-		p := field.part(&f)
+func (ff *filterFlags) Filter() (disc.Filter, error) {
+	f := disc.Filter{ReleaseID: *ff.releaseID}
+	for i, field := range disc.Fields {
+		p := field.Part(&f)
 		p.Include = nonEmpty(*ff.include[i])
 		p.Exclude = nonEmpty(*ff.exclude[i])
 	}
 
 	var err error
 	if f.Year.Include, err = parseYearValues(ff.year, ff.decade); err != nil {
-		return Filter{}, err
+		return disc.Filter{}, err
 	}
 	if f.Year.Exclude, err = parseYearValues(ff.noYear, ff.noDecade); err != nil {
-		return Filter{}, err
+		return disc.Filter{}, err
 	}
 	return f, nil
 }
@@ -171,13 +172,13 @@ func nonEmpty(vals []string) []string {
 // parseYearValues turns --year and --decade values into one list of ranges.
 // They feed a single constraint on purpose: --year 1959 --decade 70s means
 // "1959 or the 70s", not the empty intersection two AND-ed fields would give.
-func parseYearValues(years, decades []string) ([]yearRange, error) {
-	var out []yearRange
+func parseYearValues(years, decades []string) ([]disc.YearRange, error) {
+	var out []disc.YearRange
 	for _, v := range years {
 		if v == "" {
 			continue
 		}
-		r, err := parseYearValue(v)
+		r, err := disc.ParseYearValue(v)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +188,7 @@ func parseYearValues(years, decades []string) ([]yearRange, error) {
 		if v == "" {
 			continue
 		}
-		r, err := parseDecadeValue(v)
+		r, err := disc.ParseDecadeValue(v)
 		if err != nil {
 			return nil, err
 		}
@@ -204,8 +205,8 @@ func parseYearValues(years, decades []string) ([]yearRange, error) {
 // query, so it is reported by hasQuery instead -- but an --exclude-query only
 // says which record is not meant, so it narrows like any other exclusion.
 func (ff *filterFlags) anyNarrowing() bool {
-	for i := range filterFields {
-		if i != queryField && len(nonEmpty(*ff.include[i])) > 0 {
+	for i := range disc.Fields {
+		if i != disc.QueryField && len(nonEmpty(*ff.include[i])) > 0 {
 			return true
 		}
 		if len(nonEmpty(*ff.exclude[i])) > 0 {
@@ -224,7 +225,7 @@ func (ff *filterFlags) hasQuery() bool {
 
 // queryValues returns the --query values, empty ones dropped.
 func (ff *filterFlags) queryValues() []string {
-	return nonEmpty(*ff.include[queryField])
+	return nonEmpty(*ff.include[disc.QueryField])
 }
 
 // identifies reports whether the flags name one exact record on their own.
@@ -264,7 +265,7 @@ type selection struct {
 	// draw is how pick chooses from the candidates. It is meaningless for
 	// list, which never sets it.
 	draw   drawMode
-	filter Filter
+	filter disc.Filter
 	color  term.Mode
 	// json switches the data channel to the documented machine-readable
 	// payload. It changes the format only: exit codes, stderr advice and
@@ -277,7 +278,7 @@ type selection struct {
 // lives in filter.Query. An empty query means "the last pick".
 type favoriteConfig struct {
 	query  string
-	filter Filter
+	filter disc.Filter
 	color  term.Mode
 }
 
@@ -291,7 +292,7 @@ type historyConfig struct {
 // statsConfig is the parsed form of stats.
 type statsConfig struct {
 	favoritesOnly bool
-	filter        Filter
+	filter        disc.Filter
 	color         term.Mode
 	json          bool
 }
@@ -441,7 +442,7 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 // query means "the last pick".
 type openConfig struct {
 	query     string
-	filter    Filter
+	filter    disc.Filter
 	color     term.Mode
 	printOnly bool
 }
@@ -737,7 +738,7 @@ Global flags (accepted by every command):
                    auto colorizes only a terminal, and honors NO_COLOR.`
 
 // filterFlagHelp is the shared help block for the filter flags, generated
-// from filterFields and nonSubstringFilterFlags so a new filter cannot ship
+// from disc.Fields and nonSubstringFilterFlags so a new filter cannot ship
 // undocumented. The --exclude-NAME twins are named once by the heading
 // rather than listed: sixteen near-identical lines would bury the eight that
 // matter -- --release-id, which has no twin, says so on its own line instead.
@@ -747,8 +748,8 @@ var filterFlagHelp = buildFilterFlagHelp()
 func buildFilterFlagHelp() string {
 	var sb strings.Builder
 	sb.WriteString("\nFilters (all repeatable; each has an --exclude-NAME twin that removes matches):\n")
-	for _, field := range filterFields {
-		fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", field.name, field.help)
+	for _, field := range disc.Fields {
+		fmt.Fprintf(&sb, "  --%-12s VALUE  %s\n", field.Name, field.Help)
 	}
 	for _, f := range nonSubstringFilterFlags {
 		fmt.Fprintf(&sb, "  --%-12s %-7s%s\n", f.name, f.arg, f.registeredHelp())
@@ -1088,7 +1089,7 @@ func dispatch(args []string) {
 			fatal("disc-fortune: %v", cfgErr)
 		}
 	} else if cmd.needsConfig {
-		fmt.Fprint(os.Stderr, migrationNotice(a.loc, a.metaPath(), term.IsTTY(os.Stderr)))
+		fmt.Fprint(os.Stderr, disc.MigrationNotice(a.loc, a.metaPath(), term.IsTTY(os.Stderr)))
 	}
 	// The one exit point for a command failure. The printer adds no prefix:
 	// fatal never did either, and the two messages above carry their own

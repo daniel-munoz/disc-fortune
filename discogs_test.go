@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 // newTestClient returns a discogsClient pointed at a test server.
@@ -328,7 +330,7 @@ func TestGetCollectionReleasesCapturesFormatText(t *testing.T) {
 	}
 
 	// The whole point: --format now finds it.
-	if got := (Filter{Format: include("blue")}).Apply(albums); len(got) != 1 {
+	if got := (disc.Filter{Format: include("blue")}).Apply(albums); len(got) != 1 {
 		t.Errorf("Filter{Format: \"blue\"} matched %d albums, want 1", len(got))
 	}
 }

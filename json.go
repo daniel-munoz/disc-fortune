@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 // jsonAlbum is the wire representation of an Album. It is deliberately a
@@ -32,7 +34,7 @@ type jsonAlbum struct {
 // never null: they are the one pair every entry has, and Album.Key() -- the
 // identity for anything written before release IDs existed -- is built from
 // them.
-func newJSONAlbum(a Album) jsonAlbum {
+func newJSONAlbum(a disc.Album) jsonAlbum {
 	return jsonAlbum{
 		ReleaseID: intOrNull(a.ReleaseID),
 		Artist:    a.Artist,
@@ -99,7 +101,7 @@ type historyPayload struct {
 	Count   int                `json:"count"`
 }
 
-func newListPayload(albums []Album) listPayload {
+func newListPayload(albums []disc.Album) listPayload {
 	out := make([]jsonAlbum, 0, len(albums))
 	for _, a := range albums {
 		out = append(out, newJSONAlbum(a))
@@ -108,10 +110,11 @@ func newListPayload(albums []Album) listPayload {
 }
 
 // newHistoryPayload returns the last limit entries, most recent first -- the
-// same records formatHistory prints, in the same order. entries arrives in
-// storage order, oldest first. The clamping mirrors formatHistory's, so the
-// two can never disagree about what "the last N picks" means.
-func newHistoryPayload(entries []HistoryEntry, limit int) historyPayload {
+// same records disc.FormatHistory prints, in the same order. entries
+// arrives in storage order, oldest first. The clamping mirrors
+// disc.FormatHistory's, so the two can never disagree about what "the last
+// N picks" means.
+func newHistoryPayload(entries []disc.HistoryEntry, limit int) historyPayload {
 	if limit <= 0 || limit > len(entries) {
 		limit = len(entries)
 	}

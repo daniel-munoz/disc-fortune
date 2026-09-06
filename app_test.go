@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -18,7 +19,7 @@ func TestRunListWritesToInjectedStdout(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 	a := app{
-		loc:    configLocation{Dir: dir},
+		loc:    disc.Location{Dir: dir},
 		stdout: &out,
 		stderr: &errOut,
 	}
@@ -41,9 +42,9 @@ func TestRunListEmptyMatchReturnsErrorAndWritesNothing(t *testing.T) {
 	writeTestCollection(t, filepath.Join(dir, "collection.json"))
 
 	var out, errOut bytes.Buffer
-	a := app{loc: configLocation{Dir: dir}, stdout: &out, stderr: &errOut}
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
 
-	filter := Filter{Query: FieldFilter{Include: []string{"zzzz-no-such-album"}}}
+	filter := disc.Filter{Query: disc.FieldFilter{Include: []string{"zzzz-no-such-album"}}}
 
 	err := a.runList(selection{color: term.Never, filter: filter})
 	if err == nil {

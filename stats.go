@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -17,8 +18,8 @@ const topN = 5
 // Stats is everything `stats` reports, computed once and rendered twice.
 // formatStats and newStatsPayload both read from this value, which is what
 // keeps the text and JSON views from disagreeing about a figure -- unlike
-// formatHistory and newHistoryPayload, which duplicate their clamp and need a
-// test to stay in step.
+// disc.FormatHistory and newHistoryPayload, which duplicate their clamp and
+// need a test to stay in step.
 type Stats struct {
 	// Count is the described set, after filters. Total is the source set
 	// before them: the collection, or favorites under --favorites. They are
@@ -79,7 +80,7 @@ func (s Stats) Share() float64 {
 //
 // total arrives separately because pool has already been filtered by the time
 // it gets here, and the header needs both numbers to say "312 of 1247".
-func computeStats(pool, favorites []Album, entries []HistoryEntry, total int, m Meta, favoritesOnly bool) Stats {
+func computeStats(pool, favorites []disc.Album, entries []disc.HistoryEntry, total int, m disc.Meta, favoritesOnly bool) Stats {
 	s := Stats{
 		Count:         len(pool),
 		Total:         total,
@@ -95,7 +96,7 @@ func computeStats(pool, favorites []Album, entries []HistoryEntry, total int, m 
 			s.Favorites++
 		}
 
-		// lastPlayedIndex, not a map: sameAlbum is not transitive when an
+		// lastPlayedIndex, not a map: disc.SameAlbum is not transitive when an
 		// entry has no release ID, and a map key would silently assume it
 		// was. This is the same backwards first-match scan every other
 		// history comparison goes through.
@@ -116,7 +117,7 @@ func computeStats(pool, favorites []Album, entries []HistoryEntry, total int, m 
 // latest, so a decade you own nothing from shows as a zero row -- in a
 // histogram a gap is information. Albums with no year go in a Decade 0 row,
 // appended last and only when there are any.
-func decadeBuckets(pool []Album) []DecadeBucket {
+func decadeBuckets(pool []disc.Album) []DecadeBucket {
 	counts := make(map[int]int)
 	unknown := 0
 	var lo, hi int
@@ -152,7 +153,7 @@ func decadeBuckets(pool []Album) []DecadeBucket {
 
 // countGenres counts albums per genre. An album listing several genres counts
 // once in each; a genre repeated on one album counts once.
-func countGenres(pool []Album) map[string]int {
+func countGenres(pool []disc.Album) map[string]int {
 	counts := make(map[string]int)
 	for _, a := range pool {
 		seen := make(map[string]bool, len(a.Genres))
@@ -169,7 +170,7 @@ func countGenres(pool []Album) map[string]int {
 
 // countLabels counts albums per label. Album.Label is a single string, so an
 // album contributes at most one.
-func countLabels(pool []Album) map[string]int {
+func countLabels(pool []disc.Album) map[string]int {
 	counts := make(map[string]int)
 	for _, a := range pool {
 		if a.Label == "" {
@@ -216,7 +217,7 @@ func formatStats(s Stats, useColor bool) string {
 	sb.WriteString(statsHeader(s))
 	sb.WriteString("\n")
 	if !s.SyncedAt.IsZero() {
-		sb.WriteString("last synced " + formatTimestamp(s.SyncedAt) + "\n")
+		sb.WriteString("last synced " + disc.FormatTimestamp(s.SyncedAt) + "\n")
 	}
 
 	writeDecades(&sb, s.Decades, useColor)
@@ -225,10 +226,10 @@ func formatStats(s Stats, useColor bool) string {
 
 	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf("%d of %d %s picked at least once (%d%%)\n",
-		s.Picked.Count, s.Count, plural(s.Count, "album", "albums"),
+		s.Picked.Count, s.Count, disc.Plural(s.Count, "album", "albums"),
 		int(math.Round(s.Share()*100))))
 	if !s.Picked.LastPicked.IsZero() {
-		sb.WriteString("  last picked " + formatTimestamp(s.Picked.LastPicked) + "\n")
+		sb.WriteString("  last picked " + disc.FormatTimestamp(s.Picked.LastPicked) + "\n")
 	}
 
 	return sb.String()
@@ -238,9 +239,9 @@ func formatStats(s Stats, useColor bool) string {
 // many, and how many of those are favorites. Under --favorites the described
 // set already is favorites, so the tail would only repeat the count.
 func statsHeader(s Stats) string {
-	noun := plural(s.Count, "album", "albums")
+	noun := disc.Plural(s.Count, "album", "albums")
 	if s.FavoritesOnly {
-		noun = plural(s.Count, "favorite", "favorites")
+		noun = disc.Plural(s.Count, "favorite", "favorites")
 	}
 
 	head := fmt.Sprintf("%d %s", s.Count, noun)
@@ -248,7 +249,7 @@ func statsHeader(s Stats) string {
 		head = fmt.Sprintf("%d of %d %s", s.Count, s.Total, noun)
 	}
 	if !s.FavoritesOnly {
-		head += fmt.Sprintf(" · %d %s", s.Favorites, plural(s.Favorites, "favorite", "favorites"))
+		head += fmt.Sprintf(" · %d %s", s.Favorites, disc.Plural(s.Favorites, "favorite", "favorites"))
 	}
 	return head
 }

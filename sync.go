@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -60,15 +61,15 @@ func (a app) runSync(cfg syncConfig) error {
 	// Read before the write below overwrites it: comparing the two is what
 	// tells us whether this is the first sync after the identity change.
 	// Failing to read it is not an error -- it just means no notice.
-	previous, _ := loadCollectionFrom(a.collectionPath())
+	previous, _ := disc.LoadCollectionFrom(a.collectionPath())
 
-	if err := saveCollectionTo(a.collectionPath(), albums); err != nil {
+	if err := disc.SaveCollectionTo(a.collectionPath(), albums); err != nil {
 		return fmt.Errorf("Error saving collection: %v", err)
 	}
 
 	// Recorded after the collection lands, so a stale timestamp never claims
 	// a sync that did not actually persist.
-	if err := recordSync(a.metaPath(), time.Now()); err != nil {
+	if err := disc.RecordSync(a.metaPath(), time.Now()); err != nil {
 		return fmt.Errorf("Error saving sync metadata: %v", err)
 	}
 
@@ -78,7 +79,7 @@ func (a app) runSync(cfg syncConfig) error {
 	// sync retries it. The report is kept and printed below either way --
 	// a partial pass may have already rewritten favorites, and the user has
 	// to be told what changed, not just that something went wrong.
-	backfillReport, err := runBackfill(a.favoritesPath(), a.historyPath(), albums)
+	backfillReport, err := disc.RunBackfill(a.favoritesPath(), a.historyPath(), albums)
 	if err != nil {
 		fmt.Fprintf(a.stderr, "Warning: could not fill in release IDs: %v\n", err)
 	}
@@ -140,9 +141,9 @@ func resolveFolderIDs(client *discogsClient, username string, names []string) ([
 // Dedup is on Identity, not Key: two pressings of one title are two records
 // and must both survive, while one release filed in two folders is one
 // record however its title is spelled in each.
-func collectAlbums(client *discogsClient, username string, folderIDs []int) ([]Album, error) {
+func collectAlbums(client *discogsClient, username string, folderIDs []int) ([]disc.Album, error) {
 	seen := make(map[string]bool)
-	var albums []Album
+	var albums []disc.Album
 
 	for _, fid := range folderIDs {
 		releases, err := client.getCollectionReleases(username, fid)
@@ -184,7 +185,7 @@ func resolveFolderNames(names []string, folders []folder) ([]int, error) {
 // unmergedCount counts the albums that share an artist and title with at
 // least one other album -- that is, every record involved in a collision the
 // old name-based dedup used to hide.
-func unmergedCount(albums []Album) int {
+func unmergedCount(albums []disc.Album) int {
 	byKey := make(map[string]int, len(albums))
 	for _, a := range albums {
 		byKey[a.Key()]++
@@ -211,7 +212,7 @@ func unmergedCount(albums []Album) int {
 // The wording states the collision count as a fact rather than blaming it
 // for the whole change in size. Someone who also bought records since their
 // last sync would otherwise be told something false.
-func unmergeNotice(prev, next []Album) string {
+func unmergeNotice(prev, next []disc.Album) string {
 	if len(prev) == 0 {
 		return ""
 	}

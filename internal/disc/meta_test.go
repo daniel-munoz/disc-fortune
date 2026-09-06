@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"os"
@@ -11,9 +11,9 @@ import (
 func TestLoadMetaMissingFileIsNotAnError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
 
-	m, err := loadMeta(path)
+	m, err := LoadMeta(path)
 	if err != nil {
-		t.Fatalf("loadMeta on a missing file: %v", err)
+		t.Fatalf("LoadMeta on a missing file: %v", err)
 	}
 	if !m.SyncedAt.IsZero() {
 		t.Errorf("SyncedAt = %v, want zero", m.SyncedAt)
@@ -24,13 +24,13 @@ func TestRecordSyncRoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
 	when := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 
-	if err := recordSync(path, when); err != nil {
-		t.Fatalf("recordSync: %v", err)
+	if err := RecordSync(path, when); err != nil {
+		t.Fatalf("RecordSync: %v", err)
 	}
 
-	m, err := loadMeta(path)
+	m, err := LoadMeta(path)
 	if err != nil {
-		t.Fatalf("loadMeta: %v", err)
+		t.Fatalf("LoadMeta: %v", err)
 	}
 	if !m.SyncedAt.Equal(when) {
 		t.Errorf("SyncedAt = %v, want %v", m.SyncedAt, when)
@@ -42,14 +42,14 @@ func TestRecordSyncOverwritesEarlierTimestamp(t *testing.T) {
 	first := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	second := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
 
-	if err := recordSync(path, first); err != nil {
-		t.Fatalf("first recordSync: %v", err)
+	if err := RecordSync(path, first); err != nil {
+		t.Fatalf("first RecordSync: %v", err)
 	}
-	if err := recordSync(path, second); err != nil {
-		t.Fatalf("second recordSync: %v", err)
+	if err := RecordSync(path, second); err != nil {
+		t.Fatalf("second RecordSync: %v", err)
 	}
 
-	m, _ := loadMeta(path)
+	m, _ := LoadMeta(path)
 	if !m.SyncedAt.Equal(second) {
 		t.Errorf("SyncedAt = %v, want the later %v", m.SyncedAt, second)
 	}
@@ -59,17 +59,17 @@ func TestRecordSyncOverwritesEarlierTimestamp(t *testing.T) {
 // able to fail a sync that otherwise succeeded.
 func TestRecordSyncRepairsCorruptFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
-	if err := os.WriteFile(path, []byte("{not json"), collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), FilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 	when := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
 
-	if err := recordSync(path, when); err != nil {
-		t.Fatalf("recordSync over a corrupt file: %v", err)
+	if err := RecordSync(path, when); err != nil {
+		t.Fatalf("RecordSync over a corrupt file: %v", err)
 	}
-	m, err := loadMeta(path)
+	m, err := LoadMeta(path)
 	if err != nil {
-		t.Fatalf("loadMeta after repair: %v", err)
+		t.Fatalf("LoadMeta after repair: %v", err)
 	}
 	if !m.SyncedAt.Equal(when) {
 		t.Errorf("SyncedAt = %v, want %v", m.SyncedAt, when)
@@ -109,35 +109,35 @@ func TestStaleNoticeNudgesWhenOld(t *testing.T) {
 func TestSyncNoticeSuppressedWhenDisabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
 	now := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
-	if err := recordSync(path, now.Add(-staleAfter-time.Hour)); err != nil {
-		t.Fatalf("recordSync: %v", err)
+	if err := RecordSync(path, now.Add(-staleAfter-time.Hour)); err != nil {
+		t.Fatalf("RecordSync: %v", err)
 	}
 
-	if got := syncNotice(path, now, false); got != "" {
-		t.Errorf("syncNotice = %q, want empty when notices are off", got)
+	if got := SyncNotice(path, now, false); got != "" {
+		t.Errorf("SyncNotice = %q, want empty when notices are off", got)
 	}
 }
 
 func TestSyncNoticeReportsStaleCollection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
 	now := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
-	if err := recordSync(path, now.Add(-staleAfter-time.Hour)); err != nil {
-		t.Fatalf("recordSync: %v", err)
+	if err := RecordSync(path, now.Add(-staleAfter-time.Hour)); err != nil {
+		t.Fatalf("RecordSync: %v", err)
 	}
 
-	if got := syncNotice(path, now, true); got == "" {
-		t.Error("syncNotice was empty for a stale collection")
+	if got := SyncNotice(path, now, true); got == "" {
+		t.Error("SyncNotice was empty for a stale collection")
 	}
 }
 
 // A pick must succeed even if meta.json is unreadable garbage.
 func TestSyncNoticeSilentOnUnreadableMeta(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.json")
-	if err := os.WriteFile(path, []byte("{not json"), collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), FilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 
-	if got := syncNotice(path, time.Now(), true); got != "" {
-		t.Errorf("syncNotice = %q, want empty when metadata cannot be read", got)
+	if got := SyncNotice(path, time.Now(), true); got != "" {
+		t.Errorf("SyncNotice = %q, want empty when metadata cannot be read", got)
 	}
 }

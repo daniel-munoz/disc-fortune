@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 func TestResolveFolderNames(t *testing.T) {
@@ -162,7 +164,7 @@ func TestCollectAlbumsMergesSameReleaseAcrossFolders(t *testing.T) {
 
 func TestUnmergedCount(t *testing.T) {
 	// Two Kind of Blue pressings and one Souvlaki: two records share a name.
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 333, Artist: "Slowdive", Title: "Souvlaki"},
@@ -174,7 +176,7 @@ func TestUnmergedCount(t *testing.T) {
 }
 
 func TestUnmergedCountNoCollisions(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 222, Artist: "Ride", Title: "Nowhere"},
 	}
@@ -187,8 +189,8 @@ func TestUnmergedCountNoCollisions(t *testing.T) {
 // The notice fires on the first sync after upgrading, which is the moment
 // the collection count visibly jumps.
 func TestUnmergeNoticeOnFirstSync(t *testing.T) {
-	prev := []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
-	next := []Album{
+	prev := []disc.Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
+	next := []disc.Album{
 		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
@@ -205,7 +207,7 @@ func TestUnmergeNoticeOnFirstSync(t *testing.T) {
 // And never again: every entry has an ID from then on, so no flag in
 // meta.json is needed to make it one-time.
 func TestUnmergeNoticeSilentOnSecondSync(t *testing.T) {
-	prev := []Album{
+	prev := []disc.Album{
 		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
@@ -217,8 +219,8 @@ func TestUnmergeNoticeSilentOnSecondSync(t *testing.T) {
 }
 
 func TestUnmergeNoticeSilentWithoutCollisions(t *testing.T) {
-	prev := []Album{{Artist: "Slowdive", Title: "Souvlaki"}}
-	next := []Album{{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"}}
+	prev := []disc.Album{{Artist: "Slowdive", Title: "Souvlaki"}}
+	next := []disc.Album{{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"}}
 
 	if got := unmergeNotice(prev, next); got != "" {
 		t.Errorf("notice = %q, want empty when nothing un-merged", got)
@@ -228,7 +230,7 @@ func TestUnmergeNoticeSilentWithoutCollisions(t *testing.T) {
 // A fresh install has no previous collection and nothing was ever merged,
 // so there is nothing to explain.
 func TestUnmergeNoticeSilentOnFreshInstall(t *testing.T) {
-	next := []Album{
+	next := []disc.Album{
 		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"},
 	}

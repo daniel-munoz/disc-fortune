@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// migrationNotice returns the one-time notice telling a user that their data
+// MigrationNotice returns the one-time notice telling a user that their data
 // is still in the legacy directory and how to move it, or "" when there is
 // nothing to migrate, the notice has already been shown, or notices are off.
 //
@@ -14,11 +14,11 @@ import (
 // user to ignore it, and `disc-fortune migrate` stays discoverable in help
 // either way. The "shown" flag is recorded best-effort: failing to record it
 // means the notice appears again, which is harmless.
-func migrationNotice(loc configLocation, metaFile string, enabled bool) string {
+func MigrationNotice(loc Location, metaFile string, enabled bool) string {
 	if !enabled || loc.Preferred == "" {
 		return ""
 	}
-	m, err := loadMeta(metaFile)
+	m, err := LoadMeta(metaFile)
 	if err != nil {
 		m = Meta{}
 	}
@@ -35,7 +35,7 @@ func migrationNotice(loc configLocation, metaFile string, enabled bool) string {
 		loc.Dir, loc.Preferred)
 }
 
-// migrateConfig moves disc-fortune's data files from one config directory to
+// Migrate moves disc-fortune's data files from one config directory to
 // another, returning how many files it moved.
 //
 // It copies-then-removes rather than renaming: a rename cannot cross
@@ -47,7 +47,7 @@ func migrationNotice(loc configLocation, metaFile string, enabled bool) string {
 // A destination that already holds files is refused outright. Merging two
 // collections is not something to guess at, and silently overwriting is how
 // someone loses the data they were trying to protect.
-func migrateConfig(from, to string) (int, error) {
+func Migrate(from, to string) (int, error) {
 	entries, err := os.ReadDir(from)
 	if err != nil {
 		return 0, fmt.Errorf("reading %s: %w", from, err)
@@ -64,7 +64,7 @@ func migrateConfig(from, to string) (int, error) {
 	} else if os.IsNotExist(err) {
 		createdDir = true
 	}
-	if err := os.MkdirAll(to, configDirPerms); err != nil {
+	if err := os.MkdirAll(to, DirPerms); err != nil {
 		return 0, fmt.Errorf("creating %s: %w", to, err)
 	}
 
@@ -99,7 +99,7 @@ func migrateConfig(from, to string) (int, error) {
 		if err != nil {
 			return rollback(fmt.Errorf("reading %s: %w", src, err))
 		}
-		perm := os.FileMode(collectionFilePerms)
+		perm := os.FileMode(FilePerms)
 		if info, err := e.Info(); err == nil {
 			perm = info.Mode().Perm()
 		}
@@ -135,25 +135,4 @@ func migrateConfig(from, to string) (int, error) {
 	_ = os.Remove(from)
 
 	return len(copied), nil
-}
-
-// runMigrate moves the data directory to its XDG-preferred location.
-func (a app) runMigrate() error {
-	if a.loc.Preferred == "" {
-		fmt.Fprintf(a.stdout, "Nothing to migrate: disc-fortune is already using %s\n", a.loc.Dir)
-		return nil
-	}
-
-	from, to := a.loc.Dir, a.loc.Preferred
-	moved, err := migrateConfig(from, to)
-	if err != nil {
-		return fmt.Errorf("Error migrating: %v", err)
-	}
-
-	noun := "files"
-	if moved == 1 {
-		noun = "file"
-	}
-	fmt.Fprintf(a.stdout, "Moved %d %s from %s to %s\n", moved, noun, from, to)
-	return nil
 }

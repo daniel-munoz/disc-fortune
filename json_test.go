@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 // The golden tests below pin the exact bytes of the wire format. They catch
@@ -17,7 +20,7 @@ import (
 // catches that.
 
 func TestJSONAlbumGoldenFullyPopulated(t *testing.T) {
-	album := Album{
+	album := disc.Album{
 		ReleaseID: 1839278,
 		Artist:    "Miles Davis",
 		Title:     "Kind of Blue",
@@ -59,7 +62,7 @@ func TestJSONAlbumGoldenFullyPopulated(t *testing.T) {
 // keys. null says "we were not told", which "" and 0 cannot: "year": 0
 // sorts before 1959 and "release_id": 0 looks like an ID.
 func TestJSONAlbumGoldenEverythingAbsent(t *testing.T) {
-	album := Album{Artist: "Some Artist", Title: "Untitled"}
+	album := disc.Album{Artist: "Some Artist", Title: "Untitled"}
 
 	want := `{
   "release_id": null,
@@ -83,7 +86,7 @@ func TestJSONAlbumGoldenEverythingAbsent(t *testing.T) {
 }
 
 func TestPickPayloadGolden(t *testing.T) {
-	album := Album{ReleaseID: 42, Artist: "A", Title: "B"}
+	album := disc.Album{ReleaseID: 42, Artist: "A", Title: "B"}
 
 	want := `{
   "album": {
@@ -109,7 +112,7 @@ func TestPickPayloadGolden(t *testing.T) {
 }
 
 func TestListPayloadCountsWhatItEmits(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{Artist: "A", Title: "1"},
 		{Artist: "B", Title: "2"},
 	}
@@ -142,14 +145,14 @@ func TestListPayloadEmptyIsAnEmptyArray(t *testing.T) {
 	}
 }
 
-// Entries come back most recent first, matching what formatHistory prints,
+// Entries come back most recent first, matching what disc.FormatHistory prints,
 // and count is how many were emitted rather than how many the file holds.
 func TestHistoryPayloadIsMostRecentFirst(t *testing.T) {
 	base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
-	entries := []HistoryEntry{
-		{Album: Album{Artist: "oldest", Title: "1"}, Timestamp: base},
-		{Album: Album{Artist: "middle", Title: "2"}, Timestamp: base.Add(time.Hour)},
-		{Album: Album{Artist: "newest", Title: "3"}, Timestamp: base.Add(2 * time.Hour)},
+	entries := []disc.HistoryEntry{
+		{Album: disc.Album{Artist: "oldest", Title: "1"}, Timestamp: base},
+		{Album: disc.Album{Artist: "middle", Title: "2"}, Timestamp: base.Add(time.Hour)},
+		{Album: disc.Album{Artist: "newest", Title: "3"}, Timestamp: base.Add(2 * time.Hour)},
 	}
 
 	got := newHistoryPayload(entries, 2)
@@ -168,12 +171,12 @@ func TestHistoryPayloadIsMostRecentFirst(t *testing.T) {
 }
 
 // A limit larger than the history, or zero, means "all of it" -- the same
-// clamping formatHistory does.
+// clamping disc.FormatHistory does.
 func TestHistoryPayloadClampsLimit(t *testing.T) {
 	base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
-	entries := []HistoryEntry{
-		{Album: Album{Artist: "a", Title: "1"}, Timestamp: base},
-		{Album: Album{Artist: "b", Title: "2"}, Timestamp: base.Add(time.Hour)},
+	entries := []disc.HistoryEntry{
+		{Album: disc.Album{Artist: "a", Title: "1"}, Timestamp: base},
+		{Album: disc.Album{Artist: "b", Title: "2"}, Timestamp: base.Add(time.Hour)},
 	}
 
 	for _, limit := range []int{0, 2, 99, -1} {
@@ -202,9 +205,9 @@ func TestHistoryPayloadEmptyIsAnEmptyArray(t *testing.T) {
 // The timestamp on the wire and the timestamp in history.json must be the
 // same string, so no rounding can make them disagree.
 //
-// addToHistory stamps with time.Now(), which is local, so real output is not
-// always the UTC "Z" form these fixtures might suggest: it carries whatever
-// UTC offset the machine was in, and Go prints fractional seconds at
+// disc.AddToHistory stamps with time.Now(), which is local, so real output
+// is not always the UTC "Z" form these fixtures might suggest: it carries
+// whatever UTC offset the machine was in, and Go prints fractional seconds at
 // whatever length they actually have -- trailing zeros dropped, and no dot at
 // all when there is no fraction. Both cases are exercised here so a fixed
 // UTC assumption cannot creep back in undetected.
@@ -221,7 +224,7 @@ func TestHistoryPayloadTimestampIsRFC3339AsStored(t *testing.T) {
 		},
 		{
 			// A local offset, and a fractional-second length (6 digits, no
-			// trailing zero) matching what addToHistory actually produces.
+			// trailing zero) matching what disc.AddToHistory actually produces.
 			name: "local offset with variable-length fraction",
 			ts:   time.Date(2026, 9, 3, 18, 58, 59, 262156000, time.FixedZone("", -4*60*60)),
 			want: `"2026-09-03T18:58:59.262156-04:00"`,
@@ -230,7 +233,7 @@ func TestHistoryPayloadTimestampIsRFC3339AsStored(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entries := []HistoryEntry{{Album: Album{Artist: "a", Title: "1"}, Timestamp: tt.ts}}
+			entries := []disc.HistoryEntry{{Album: disc.Album{Artist: "a", Title: "1"}, Timestamp: tt.ts}}
 
 			var buf bytes.Buffer
 			if err := writeJSON(&buf, newHistoryPayload(entries, 1)); err != nil {
@@ -245,7 +248,7 @@ func TestHistoryPayloadTimestampIsRFC3339AsStored(t *testing.T) {
 
 // Output is not merely plausible: it parses.
 func TestWriteJSONRoundTrips(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 1, Artist: "A", Title: "1", Year: 1970, Genres: []string{"Jazz"}},
 		{Artist: "B", Title: "2"},
 	}
@@ -272,7 +275,7 @@ func TestWriteJSONRoundTrips(t *testing.T) {
 
 func TestWriteJSONEndsWithExactlyOneNewline(t *testing.T) {
 	var buf bytes.Buffer
-	if err := writeJSON(&buf, pickPayload{Album: newJSONAlbum(Album{Artist: "A", Title: "B"})}); err != nil {
+	if err := writeJSON(&buf, pickPayload{Album: newJSONAlbum(disc.Album{Artist: "A", Title: "B"})}); err != nil {
 		t.Fatalf("writeJSON: %v", err)
 	}
 	out := buf.String()
@@ -285,7 +288,7 @@ func TestWriteJSONEndsWithExactlyOneNewline(t *testing.T) {
 // a conscious decision about the wire format, not a silent omission: this test
 // is the forcing function the golden tests cannot be.
 func TestEveryAlbumFieldHasAWireDecision(t *testing.T) {
-	storage := reflect.TypeOf(Album{})
+	storage := reflect.TypeOf(disc.Album{})
 	wire := reflect.TypeOf(jsonAlbum{})
 	if storage.NumField() != wire.NumField() {
 		t.Fatalf("Album has %d fields, jsonAlbum has %d -- decide what the new "+
@@ -395,5 +398,49 @@ func TestStatsPayloadShareIsAgainstCount(t *testing.T) {
 	p := newStatsPayload(Stats{Count: 200, Total: 1000, Picked: PickedStats{Count: 50}})
 	if p.Picked.Share != 0.25 {
 		t.Errorf("share = %v, want 0.25 (50/200, not 50/1000)", p.Picked.Share)
+	}
+}
+
+// FormatHistory (text) and newHistoryPayload (json.go) deliberately duplicate
+// their clamp-and-reverse logic rather than share it, so that the two views
+// can never disagree about "the last N picks". Nothing else enforces that
+// promise: each is tested against its own expectations, so a divergence
+// between the two loop bounds would leave both suites green. This test runs
+// both over the same fixture and checks they picked the same records in the
+// same order.
+func TestFormatHistoryAgreesWithHistoryPayload(t *testing.T) {
+	base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	const n = 5
+	entries := make([]disc.HistoryEntry, n)
+	for i := 0; i < n; i++ {
+		entries[i] = disc.HistoryEntry{
+			Album:     disc.Album{Artist: fmt.Sprintf("artist%d", i), Title: fmt.Sprintf("title%d", i)},
+			Timestamp: base.Add(time.Duration(i) * time.Hour),
+		}
+	}
+
+	for _, limit := range []int{0, 1, n - 1, n, n + 1, -1} {
+		text := disc.FormatHistory(entries, limit, false)
+		payload := newHistoryPayload(entries, limit)
+
+		wantHeader := fmt.Sprintf("last %d picks", payload.Count)
+		if !strings.Contains(text, wantHeader) {
+			t.Errorf("limit %d: FormatHistory header does not match payload.Count = %d:\n%s",
+				limit, payload.Count, text)
+		}
+
+		lastIdx := -1
+		for _, e := range payload.Entries {
+			idx := strings.Index(text, e.Album.Artist)
+			if idx == -1 {
+				t.Fatalf("limit %d: FormatHistory output missing %q, present in newHistoryPayload:\n%s",
+					limit, e.Album.Artist, text)
+			}
+			if idx <= lastIdx {
+				t.Fatalf("limit %d: %q out of order between FormatHistory and newHistoryPayload:\n%s",
+					limit, e.Album.Artist, text)
+			}
+			lastIdx = idx
+		}
 	}
 }

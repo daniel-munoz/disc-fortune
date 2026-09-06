@@ -1,6 +1,6 @@
 //go:build unix
 
-package main
+package disc
 
 import (
 	"path/filepath"
@@ -26,16 +26,16 @@ func TestAddToHistoryConcurrentAppendsDoNotLose(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			album := Album{ReleaseID: i + 1, Artist: "A", Title: strconv.Itoa(i + 1)}
-			if err := addToHistory(path, album); err != nil {
-				t.Errorf("addToHistory: %v", err)
+			if err := AddToHistory(path, album); err != nil {
+				t.Errorf("AddToHistory: %v", err)
 			}
 		}()
 	}
 	wg.Wait()
 
-	entries, err := loadHistory(path)
+	entries, err := LoadHistory(path)
 	if err != nil {
-		t.Fatalf("loadHistory: %v", err)
+		t.Fatalf("LoadHistory: %v", err)
 	}
 	if len(entries) != writers {
 		t.Errorf("history has %d entries, want %d", len(entries), writers)

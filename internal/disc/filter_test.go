@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"reflect"
@@ -269,9 +269,9 @@ func years(t *testing.T, vals ...string) YearFilter {
 	t.Helper()
 	var yf YearFilter
 	for _, v := range vals {
-		r, err := parseYearValue(v)
+		r, err := ParseYearValue(v)
 		if err != nil {
-			t.Fatalf("parseYearValue(%q): %v", v, err)
+			t.Fatalf("ParseYearValue(%q): %v", v, err)
 		}
 		yf.Include = append(yf.Include, r)
 	}
@@ -281,14 +281,14 @@ func years(t *testing.T, vals ...string) YearFilter {
 func TestParseYearValue(t *testing.T) {
 	tests := []struct {
 		in      string
-		want    yearRange
+		want    YearRange
 		wantErr bool
 	}{
-		{in: "1975", want: yearRange{1975, 1975}},
-		{in: " 1975 ", want: yearRange{1975, 1975}},
-		{in: "1970-1980", want: yearRange{1970, 1980}},
-		{in: "1980-1970", want: yearRange{1970, 1980}}, // auto-swap, as in v2.3.0
-		{in: "1970 - 1980", want: yearRange{1970, 1980}},
+		{in: "1975", want: YearRange{1975, 1975}},
+		{in: " 1975 ", want: YearRange{1975, 1975}},
+		{in: "1970-1980", want: YearRange{1970, 1980}},
+		{in: "1980-1970", want: YearRange{1970, 1980}}, // auto-swap, as in v2.3.0
+		{in: "1970 - 1980", want: YearRange{1970, 1980}},
 		{in: "nineteen", wantErr: true},
 		{in: "1970-", wantErr: true},
 		{in: "1970-1980-1990", wantErr: true},
@@ -297,18 +297,18 @@ func TestParseYearValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
-			got, err := parseYearValue(tt.in)
+			got, err := ParseYearValue(tt.in)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("parseYearValue(%q) = %v, want an error", tt.in, got)
+					t.Fatalf("ParseYearValue(%q) = %v, want an error", tt.in, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("parseYearValue(%q): %v", tt.in, err)
+				t.Fatalf("ParseYearValue(%q): %v", tt.in, err)
 			}
 			if got != tt.want {
-				t.Errorf("parseYearValue(%q) = %v, want %v", tt.in, got, tt.want)
+				t.Errorf("ParseYearValue(%q) = %v, want %v", tt.in, got, tt.want)
 			}
 		})
 	}
@@ -322,15 +322,15 @@ func TestYearFilterMatches(t *testing.T) {
 		want bool
 	}{
 		{"unconstrained", YearFilter{}, 1975, true},
-		{"include single hit", YearFilter{Include: []yearRange{{1975, 1975}}}, 1975, true},
-		{"include single miss", YearFilter{Include: []yearRange{{1975, 1975}}}, 1976, false},
-		{"include range hit", YearFilter{Include: []yearRange{{1970, 1980}}}, 1975, true},
-		{"include is OR", YearFilter{Include: []yearRange{{1959, 1959}, {1970, 1979}}}, 1975, true},
-		{"exclude hit", YearFilter{Exclude: []yearRange{{1970, 1979}}}, 1975, false},
-		{"exclude miss", YearFilter{Exclude: []yearRange{{1970, 1979}}}, 1985, true},
-		{"exclusion beats inclusion", YearFilter{Include: []yearRange{{1970, 1980}}, Exclude: []yearRange{{1975, 1975}}}, 1975, false},
-		{"unknown year fails an inclusion", YearFilter{Include: []yearRange{{1970, 1980}}}, 0, false},
-		{"unknown year survives an exclusion", YearFilter{Exclude: []yearRange{{1970, 1980}}}, 0, true},
+		{"include single hit", YearFilter{Include: []YearRange{{1975, 1975}}}, 1975, true},
+		{"include single miss", YearFilter{Include: []YearRange{{1975, 1975}}}, 1976, false},
+		{"include range hit", YearFilter{Include: []YearRange{{1970, 1980}}}, 1975, true},
+		{"include is OR", YearFilter{Include: []YearRange{{1959, 1959}, {1970, 1979}}}, 1975, true},
+		{"exclude hit", YearFilter{Exclude: []YearRange{{1970, 1979}}}, 1975, false},
+		{"exclude miss", YearFilter{Exclude: []YearRange{{1970, 1979}}}, 1985, true},
+		{"exclusion beats inclusion", YearFilter{Include: []YearRange{{1970, 1980}}, Exclude: []YearRange{{1975, 1975}}}, 1975, false},
+		{"unknown year fails an inclusion", YearFilter{Include: []YearRange{{1970, 1980}}}, 0, false},
+		{"unknown year survives an exclusion", YearFilter{Exclude: []YearRange{{1970, 1980}}}, 0, true},
 		{"unknown year with no year filter", YearFilter{}, 0, true},
 	}
 
@@ -346,27 +346,27 @@ func TestYearFilterMatches(t *testing.T) {
 func TestParseDecadeValue(t *testing.T) {
 	tests := []struct {
 		in   string
-		want yearRange
+		want YearRange
 	}{
-		{"70s", yearRange{1970, 1979}},
-		{"1970s", yearRange{1970, 1979}},
-		{"1970", yearRange{1970, 1979}},
-		{"2020s", yearRange{2020, 2029}},
-		{"30s", yearRange{1930, 1939}},
-		{"90s", yearRange{1990, 1999}},
-		{"70S", yearRange{1970, 1979}}, // case-insensitive
-		{" 70s ", yearRange{1970, 1979}},
-		{"1975", yearRange{1970, 1979}}, // any year names its decade
+		{"70s", YearRange{1970, 1979}},
+		{"1970s", YearRange{1970, 1979}},
+		{"1970", YearRange{1970, 1979}},
+		{"2020s", YearRange{2020, 2029}},
+		{"30s", YearRange{1930, 1939}},
+		{"90s", YearRange{1990, 1999}},
+		{"70S", YearRange{1970, 1979}}, // case-insensitive
+		{" 70s ", YearRange{1970, 1979}},
+		{"1975", YearRange{1970, 1979}}, // any year names its decade
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
-			got, err := parseDecadeValue(tt.in)
+			got, err := ParseDecadeValue(tt.in)
 			if err != nil {
-				t.Fatalf("parseDecadeValue(%q): %v", tt.in, err)
+				t.Fatalf("ParseDecadeValue(%q): %v", tt.in, err)
 			}
 			if got != tt.want {
-				t.Errorf("parseDecadeValue(%q) = %v, want %v", tt.in, got, tt.want)
+				t.Errorf("ParseDecadeValue(%q) = %v, want %v", tt.in, got, tt.want)
 			}
 		})
 	}
@@ -383,17 +383,17 @@ func TestParseDecadeValueRejectsAmbiguous(t *testing.T) {
 		"20s": {"1920s", "2020s"},
 		"25s": {"1920s", "2020s"},
 	} {
-		_, err := parseDecadeValue(in)
+		_, err := ParseDecadeValue(in)
 		if err == nil {
-			t.Errorf("parseDecadeValue(%q) succeeded, want an ambiguity error", in)
+			t.Errorf("ParseDecadeValue(%q) succeeded, want an ambiguity error", in)
 			continue
 		}
 		if !strings.Contains(err.Error(), "ambiguous") {
-			t.Errorf("parseDecadeValue(%q) error = %q, want it to say ambiguous", in, err)
+			t.Errorf("ParseDecadeValue(%q) error = %q, want it to say ambiguous", in, err)
 		}
 		for _, spelling := range both {
 			if !strings.Contains(err.Error(), spelling) {
-				t.Errorf("parseDecadeValue(%q) error = %q, want it to name %s", in, err, spelling)
+				t.Errorf("ParseDecadeValue(%q) error = %q, want it to name %s", in, err, spelling)
 			}
 		}
 	}
@@ -401,17 +401,17 @@ func TestParseDecadeValueRejectsAmbiguous(t *testing.T) {
 
 func TestParseDecadeValueRejectsGarbage(t *testing.T) {
 	for _, in := range []string{"", "s", "7s", "197s", "abc", "-5", "19700s"} {
-		if got, err := parseDecadeValue(in); err == nil {
-			t.Errorf("parseDecadeValue(%q) = %v, want an error", in, got)
+		if got, err := ParseDecadeValue(in); err == nil {
+			t.Errorf("ParseDecadeValue(%q) = %v, want an error", in, got)
 		}
 	}
 }
 
-// queryField is an index rather than a lookup, so a test pins the assumption.
+// QueryField is an index rather than a lookup, so a test pins the assumption.
 func TestQueryIsTheFirstFilterField(t *testing.T) {
-	if filterFields[queryField].name != "query" {
-		t.Fatalf("filterFields[queryField].name = %q, want %q",
-			filterFields[queryField].name, "query")
+	if Fields[QueryField].Name != "query" {
+		t.Fatalf("Fields[QueryField].Name = %q, want %q",
+			Fields[QueryField].Name, "query")
 	}
 }
 
@@ -421,21 +421,21 @@ func TestQueryIsTheFirstFilterField(t *testing.T) {
 func TestFilterFieldsAreWiredDistinctly(t *testing.T) {
 	var f Filter
 	seen := map[*FieldFilter]string{}
-	for _, field := range filterFields {
-		p := field.part(&f)
+	for _, field := range Fields {
+		p := field.Part(&f)
 		if p == nil {
-			t.Errorf("%s: part() returned nil", field.name)
+			t.Errorf("%s: part() returned nil", field.Name)
 			continue
 		}
 		if other, dup := seen[p]; dup {
-			t.Errorf("%s and %s point at the same FieldFilter", field.name, other)
+			t.Errorf("%s and %s point at the same FieldFilter", field.Name, other)
 		}
-		seen[p] = field.name
-		if field.albumValue == nil {
-			t.Errorf("%s: albumValue is nil", field.name)
+		seen[p] = field.Name
+		if field.AlbumValue == nil {
+			t.Errorf("%s: albumValue is nil", field.Name)
 		}
-		if field.help == "" {
-			t.Errorf("%s: help is empty", field.name)
+		if field.Help == "" {
+			t.Errorf("%s: help is empty", field.Name)
 		}
 	}
 	if len(seen) != 6 {
@@ -460,16 +460,16 @@ func TestFilterFieldsReadTheRightAlbumValues(t *testing.T) {
 		"format": {"Vinyl", "LP", "Blue Translucent"},
 	}
 
-	for _, field := range filterFields {
-		got := field.albumValue(album)
-		exp := want[field.name]
+	for _, field := range Fields {
+		got := field.AlbumValue(album)
+		exp := want[field.Name]
 		if len(got) != len(exp) {
-			t.Errorf("%s: albumValue = %q, want %q", field.name, got, exp)
+			t.Errorf("%s: albumValue = %q, want %q", field.Name, got, exp)
 			continue
 		}
 		for i := range got {
 			if got[i] != exp[i] {
-				t.Errorf("%s: albumValue = %q, want %q", field.name, got, exp)
+				t.Errorf("%s: albumValue = %q, want %q", field.Name, got, exp)
 				break
 			}
 		}
@@ -529,12 +529,12 @@ func TestFilterGrammar(t *testing.T) {
 		},
 		{
 			name:   "an unknown year is excluded by nothing",
-			filter: Filter{Year: YearFilter{Exclude: []yearRange{{1959, 1959}}}},
+			filter: Filter{Year: YearFilter{Exclude: []YearRange{{1959, 1959}}}},
 			want:   []string{"Herbie Hancock", "Parliament", "Black Sabbath", "Unknown"},
 		},
 		{
 			name:   "year and decade ranges OR together",
-			filter: Filter{Year: YearFilter{Include: []yearRange{{1959, 1959}, {1970, 1979}}}},
+			filter: Filter{Year: YearFilter{Include: []YearRange{{1959, 1959}, {1970, 1979}}}},
 			want:   []string{"Miles Davis", "Herbie Hancock", "Parliament", "Black Sabbath"},
 		},
 		{
@@ -579,7 +579,7 @@ func TestMatchAlbumsClassifies(t *testing.T) {
 	pool := []Album{miles, milesAlt, ride}
 
 	t.Run("one", func(t *testing.T) {
-		album, matches, status := matchAlbums(pool, Filter{ReleaseID: 3})
+		album, matches, status := MatchAlbums(pool, Filter{ReleaseID: 3})
 		if status != matchedOne {
 			t.Fatalf("status = %v, want matchedOne", status)
 		}
@@ -592,24 +592,24 @@ func TestMatchAlbumsClassifies(t *testing.T) {
 	})
 
 	t.Run("none", func(t *testing.T) {
-		_, _, status := matchAlbums(pool, Filter{ReleaseID: 999})
-		if status != matchedNone {
-			t.Errorf("status = %v, want matchedNone", status)
+		_, _, status := MatchAlbums(pool, Filter{ReleaseID: 999})
+		if status != MatchedNone {
+			t.Errorf("status = %v, want MatchedNone", status)
 		}
 	})
 
 	t.Run("many", func(t *testing.T) {
 		f := Filter{}
 		f.Query.Include = []string{"miles"}
-		album, matches, status := matchAlbums(pool, f)
-		if status != matchedMany {
-			t.Fatalf("status = %v, want matchedMany", status)
+		album, matches, status := MatchAlbums(pool, f)
+		if status != MatchedMany {
+			t.Fatalf("status = %v, want MatchedMany", status)
 		}
 		if len(matches) != 2 {
 			t.Errorf("matches = %d, want 2", len(matches))
 		}
 		if !reflect.DeepEqual(album, Album{}) {
-			t.Errorf("album = %+v, want the zero Album for matchedMany", album)
+			t.Errorf("album = %+v, want the zero Album for MatchedMany", album)
 		}
 	})
 }
@@ -617,8 +617,8 @@ func TestMatchAlbumsClassifies(t *testing.T) {
 // An unset filter returns the input untouched, which is what keeps `list`
 // from copying the whole collection for nothing.
 func TestFilterAnyReportsWhetherAnythingIsSet(t *testing.T) {
-	if (Filter{}).any() {
-		t.Error("empty Filter.any() = true, want false")
+	if (Filter{}).Any() {
+		t.Error("empty Filter.Any() = true, want false")
 	}
 	for name, f := range map[string]Filter{
 		"query include": {Query: include("miles")},
@@ -628,11 +628,11 @@ func TestFilterAnyReportsWhetherAnythingIsSet(t *testing.T) {
 		"genre":         {Genre: include("jazz")},
 		"label":         {Label: include("columbia")},
 		"format":        {Format: include("vinyl")},
-		"year include":  {Year: YearFilter{Include: []yearRange{{1975, 1975}}}},
-		"year exclude":  {Year: YearFilter{Exclude: []yearRange{{1975, 1975}}}},
+		"year include":  {Year: YearFilter{Include: []YearRange{{1975, 1975}}}},
+		"year exclude":  {Year: YearFilter{Exclude: []YearRange{{1975, 1975}}}},
 		"release id":    {ReleaseID: 1839278},
 	} {
-		if !f.any() {
+		if !f.Any() {
 			t.Errorf("%s: any() = false, want true", name)
 		}
 	}

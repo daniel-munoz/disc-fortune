@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"os"
@@ -30,7 +30,7 @@ func TestWriteFileAtomicCreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestWriteFileAtomicAppliesPerms(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -64,8 +64,8 @@ func TestWriteFileAtomicAppliesPerms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != collectionFilePerms {
-		t.Errorf("perm = %o, want %o", got, collectionFilePerms)
+	if got := info.Mode().Perm(); got != FilePerms {
+		t.Errorf("perm = %o, want %o", got, FilePerms)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestWriteFileAtomicRespectsUmaskOnNewFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -99,14 +99,14 @@ func TestWriteFileAtomicPreservesAnExistingFilesMode(t *testing.T) {
 	withUmask(t, 0o022)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "history.json")
-	if err := os.WriteFile(path, []byte("old"), collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("old"), FilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("new"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -133,7 +133,7 @@ func TestWriteFileAtomicPreservesAWidenedMode(t *testing.T) {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("new"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -150,11 +150,11 @@ func TestWriteFileAtomicPreservesAWidenedMode(t *testing.T) {
 func TestWriteFileAtomicOverwrites(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
-	if err := os.WriteFile(path, []byte("old"), collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("old"), FilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 
-	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("new"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestWriteFileAtomicLeavesNoResidueOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
 
-	if err := writeFileAtomic(path, []byte("hello"), collectionFilePerms); err != nil {
+	if err := writeFileAtomic(path, []byte("hello"), FilePerms); err != nil {
 		t.Fatalf("writeFileAtomic: %v", err)
 	}
 
@@ -186,11 +186,11 @@ func TestWriteFileAtomicLeavesNoResidueOnSuccess(t *testing.T) {
 func TestWriteFileAtomicPreservesOriginalOnRenameFailure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
-	if err := os.Mkdir(path, configDirPerms); err != nil {
+	if err := os.Mkdir(path, DirPerms); err != nil {
 		t.Fatalf("seeding directory: %v", err)
 	}
 
-	err := writeFileAtomic(path, []byte("new"), collectionFilePerms)
+	err := writeFileAtomic(path, []byte("new"), FilePerms)
 	if err == nil {
 		t.Fatal("writeFileAtomic succeeded renaming over a directory, want error")
 	}
@@ -210,7 +210,7 @@ func TestWriteFileAtomicPreservesOriginalOnRenameFailure(t *testing.T) {
 func TestWriteFileAtomicPreservesOriginalWhenTempCannotBeCreated(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "collection.json")
-	if err := os.WriteFile(path, []byte("original"), collectionFilePerms); err != nil {
+	if err := os.WriteFile(path, []byte("original"), FilePerms); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
 	// A read-only directory blocks the temp file, standing in for a full disk.
@@ -219,7 +219,7 @@ func TestWriteFileAtomicPreservesOriginalWhenTempCannotBeCreated(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
 
-	if err := writeFileAtomic(path, []byte("new"), collectionFilePerms); err == nil {
+	if err := writeFileAtomic(path, []byte("new"), FilePerms); err == nil {
 		t.Fatal("writeFileAtomic succeeded in a read-only directory, want error")
 	}
 
@@ -254,16 +254,16 @@ func TestSaveCollectionReplacesRatherThanTruncates(t *testing.T) {
 	path := filepath.Join(dir, "collection.json")
 	albums := []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
 
-	if err := saveCollectionTo(path, albums); err != nil {
+	if err := SaveCollectionTo(path, albums); err != nil {
 		t.Fatalf("first save: %v", err)
 	}
 	before := inodeOf(t, path)
 
-	if err := saveCollectionTo(path, append(albums, Album{Artist: "Sun Ra", Title: "Lanquidity"})); err != nil {
+	if err := SaveCollectionTo(path, append(albums, Album{Artist: "Sun Ra", Title: "Lanquidity"})); err != nil {
 		t.Fatalf("second save: %v", err)
 	}
 	if after := inodeOf(t, path); after == before {
-		t.Error("saveCollectionTo rewrote the file in place; it must rename a temp file over it")
+		t.Error("SaveCollectionTo rewrote the file in place; it must rename a temp file over it")
 	}
 	if residue := tmpResidue(t, dir); len(residue) != 0 {
 		t.Errorf("temp files left behind: %v", residue)
@@ -275,16 +275,16 @@ func TestSaveHistoryReplacesRatherThanTruncates(t *testing.T) {
 	path := filepath.Join(dir, "history.json")
 	entries := []HistoryEntry{{Album: Album{Artist: "Alice Coltrane", Title: "Journey in Satchidananda"}, Timestamp: time.Now()}}
 
-	if err := saveHistory(path, entries); err != nil {
+	if err := SaveHistory(path, entries); err != nil {
 		t.Fatalf("first save: %v", err)
 	}
 	before := inodeOf(t, path)
 
-	if err := saveHistory(path, append(entries, entries[0])); err != nil {
+	if err := SaveHistory(path, append(entries, entries[0])); err != nil {
 		t.Fatalf("second save: %v", err)
 	}
 	if after := inodeOf(t, path); after == before {
-		t.Error("saveHistory rewrote the file in place; it must rename a temp file over it")
+		t.Error("SaveHistory rewrote the file in place; it must rename a temp file over it")
 	}
 	if residue := tmpResidue(t, dir); len(residue) != 0 {
 		t.Errorf("temp files left behind: %v", residue)
@@ -296,16 +296,16 @@ func TestSaveFavoritesReplacesRatherThanTruncates(t *testing.T) {
 	path := filepath.Join(dir, "favorites.json")
 	albums := []Album{{Artist: "Pharoah Sanders", Title: "Karma"}}
 
-	if err := saveFavorites(path, albums); err != nil {
+	if err := SaveFavorites(path, albums); err != nil {
 		t.Fatalf("first save: %v", err)
 	}
 	before := inodeOf(t, path)
 
-	if err := saveFavorites(path, append(albums, Album{Artist: "Don Cherry", Title: "Brown Rice"})); err != nil {
+	if err := SaveFavorites(path, append(albums, Album{Artist: "Don Cherry", Title: "Brown Rice"})); err != nil {
 		t.Fatalf("second save: %v", err)
 	}
 	if after := inodeOf(t, path); after == before {
-		t.Error("saveFavorites rewrote the file in place; it must rename a temp file over it")
+		t.Error("SaveFavorites rewrote the file in place; it must rename a temp file over it")
 	}
 	if residue := tmpResidue(t, dir); len(residue) != 0 {
 		t.Errorf("temp files left behind: %v", residue)

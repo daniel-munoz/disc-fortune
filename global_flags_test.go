@@ -198,7 +198,7 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 // what the shared help block shows for it. That gap is exactly how --year's
 // registered help fell out of sync with its documented help before
 // nonSubstringFilterFlags existed. This asserts the stronger, single-source
-// property directly: each of the three flags outside filterFields is
+// property directly: each of the three flags outside disc.Fields is
 // registered with, and documented with, the very same string.
 func TestNonTableFilterFlagsHaveOneHelpSource(t *testing.T) {
 	fs, _ := newFlagSet("pick")
@@ -221,7 +221,7 @@ func TestNonTableFilterFlagsHaveOneHelpSource(t *testing.T) {
 	}
 }
 
-// buildFilterFlagHelp generates filterFlagHelp from filterFields, and every
+// buildFilterFlagHelp generates filterFlagHelp from disc.Fields, and every
 // usage block appends it straight after a line already ending in "\n". A
 // trailing newline left on the generated block would double up with that
 // "\n" (and with globalFlagHelp's own leading "\n\n"), adding a stray blank

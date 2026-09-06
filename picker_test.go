@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 func TestParseDrawMode(t *testing.T) {
@@ -50,10 +52,10 @@ func TestDrawFreshIsZeroValue(t *testing.T) {
 // histOf builds a history whose entries are the given albums, oldest first.
 // Timestamps are irrelevant to every function under test -- the window is
 // counted in picks, not in time -- so they are left zero.
-func histOf(albums ...Album) []HistoryEntry {
-	entries := make([]HistoryEntry, len(albums))
+func histOf(albums ...disc.Album) []disc.HistoryEntry {
+	entries := make([]disc.HistoryEntry, len(albums))
 	for i, a := range albums {
-		entries[i] = HistoryEntry{Album: a}
+		entries[i] = disc.HistoryEntry{Album: a}
 	}
 	return entries
 }
@@ -76,8 +78,8 @@ func TestAntiRepeatWindowScalesToPool(t *testing.T) {
 }
 
 func TestLastPlayedIndexFindsMostRecent(t *testing.T) {
-	a := Album{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}
-	b := Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"}
+	a := disc.Album{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}
+	b := disc.Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"}
 	entries := histOf(a, b, a)
 
 	idx, played := lastPlayedIndex(entries, a)
@@ -90,26 +92,26 @@ func TestLastPlayedIndexFindsMostRecent(t *testing.T) {
 }
 
 func TestLastPlayedIndexNeverPlayed(t *testing.T) {
-	entries := histOf(Album{ReleaseID: 1, Artist: "Ride", Title: "Nowhere"})
-	if _, played := lastPlayedIndex(entries, Album{ReleaseID: 2, Artist: "Lush", Title: "Spooky"}); played {
+	entries := histOf(disc.Album{ReleaseID: 1, Artist: "Ride", Title: "Nowhere"})
+	if _, played := lastPlayedIndex(entries, disc.Album{ReleaseID: 2, Artist: "Lush", Title: "Spooky"}); played {
 		t.Error("played = true for an album that is not in history")
 	}
 }
 
 // A history entry written before release IDs existed carries only a name, and
-// sameAlbum treats it as that name's wildcard. It must still match the
+// disc.SameAlbum treats it as that name's wildcard. It must still match the
 // ID-bearing album it refers to.
 func TestLastPlayedIndexMatchesUnIDdEntry(t *testing.T) {
-	stored := Album{Artist: "Slowdive", Title: "Souvlaki"}
-	synced := Album{ReleaseID: 42, Artist: "Slowdive", Title: "Souvlaki"}
+	stored := disc.Album{Artist: "Slowdive", Title: "Souvlaki"}
+	synced := disc.Album{ReleaseID: 42, Artist: "Slowdive", Title: "Souvlaki"}
 	if _, played := lastPlayedIndex(histOf(stored), synced); !played {
 		t.Error("an un-ID'd history entry did not match its synced self")
 	}
 }
 
 func TestRecentlyPlayedReturnsDistinctAlbums(t *testing.T) {
-	a := Album{ReleaseID: 1, Artist: "A", Title: "1"}
-	b := Album{ReleaseID: 2, Artist: "B", Title: "2"}
+	a := disc.Album{ReleaseID: 1, Artist: "A", Title: "1"}
+	b := disc.Album{ReleaseID: 2, Artist: "B", Title: "2"}
 	// a played three times in a row must not consume the whole window.
 	got := recentlyPlayed(histOf(b, a, a, a), 2)
 	if len(got) != 2 {
@@ -121,23 +123,23 @@ func TestRecentlyPlayedReturnsDistinctAlbums(t *testing.T) {
 }
 
 func TestRecentlyPlayedShorterThanWindow(t *testing.T) {
-	got := recentlyPlayed(histOf(Album{ReleaseID: 1, Artist: "A", Title: "1"}), 10)
+	got := recentlyPlayed(histOf(disc.Album{ReleaseID: 1, Artist: "A", Title: "1"}), 10)
 	if len(got) != 1 {
 		t.Errorf("len = %d, want 1", len(got))
 	}
 }
 
 func TestRecentlyPlayedZeroWindow(t *testing.T) {
-	if got := recentlyPlayed(histOf(Album{ReleaseID: 1, Artist: "A", Title: "1"}), 0); len(got) != 0 {
+	if got := recentlyPlayed(histOf(disc.Album{ReleaseID: 1, Artist: "A", Title: "1"}), 0); len(got) != 0 {
 		t.Errorf("len = %d, want 0", len(got))
 	}
 }
 
 func TestUnheardOnlyKeepsNeverPlayed(t *testing.T) {
-	played := Album{ReleaseID: 1, Artist: "A", Title: "1"}
-	fresh := Album{ReleaseID: 2, Artist: "B", Title: "2"}
+	played := disc.Album{ReleaseID: 1, Artist: "A", Title: "1"}
+	fresh := disc.Album{ReleaseID: 2, Artist: "B", Title: "2"}
 
-	got := unheardOnly([]Album{played, fresh}, histOf(played))
+	got := unheardOnly([]disc.Album{played, fresh}, histOf(played))
 	if len(got) != 1 {
 		t.Fatalf("len = %d, want 1; got %+v", len(got), got)
 	}
@@ -147,7 +149,7 @@ func TestUnheardOnlyKeepsNeverPlayed(t *testing.T) {
 }
 
 func TestUnheardOnlyEmptyHistoryKeepsEverything(t *testing.T) {
-	pool := []Album{{ReleaseID: 1, Artist: "A", Title: "1"}, {ReleaseID: 2, Artist: "B", Title: "2"}}
+	pool := []disc.Album{{ReleaseID: 1, Artist: "A", Title: "1"}, {ReleaseID: 2, Artist: "B", Title: "2"}}
 	if got := unheardOnly(pool, nil); len(got) != 2 {
 		t.Errorf("len = %d, want 2", len(got))
 	}
@@ -156,11 +158,11 @@ func TestUnheardOnlyEmptyHistoryKeepsEverything(t *testing.T) {
 // A history entry with no release ID does not say which pressing was played,
 // so --unheard must not claim any of them is unheard.
 func TestUnheardOnlyIsConservativeAboutUnIDdEntries(t *testing.T) {
-	pool := []Album{
+	pool := []disc.Album{
 		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 2, Artist: "Slowdive", Title: "Souvlaki"},
 	}
-	entries := histOf(Album{Artist: "Slowdive", Title: "Souvlaki"})
+	entries := histOf(disc.Album{Artist: "Slowdive", Title: "Souvlaki"})
 
 	if got := unheardOnly(pool, entries); len(got) != 0 {
 		t.Errorf("len = %d, want 0; an un-ID'd entry must hide every pressing of its title", len(got))
@@ -173,10 +175,10 @@ func seededRNG() *rand.Rand {
 	return rand.New(rand.NewPCG(1, 2))
 }
 
-func poolOf(n int) []Album {
-	pool := make([]Album, n)
+func poolOf(n int) []disc.Album {
+	pool := make([]disc.Album, n)
 	for i := range pool {
-		pool[i] = Album{ReleaseID: i + 1, Artist: "A", Title: strconv.Itoa(i + 1)}
+		pool[i] = disc.Album{ReleaseID: i + 1, Artist: "A", Title: strconv.Itoa(i + 1)}
 	}
 	return pool
 }
@@ -228,12 +230,12 @@ func TestPickAlbumAnyIgnoresHistory(t *testing.T) {
 // un-ID'd history entry is a wildcard matching every pressing of its title,
 // so exclusion really can empty a pool.
 func TestPickAlbumFallsBackWhenExclusionEmptiesThePool(t *testing.T) {
-	pool := []Album{
+	pool := []disc.Album{
 		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 2, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 3, Artist: "Slowdive", Title: "Souvlaki"},
 	}
-	entries := histOf(Album{Artist: "Slowdive", Title: "Souvlaki"})
+	entries := histOf(disc.Album{Artist: "Slowdive", Title: "Souvlaki"})
 
 	got := pickAlbum(pool, entries, drawFresh, seededRNG())
 	if got.ReleaseID == 0 {
@@ -250,12 +252,12 @@ func TestPickAlbumSinglePool(t *testing.T) {
 }
 
 func TestStaleWeightsRankNeverPlayedHighest(t *testing.T) {
-	old := Album{ReleaseID: 1, Artist: "A", Title: "1"}
-	recent := Album{ReleaseID: 2, Artist: "B", Title: "2"}
-	never := Album{ReleaseID: 3, Artist: "C", Title: "3"}
+	old := disc.Album{ReleaseID: 1, Artist: "A", Title: "1"}
+	recent := disc.Album{ReleaseID: 2, Artist: "B", Title: "2"}
+	never := disc.Album{ReleaseID: 3, Artist: "C", Title: "3"}
 	entries := histOf(old, recent)
 
-	w := staleWeights([]Album{old, recent, never}, entries)
+	w := staleWeights([]disc.Album{old, recent, never}, entries)
 	if !(w[2] > w[0] && w[0] > w[1]) {
 		t.Errorf("weights = %v, want never-played > long-unplayed > recent", w)
 	}
@@ -276,7 +278,7 @@ func TestStaleWeightsEmptyHistoryIsUniform(t *testing.T) {
 // The uniform draw, which is what --draw any restores. This replaces the old
 // TestRandomAlbum from collection_test.go.
 func TestPickAlbumAnyReturnsValidAlbums(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{Artist: "A", Title: "1"},
 		{Artist: "B", Title: "2"},
 		{Artist: "C", Title: "3"},
@@ -307,12 +309,12 @@ func TestWeightedIndexRespectsWeights(t *testing.T) {
 // same pool. A plain `pick` between two `pick --favorites` must not consume the
 // window and let a just-played favorite straight back in.
 func TestExcludeRecentFillsTheWindowFromThePoolNotGlobalHistory(t *testing.T) {
-	pool := []Album{
+	pool := []disc.Album{
 		{ReleaseID: 1, Artist: "Fav", Title: "One"},
 		{ReleaseID: 2, Artist: "Fav", Title: "Two"},
 		{ReleaseID: 3, Artist: "Fav", Title: "Three"},
 	}
-	outsider := Album{ReleaseID: 99, Artist: "Other", Title: "X"}
+	outsider := disc.Album{ReleaseID: 99, Artist: "Other", Title: "X"}
 
 	// Pool of 3 gives a window of 1. Release 1 is the most recent pick from
 	// within the pool; the outsider is the most recent pick overall.
@@ -332,7 +334,7 @@ func TestExcludeRecentFillsTheWindowFromThePoolNotGlobalHistory(t *testing.T) {
 // outside the current filter -- must not occupy a window slot either.
 func TestExcludeRecentIgnoresHistoryOutsideThePool(t *testing.T) {
 	pool := poolOf(9) // window 3
-	gone := []Album{
+	gone := []disc.Album{
 		{ReleaseID: 101, Artist: "Sold", Title: "A"},
 		{ReleaseID: 102, Artist: "Sold", Title: "B"},
 		{ReleaseID: 103, Artist: "Sold", Title: "C"},

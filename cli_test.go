@@ -10,7 +10,29 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
+
+// include and years mirror the fixture helpers in internal/disc's
+// filter_test.go. The two packages cannot share an unexported helper, so
+// each keeps its own copy.
+func include(vals ...string) disc.FieldFilter { return disc.FieldFilter{Include: vals} }
+
+// years builds an inclusive YearFilter from --year spellings, so the tests
+// below read the way the command line does.
+func years(t *testing.T, vals ...string) disc.YearFilter {
+	t.Helper()
+	var yf disc.YearFilter
+	for _, v := range vals {
+		r, err := disc.ParseYearValue(v)
+		if err != nil {
+			t.Fatalf("ParseYearValue(%q): %v", v, err)
+		}
+		yf.Include = append(yf.Include, r)
+	}
+	return yf
+}
 
 func TestParseInterspersedFlagsAfterPositional(t *testing.T) {
 	fs, _ := newFlagSet("favorite")
@@ -816,7 +838,7 @@ func TestAllFilterTakingCommandsRegisterFilterFlags(t *testing.T) {
 		"--genre", "jazz", "--exclude-label", "x",
 		"--year", "1975", "--decade", "70s", "--release-id", "42",
 	}
-	check := func(t *testing.T, filter Filter) {
+	check := func(t *testing.T, filter disc.Filter) {
 		t.Helper()
 		if len(filter.Genre.Include) != 1 || filter.Genre.Include[0] != "jazz" {
 			t.Errorf("Genre.Include = %q, want [jazz]", filter.Genre.Include)
@@ -890,7 +912,7 @@ func TestYearAndDecadeFeedOneConstraint(t *testing.T) {
 	if len(filter.Year.Include) != 2 {
 		t.Fatalf("Year.Include = %v, want two ranges", filter.Year.Include)
 	}
-	albums := []Album{
+	albums := []disc.Album{
 		{Artist: "A", Year: 1959},
 		{Artist: "B", Year: 1975},
 		{Artist: "C", Year: 1985},
@@ -949,11 +971,11 @@ func TestEmptyFilterValuesAreDropped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Filter: %v", err)
 	}
-	if filter.any() {
+	if filter.Any() {
 		t.Errorf("filter = %+v, want nothing set", filter)
 	}
 
-	albums := []Album{{Artist: "A", Genres: []string{"Jazz"}}, {Artist: "B"}}
+	albums := []disc.Album{{Artist: "A", Genres: []string{"Jazz"}}, {Artist: "B"}}
 	if got := filter.Apply(albums); len(got) != 2 {
 		t.Errorf("matched %d albums, want all 2", len(got))
 	}
@@ -1009,7 +1031,7 @@ func TestParseSelectionAcceptsQueryAndTheNewFilters(t *testing.T) {
 		if len(cfg.filter.Artist.Include) != 1 || len(cfg.filter.Title.Include) != 1 {
 			t.Errorf("%s: artist/title not parsed: %+v", name, cfg.filter)
 		}
-		if len(cfg.filter.Year.Include) != 1 || cfg.filter.Year.Include[0] != (yearRange{1970, 1979}) {
+		if len(cfg.filter.Year.Include) != 1 || cfg.filter.Year.Include[0] != (disc.YearRange{Start: 1970, End: 1979}) {
 			t.Errorf("%s: Year.Include = %v, want [{1970 1979}]", name, cfg.filter.Year.Include)
 		}
 		if len(cfg.filter.Genre.Exclude) != 1 || cfg.filter.Genre.Exclude[0] != "rock" {

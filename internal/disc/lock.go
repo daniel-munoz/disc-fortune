@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ const lockFilePerms = 0644
 // descriptors, deadlock even inside a single process, so withFileLock belongs
 // at the outermost layer of a read-modify-write and never inside another one.
 func withFileLock(path string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 

@@ -9,10 +9,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 func TestRunListOutput(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{Artist: "Slowdive", Title: "Souvlaki", Year: 1993, Label: "Creation Records", Genres: []string{"Shoegaze"}},
 		{Artist: "Ride", Title: "Nowhere", Year: 1990, Label: "Creation Records", Genres: []string{"Shoegaze"}},
 	}
@@ -29,14 +31,14 @@ func TestRunListOutput(t *testing.T) {
 }
 
 func TestRunListEmpty(t *testing.T) {
-	out := formatList([]Album{}, false, false)
+	out := formatList([]disc.Album{}, false, false)
 	if !strings.Contains(out, "No albums") {
 		t.Errorf("expected empty message, got: %q", out)
 	}
 }
 
 func TestRunListSeparator(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{Artist: "A", Title: "X"},
 		{Artist: "B", Title: "Y"},
 	}
@@ -48,7 +50,7 @@ func TestRunListSeparator(t *testing.T) {
 }
 
 func TestRunListSingular(t *testing.T) {
-	out := formatList([]Album{{Artist: "A", Title: "X"}}, false, false)
+	out := formatList([]disc.Album{{Artist: "A", Title: "X"}}, false, false)
 	if !strings.Contains(out, "1 album") {
 		t.Errorf("expected singular 'album', got: %q", out)
 	}
@@ -175,24 +177,24 @@ func fixturePaths(home string) (collection, favorites, history string) {
 	return filepath.Join(dir, "collection.json"), filepath.Join(dir, "favorites.json"), filepath.Join(dir, "history.json")
 }
 
-func mustSaveCollection(t *testing.T, path string, albums []Album) {
+func mustSaveCollection(t *testing.T, path string, albums []disc.Album) {
 	t.Helper()
-	if err := saveCollectionTo(path, albums); err != nil {
-		t.Fatalf("saveCollectionTo: %v", err)
+	if err := disc.SaveCollectionTo(path, albums); err != nil {
+		t.Fatalf("disc.SaveCollectionTo: %v", err)
 	}
 }
 
-func mustSaveFavorites(t *testing.T, path string, albums []Album) {
+func mustSaveFavorites(t *testing.T, path string, albums []disc.Album) {
 	t.Helper()
-	if err := saveFavorites(path, albums); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := disc.SaveFavorites(path, albums); err != nil {
+		t.Fatalf("disc.SaveFavorites: %v", err)
 	}
 }
 
-func mustSaveHistory(t *testing.T, path string, entries []HistoryEntry) {
+func mustSaveHistory(t *testing.T, path string, entries []disc.HistoryEntry) {
 	t.Helper()
-	if err := saveHistory(path, entries); err != nil {
-		t.Fatalf("saveHistory: %v", err)
+	if err := disc.SaveHistory(path, entries); err != nil {
+		t.Fatalf("disc.SaveHistory: %v", err)
 	}
 }
 
@@ -202,9 +204,9 @@ func mustSaveHistory(t *testing.T, path string, entries []HistoryEntry) {
 // to reach the situation under test, then checks the real binary's exit
 // code via the subprocess helper above.
 func TestExitCodes(t *testing.T) {
-	miles := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
-	beatles := Album{Artist: "The Beatles", Title: "Revolver", Year: 1966}
-	who := Album{Artist: "The Who", Title: "Tommy", Year: 1969}
+	miles := disc.Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	beatles := disc.Album{Artist: "The Beatles", Title: "Revolver", Year: 1966}
+	who := disc.Album{Artist: "The Who", Title: "Tommy", Year: 1969}
 
 	tests := []struct {
 		name  string
@@ -222,7 +224,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"pick"},
 			setup: func(t *testing.T, home string) {
 				collection, _, _ := fixturePaths(home)
-				mustSaveCollection(t, collection, []Album{})
+				mustSaveCollection(t, collection, []disc.Album{})
 			},
 			want: 1,
 		},
@@ -236,7 +238,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"pick", "--year", "1899"},
 			setup: func(t *testing.T, home string) {
 				collection, _, _ := fixturePaths(home)
-				mustSaveCollection(t, collection, []Album{miles})
+				mustSaveCollection(t, collection, []disc.Album{miles})
 			},
 			want: 1,
 		},
@@ -245,7 +247,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"list", "--year", "1899"},
 			setup: func(t *testing.T, home string) {
 				collection, _, _ := fixturePaths(home)
-				mustSaveCollection(t, collection, []Album{miles})
+				mustSaveCollection(t, collection, []disc.Album{miles})
 			},
 			want: 1,
 		},
@@ -254,7 +256,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"favorite", "does not exist zzz"},
 			setup: func(t *testing.T, home string) {
 				collection, _, _ := fixturePaths(home)
-				mustSaveCollection(t, collection, []Album{miles})
+				mustSaveCollection(t, collection, []disc.Album{miles})
 			},
 			want: 1,
 		},
@@ -272,7 +274,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"unfavorite", "does not exist zzz"},
 			setup: func(t *testing.T, home string) {
 				_, favorites, _ := fixturePaths(home)
-				mustSaveFavorites(t, favorites, []Album{})
+				mustSaveFavorites(t, favorites, []disc.Album{})
 			},
 			want: 0,
 		},
@@ -280,13 +282,13 @@ func TestExitCodes(t *testing.T) {
 			name: "unfavorite: no match, favorites populated (exercises UnfavoriteNoMatch)",
 			args: []string{"unfavorite", "does not exist zzz"},
 			// Unlike the two subtests above, favorites.json here has a real,
-			// non-matching entry. loadFavoritesChecked succeeds (favorites
-			// isn't empty), so this reaches unfavoriteByQuery and its
+			// non-matching entry. disc.LoadFavoritesChecked succeeds (favorites
+			// isn't empty), so this reaches disc.UnfavoriteByQuery and its
 			// case UnfavoriteNoMatch switch arm in runUnfavorite, rather than
-			// the errNoFavorites shortcut the two subtests above take.
+			// the disc.ErrNoFavorites shortcut the two subtests above take.
 			setup: func(t *testing.T, home string) {
 				_, favorites, _ := fixturePaths(home)
-				mustSaveFavorites(t, favorites, []Album{miles})
+				mustSaveFavorites(t, favorites, []disc.Album{miles})
 			},
 			want: 0,
 		},
@@ -295,7 +297,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"favorite", "the"},
 			setup: func(t *testing.T, home string) {
 				collection, _, _ := fixturePaths(home)
-				mustSaveCollection(t, collection, []Album{beatles, who})
+				mustSaveCollection(t, collection, []disc.Album{beatles, who})
 			},
 			want: 1,
 		},
@@ -304,7 +306,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"unfavorite", "the"},
 			setup: func(t *testing.T, home string) {
 				_, favorites, _ := fixturePaths(home)
-				mustSaveFavorites(t, favorites, []Album{beatles, who})
+				mustSaveFavorites(t, favorites, []disc.Album{beatles, who})
 			},
 			want: 1,
 		},
@@ -313,8 +315,8 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"favorite"},
 			setup: func(t *testing.T, home string) {
 				_, favorites, history := fixturePaths(home)
-				mustSaveFavorites(t, favorites, []Album{miles})
-				mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+				mustSaveFavorites(t, favorites, []disc.Album{miles})
+				mustSaveHistory(t, history, []disc.HistoryEntry{{Album: miles, Timestamp: time.Now()}})
 			},
 			want: 0,
 		},
@@ -323,7 +325,7 @@ func TestExitCodes(t *testing.T) {
 			args: []string{"unfavorite"},
 			setup: func(t *testing.T, home string) {
 				_, _, history := fixturePaths(home)
-				mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+				mustSaveHistory(t, history, []disc.HistoryEntry{{Album: miles, Timestamp: time.Now()}})
 			},
 			want: 0,
 		},
@@ -348,14 +350,14 @@ func TestExitCodes(t *testing.T) {
 // absent from stdout), so `album=$(disc-fortune)` never captures error text
 // as if it were a real result and `2>/dev/null` actually silences it.
 func TestFailureDiagnosticsGoToStderr(t *testing.T) {
-	miles := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
-	beatles := Album{Artist: "The Beatles", Title: "Revolver", Year: 1966}
-	who := Album{Artist: "The Who", Title: "Tommy", Year: 1969}
+	miles := disc.Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	beatles := disc.Album{Artist: "The Beatles", Title: "Revolver", Year: 1966}
+	who := disc.Album{Artist: "The Who", Title: "Tommy", Year: 1969}
 
 	t.Run("pick: no albums match", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		got, stdout, stderr := runHelperSplit(t, home, "pick", "--year", "1899")
 		if got != 1 {
@@ -372,7 +374,7 @@ func TestFailureDiagnosticsGoToStderr(t *testing.T) {
 	t.Run("list: no albums match", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		got, stdout, stderr := runHelperSplit(t, home, "list", "--year", "1899")
 		if got != 1 {
@@ -389,7 +391,7 @@ func TestFailureDiagnosticsGoToStderr(t *testing.T) {
 	t.Run("favorite: multiple matches keeps the list on stdout but moves the trailer to stderr", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{beatles, who})
+		mustSaveCollection(t, collection, []disc.Album{beatles, who})
 
 		got, stdout, stderr := runHelperSplit(t, home, "favorite", "the")
 		if got != 1 {
@@ -409,7 +411,7 @@ func TestFailureDiagnosticsGoToStderr(t *testing.T) {
 	t.Run("unfavorite: multiple matches keeps the list on stdout but moves the trailer to stderr", func(t *testing.T) {
 		home := t.TempDir()
 		_, favorites, _ := fixturePaths(home)
-		mustSaveFavorites(t, favorites, []Album{beatles, who})
+		mustSaveFavorites(t, favorites, []disc.Album{beatles, who})
 
 		got, stdout, stderr := runHelperSplit(t, home, "unfavorite", "the")
 		if got != 1 {
@@ -430,7 +432,7 @@ func TestFailureDiagnosticsGoToStderr(t *testing.T) {
 // TestFormatListHidesIDsByDefault: everyday list output is unchanged from
 // v2.2.0 -- the release ID stays out of it.
 func TestFormatListHidesIDsByDefault(t *testing.T) {
-	albums := []Album{{ReleaseID: 1839278, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}}
+	albums := []disc.Album{{ReleaseID: 1839278, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}}
 
 	got := formatList(albums, false, false)
 	if strings.Contains(got, "1839278") || strings.Contains(got, "release") {
@@ -442,7 +444,7 @@ func TestFormatListHidesIDsByDefault(t *testing.T) {
 // that can tell two identical-looking pressings apart, and the only thing
 // --release-id can act on.
 func TestFormatListShowsIDsWhenAsked(t *testing.T) {
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 1839278, Artist: "Slowdive", Title: "Souvlaki", Year: 1993},
 		{ReleaseID: 9112233, Artist: "Slowdive", Title: "Souvlaki", Year: 1993},
 	}
@@ -458,7 +460,7 @@ func TestFormatListShowsIDsWhenAsked(t *testing.T) {
 // An entry with no ID -- written before v2.2.0 -- has nothing to show, and
 // must not render a bare "release 0".
 func TestFormatListOmitsAbsentIDs(t *testing.T) {
-	albums := []Album{{Artist: "Slowdive", Title: "Souvlaki"}}
+	albums := []disc.Album{{Artist: "Slowdive", Title: "Souvlaki"}}
 
 	got := formatList(albums, false, true)
 	if strings.Contains(got, "release") {
@@ -470,22 +472,22 @@ func TestFormatListOmitsAbsentIDs(t *testing.T) {
 // runFavorite sends an empty query to the last pick, so a --release-id with
 // no query has to be recognised there too, or the flag is silently ignored.
 func TestReleaseIDSelectsWithoutAQuery(t *testing.T) {
-	blue := Album{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}
-	clear := Album{ReleaseID: 222, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}
+	blue := disc.Album{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}
+	clear := disc.Album{ReleaseID: 222, Artist: "Slowdive", Title: "Souvlaki", Year: 1993}
 
 	t.Run("favorite", func(t *testing.T) {
 		home := t.TempDir()
 		collection, favorites, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{blue, clear})
+		mustSaveCollection(t, collection, []disc.Album{blue, clear})
 
 		code, stdout, stderr := runHelperSplit(t, home, "favorite", "--release-id", "222")
 		if code != 0 {
 			t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, stdout, stderr)
 		}
 
-		favs, err := loadFavorites(favorites)
+		favs, err := disc.LoadFavorites(favorites)
 		if err != nil {
-			t.Fatalf("loadFavorites: %v", err)
+			t.Fatalf("disc.LoadFavorites: %v", err)
 		}
 		if len(favs) != 1 || favs[0].ReleaseID != 222 {
 			t.Errorf("favorites = %+v, want only release 222", favs)
@@ -495,9 +497,9 @@ func TestReleaseIDSelectsWithoutAQuery(t *testing.T) {
 	t.Run("unfavorite", func(t *testing.T) {
 		home := t.TempDir()
 		collection, favorites, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{blue, clear})
-		if err := saveFavorites(favorites, []Album{blue, clear}); err != nil {
-			t.Fatalf("saveFavorites: %v", err)
+		mustSaveCollection(t, collection, []disc.Album{blue, clear})
+		if err := disc.SaveFavorites(favorites, []disc.Album{blue, clear}); err != nil {
+			t.Fatalf("disc.SaveFavorites: %v", err)
 		}
 
 		code, stdout, stderr := runHelperSplit(t, home, "unfavorite", "--release-id", "222")
@@ -505,9 +507,9 @@ func TestReleaseIDSelectsWithoutAQuery(t *testing.T) {
 			t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, stdout, stderr)
 		}
 
-		favs, err := loadFavorites(favorites)
+		favs, err := disc.LoadFavorites(favorites)
 		if err != nil {
-			t.Fatalf("loadFavorites: %v", err)
+			t.Fatalf("disc.LoadFavorites: %v", err)
 		}
 		if len(favs) != 1 || favs[0].ReleaseID != 111 {
 			t.Errorf("favorites = %+v, want only release 111 left", favs)
@@ -518,12 +520,12 @@ func TestReleaseIDSelectsWithoutAQuery(t *testing.T) {
 // TestNoMatchMessageNamesTheReleaseID: a query-less --release-id would
 // otherwise be reported as an empty query -- 'No albums match query ""'.
 func TestNoMatchMessageNamesTheReleaseID(t *testing.T) {
-	album := Album{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"}
+	album := disc.Album{ReleaseID: 111, Artist: "Slowdive", Title: "Souvlaki"}
 
 	t.Run("favorite", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{album})
+		mustSaveCollection(t, collection, []disc.Album{album})
 
 		code, _, stderr := runHelperSplit(t, home, "favorite", "--release-id", "999")
 		if code != 1 {
@@ -540,9 +542,9 @@ func TestNoMatchMessageNamesTheReleaseID(t *testing.T) {
 	t.Run("unfavorite", func(t *testing.T) {
 		home := t.TempDir()
 		collection, favorites, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{album})
-		if err := saveFavorites(favorites, []Album{album}); err != nil {
-			t.Fatalf("saveFavorites: %v", err)
+		mustSaveCollection(t, collection, []disc.Album{album})
+		if err := disc.SaveFavorites(favorites, []disc.Album{album}); err != nil {
+			t.Fatalf("disc.SaveFavorites: %v", err)
 		}
 
 		code, stdout, _ := runHelperSplit(t, home, "unfavorite", "--release-id", "999")
@@ -562,12 +564,12 @@ func TestPickUnheardExhaustedExitsOne(t *testing.T) {
 	home := t.TempDir()
 	collection, _, history := fixturePaths(home)
 
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
 	}
 	mustSaveCollection(t, collection, albums)
-	mustSaveHistory(t, history, []HistoryEntry{
+	mustSaveHistory(t, history, []disc.HistoryEntry{
 		{Album: albums[0], Timestamp: time.Now()},
 		{Album: albums[1], Timestamp: time.Now()},
 	})
@@ -588,12 +590,12 @@ func TestPickUnheardReturnsTheUnplayedOne(t *testing.T) {
 	home := t.TempDir()
 	collection, _, history := fixturePaths(home)
 
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
 	}
 	mustSaveCollection(t, collection, albums)
-	mustSaveHistory(t, history, []HistoryEntry{{Album: albums[0], Timestamp: time.Now()}})
+	mustSaveHistory(t, history, []disc.HistoryEntry{{Album: albums[0], Timestamp: time.Now()}})
 
 	code, stdout, _ := runHelperSplit(t, home, "pick", "--unheard")
 	if code != 0 {
@@ -607,7 +609,7 @@ func TestPickUnheardReturnsTheUnplayedOne(t *testing.T) {
 func TestPickRejectsBadDrawValue(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "A", Title: "1"}})
+	mustSaveCollection(t, collection, []disc.Album{{ReleaseID: 1, Artist: "A", Title: "1"}})
 
 	code, _, stderr := runHelperSplit(t, home, "pick", "--draw", "weighted")
 	if code != 1 {
@@ -622,12 +624,12 @@ func TestListUnheardFiltersPlayedAlbums(t *testing.T) {
 	home := t.TempDir()
 	collection, _, history := fixturePaths(home)
 
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"},
 		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
 	}
 	mustSaveCollection(t, collection, albums)
-	mustSaveHistory(t, history, []HistoryEntry{{Album: albums[0], Timestamp: time.Now()}})
+	mustSaveHistory(t, history, []disc.HistoryEntry{{Album: albums[0], Timestamp: time.Now()}})
 
 	code, stdout, _ := runHelperSplit(t, home, "list", "--unheard")
 	if code != 0 {
@@ -648,9 +650,9 @@ func TestListUnheardExhaustedExitsOne(t *testing.T) {
 	home := t.TempDir()
 	collection, _, history := fixturePaths(home)
 
-	album := Album{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}
-	mustSaveCollection(t, collection, []Album{album})
-	mustSaveHistory(t, history, []HistoryEntry{{Album: album, Timestamp: time.Now()}})
+	album := disc.Album{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}
+	mustSaveCollection(t, collection, []disc.Album{album})
+	mustSaveHistory(t, history, []disc.HistoryEntry{{Album: album, Timestamp: time.Now()}})
 
 	code, stdout, stderr := runHelperSplit(t, home, "list", "--unheard")
 	if code != 1 {
@@ -676,13 +678,13 @@ func TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw(t *testing.T) {
 	home := t.TempDir()
 	collection, favorites, _ := fixturePaths(home)
 
-	fav1 := Album{ReleaseID: 1, Artist: "Fav", Title: "One"}
-	fav2 := Album{ReleaseID: 2, Artist: "Fav", Title: "Two"}
-	fav3 := Album{ReleaseID: 3, Artist: "Fav", Title: "Three"}
-	nonFav := Album{ReleaseID: 4, Artist: "NotAFavorite", Title: "Excluded"}
+	fav1 := disc.Album{ReleaseID: 1, Artist: "Fav", Title: "One"}
+	fav2 := disc.Album{ReleaseID: 2, Artist: "Fav", Title: "Two"}
+	fav3 := disc.Album{ReleaseID: 3, Artist: "Fav", Title: "Three"}
+	nonFav := disc.Album{ReleaseID: 4, Artist: "NotAFavorite", Title: "Excluded"}
 
-	mustSaveCollection(t, collection, []Album{fav1, fav2, fav3, nonFav})
-	mustSaveFavorites(t, favorites, []Album{fav1, fav2, fav3})
+	mustSaveCollection(t, collection, []disc.Album{fav1, fav2, fav3, nonFav})
+	mustSaveFavorites(t, favorites, []disc.Album{fav1, fav2, fav3})
 
 	// history.json persists across these calls (each is a fresh process
 	// reading and writing the same fixture directory), so this both
@@ -724,7 +726,7 @@ func TestPickDefaultDrawAvoidsRepeatsAcrossSequentialRuns(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
 
-	albums := []Album{
+	albums := []disc.Album{
 		{ReleaseID: 1, Artist: "Aardvark", Title: "One"},
 		{ReleaseID: 2, Artist: "Bobcat", Title: "Two"},
 		{ReleaseID: 3, Artist: "Coyote", Title: "Three"},
@@ -794,18 +796,18 @@ func TestPickFavoritesAntiRepeatSurvivesAnInterleavedUnfilteredPick(t *testing.T
 	home := t.TempDir()
 	collection, favoritesPath, _ := fixturePaths(home)
 
-	favs := []Album{
+	favs := []disc.Album{
 		{ReleaseID: 1, Artist: "Aardvark", Title: "One", Genres: []string{"Jazz"}},
 		{ReleaseID: 2, Artist: "Bobcat", Title: "Two", Genres: []string{"Jazz"}},
 		{ReleaseID: 3, Artist: "Coyote", Title: "Three", Genres: []string{"Jazz"}},
 	}
-	others := []Album{
+	others := []disc.Album{
 		{ReleaseID: 101, Artist: "Dingo", Title: "Four", Genres: []string{"Filler"}},
 		{ReleaseID: 102, Artist: "Egret", Title: "Five", Genres: []string{"Filler"}},
 		{ReleaseID: 103, Artist: "Falcon", Title: "Six", Genres: []string{"Filler"}},
 		{ReleaseID: 104, Artist: "Gannet", Title: "Seven", Genres: []string{"Filler"}},
 	}
-	mustSaveCollection(t, collection, append(append([]Album{}, favs...), others...))
+	mustSaveCollection(t, collection, append(append([]disc.Album{}, favs...), others...))
 	mustSaveFavorites(t, favoritesPath, favs)
 
 	firstLine := func(s string) string {
@@ -844,13 +846,13 @@ func TestPickFavoritesAntiRepeatSurvivesAnInterleavedUnfilteredPick(t *testing.T
 // TestJSONOutput drives the real binary and parses what it emits. A payload
 // that only looks right is not enough -- these decode it.
 func TestJSONOutput(t *testing.T) {
-	miles := Album{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}}
-	bare := Album{Artist: "Some Artist", Title: "Untitled"}
+	miles := disc.Album{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}}
+	bare := disc.Album{Artist: "Some Artist", Title: "Untitled"}
 
 	t.Run("pick emits one album and exits 0", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		code, stdout, _ := runHelperSplit(t, home, "pick", "--json")
 		if code != 0 {
@@ -871,14 +873,14 @@ func TestJSONOutput(t *testing.T) {
 	t.Run("pick still records history", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, historyFile := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		if code, _, stderr := runHelperSplit(t, home, "pick", "--json"); code != 0 {
 			t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
 		}
-		entries, err := loadHistory(historyFile)
+		entries, err := disc.LoadHistory(historyFile)
 		if err != nil {
-			t.Fatalf("loadHistory: %v", err)
+			t.Fatalf("disc.LoadHistory: %v", err)
 		}
 		if len(entries) != 1 {
 			t.Errorf("history has %d entries, want 1 -- --json is a format flag, not a dry run", len(entries))
@@ -888,7 +890,7 @@ func TestJSONOutput(t *testing.T) {
 	t.Run("list emits albums and a count", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles, bare})
+		mustSaveCollection(t, collection, []disc.Album{miles, bare})
 
 		code, stdout, _ := runHelperSplit(t, home, "list", "--json")
 		if code != 0 {
@@ -906,7 +908,7 @@ func TestJSONOutput(t *testing.T) {
 	t.Run("an album with nothing known still carries every key", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{bare})
+		mustSaveCollection(t, collection, []disc.Album{bare})
 
 		_, stdout, _ := runHelperSplit(t, home, "list", "--json")
 		for _, key := range []string{`"release_id"`, `"artist"`, `"title"`, `"year"`, `"label"`, `"catno"`, `"genres"`, `"formats"`} {
@@ -922,12 +924,12 @@ func TestJSONOutput(t *testing.T) {
 	t.Run("history is most recent first with a count", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, historyFile := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 		base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
-		mustSaveHistory(t, historyFile, []HistoryEntry{
-			{Album: Album{Artist: "oldest", Title: "1"}, Timestamp: base},
-			{Album: Album{Artist: "middle", Title: "2"}, Timestamp: base.Add(time.Hour)},
-			{Album: Album{Artist: "newest", Title: "3"}, Timestamp: base.Add(2 * time.Hour)},
+		mustSaveHistory(t, historyFile, []disc.HistoryEntry{
+			{Album: disc.Album{Artist: "oldest", Title: "1"}, Timestamp: base},
+			{Album: disc.Album{Artist: "middle", Title: "2"}, Timestamp: base.Add(time.Hour)},
+			{Album: disc.Album{Artist: "newest", Title: "3"}, Timestamp: base.Add(2 * time.Hour)},
 		})
 
 		code, stdout, _ := runHelperSplit(t, home, "history", "--json", "2")
@@ -951,12 +953,12 @@ func TestJSONOutput(t *testing.T) {
 // --json is a formatting flag: every exit code and every stream stays as it
 // was, so anyone scripting today keeps working.
 func TestJSONDoesNotChangeSemantics(t *testing.T) {
-	miles := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	miles := disc.Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
 
 	t.Run("list matching nothing still exits 1 with an empty stdout", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		code, stdout, stderr := runHelperSplit(t, home, "list", "--json", "--year", "1899")
 		if code != 1 {
@@ -973,7 +975,7 @@ func TestJSONDoesNotChangeSemantics(t *testing.T) {
 	t.Run("pick matching nothing still exits 1 with an empty stdout", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		code, stdout, _ := runHelperSplit(t, home, "pick", "--json", "--year", "1899")
 		if code != 1 {
@@ -991,7 +993,7 @@ func TestJSONDoesNotChangeSemantics(t *testing.T) {
 	t.Run("history on an empty history exits 0 with an empty payload", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, historyFile := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 		mustSaveHistory(t, historyFile, nil)
 
 		code, stdout, _ := runHelperSplit(t, home, "history", "--json")
@@ -1013,8 +1015,8 @@ func TestJSONDoesNotChangeSemantics(t *testing.T) {
 	t.Run("list --json --unheard on a fully-heard collection exits 1 with empty stdout", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, history := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
-		mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+		mustSaveCollection(t, collection, []disc.Album{miles})
+		mustSaveHistory(t, history, []disc.HistoryEntry{{Album: miles, Timestamp: time.Now()}})
 
 		code, stdout, stderr := runHelperSplit(t, home, "list", "--json", "--unheard")
 		if code != 1 {
@@ -1033,7 +1035,7 @@ func TestJSONDoesNotChangeSemantics(t *testing.T) {
 	t.Run("--color=always injects no escapes", func(t *testing.T) {
 		home := t.TempDir()
 		collection, _, _ := fixturePaths(home)
-		mustSaveCollection(t, collection, []Album{miles})
+		mustSaveCollection(t, collection, []disc.Album{miles})
 
 		for _, cmd := range [][]string{
 			{"pick", "--json", "--color", "always"},
@@ -1052,11 +1054,11 @@ func TestStatsEndToEnd(t *testing.T) {
 	home := t.TempDir()
 	collection, favorites, history := fixturePaths(home)
 
-	miles := Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}}
-	ride := Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere", Year: 1990, Label: "Creation", Genres: []string{"Shoegaze"}}
-	mustSaveCollection(t, collection, []Album{miles, ride})
-	mustSaveFavorites(t, favorites, []Album{miles})
-	mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+	miles := disc.Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", Genres: []string{"Jazz"}}
+	ride := disc.Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere", Year: 1990, Label: "Creation", Genres: []string{"Shoegaze"}}
+	mustSaveCollection(t, collection, []disc.Album{miles, ride})
+	mustSaveFavorites(t, favorites, []disc.Album{miles})
+	mustSaveHistory(t, history, []disc.HistoryEntry{{Album: miles, Timestamp: time.Now()}})
 
 	code, stdout, _ := runHelperSplit(t, home, "stats")
 	if code != 0 {
@@ -1072,7 +1074,7 @@ func TestStatsEndToEnd(t *testing.T) {
 func TestStatsJSONParses(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{
+	mustSaveCollection(t, collection, []disc.Album{
 		{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Genres: []string{"Jazz"}},
 	})
 
@@ -1100,7 +1102,7 @@ func TestStatsJSONParses(t *testing.T) {
 func TestStatsEmptyMatchExitsOneInBothFormats(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "Ride", Title: "Nowhere", Year: 1990}})
+	mustSaveCollection(t, collection, []disc.Album{{ReleaseID: 1, Artist: "Ride", Title: "Nowhere", Year: 1990}})
 
 	for _, args := range [][]string{{"stats", "--genre", "polka"}, {"stats", "--genre", "polka", "--json"}} {
 		code, stdout, stderr := runHelperSplit(t, home, args...)
@@ -1119,9 +1121,9 @@ func TestStatsEmptyMatchExitsOneInBothFormats(t *testing.T) {
 func TestStatsFavoritesOnlyHeader(t *testing.T) {
 	home := t.TempDir()
 	collection, favorites, _ := fixturePaths(home)
-	miles := Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
-	mustSaveCollection(t, collection, []Album{miles, {ReleaseID: 2, Artist: "Ride", Title: "Nowhere", Year: 1990}})
-	mustSaveFavorites(t, favorites, []Album{miles})
+	miles := disc.Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
+	mustSaveCollection(t, collection, []disc.Album{miles, {ReleaseID: 2, Artist: "Ride", Title: "Nowhere", Year: 1990}})
+	mustSaveFavorites(t, favorites, []disc.Album{miles})
 
 	code, stdout, _ := runHelperSplit(t, home, "stats", "--favorites")
 	if code != 0 {
@@ -1135,9 +1137,9 @@ func TestStatsFavoritesOnlyHeader(t *testing.T) {
 func TestOpenPrintsTheLastPicksURL(t *testing.T) {
 	home := t.TempDir()
 	collection, _, history := fixturePaths(home)
-	miles := Album{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue"}
-	mustSaveCollection(t, collection, []Album{miles})
-	mustSaveHistory(t, history, []HistoryEntry{{Album: miles, Timestamp: time.Now()}})
+	miles := disc.Album{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue"}
+	mustSaveCollection(t, collection, []disc.Album{miles})
+	mustSaveHistory(t, history, []disc.HistoryEntry{{Album: miles, Timestamp: time.Now()}})
 
 	code, stdout, stderr := runHelperSplit(t, home, "open", "--print")
 	if code != 0 {
@@ -1154,7 +1156,7 @@ func TestOpenPrintsTheLastPicksURL(t *testing.T) {
 func TestOpenPrintsAQueriedReleasesURL(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{
+	mustSaveCollection(t, collection, []disc.Album{
 		{ReleaseID: 1839278, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"},
 	})
@@ -1171,7 +1173,7 @@ func TestOpenPrintsAQueriedReleasesURL(t *testing.T) {
 func TestOpenReleaseIDNeedsNoQuery(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{{ReleaseID: 42, Artist: "A", Title: "B"}})
+	mustSaveCollection(t, collection, []disc.Album{{ReleaseID: 42, Artist: "A", Title: "B"}})
 
 	code, stdout, _ := runHelperSplit(t, home, "open", "--release-id", "42", "--print")
 	if code != 0 {
@@ -1187,7 +1189,7 @@ func TestOpenReleaseIDNeedsNoQuery(t *testing.T) {
 func TestOpenAmbiguousQueryListsCandidates(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{
+	mustSaveCollection(t, collection, []disc.Album{
 		{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue"},
 	})
@@ -1207,7 +1209,7 @@ func TestOpenAmbiguousQueryListsCandidates(t *testing.T) {
 func TestOpenNoMatchExitsOne(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "Ride", Title: "Nowhere"}})
+	mustSaveCollection(t, collection, []disc.Album{{ReleaseID: 1, Artist: "Ride", Title: "Nowhere"}})
 
 	code, _, stderr := runHelperSplit(t, home, "open", "kind of blue")
 	if code != 1 {
@@ -1224,9 +1226,9 @@ func TestOpenNoMatchExitsOne(t *testing.T) {
 func TestOpenWithoutAReleaseIDExitsOne(t *testing.T) {
 	home := t.TempDir()
 	collection, _, history := fixturePaths(home)
-	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	mustSaveCollection(t, collection, []Album{legacy})
-	mustSaveHistory(t, history, []HistoryEntry{{Album: legacy, Timestamp: time.Now()}})
+	legacy := disc.Album{Artist: "Miles Davis", Title: "Kind of Blue"}
+	mustSaveCollection(t, collection, []disc.Album{legacy})
+	mustSaveHistory(t, history, []disc.HistoryEntry{{Album: legacy, Timestamp: time.Now()}})
 
 	code, stdout, stderr := runHelperSplit(t, home, "open", "--print")
 	if code != 1 {
@@ -1253,7 +1255,7 @@ func TestOpenHasNoJSONFlag(t *testing.T) {
 func TestOpenWithNoHistoryExitsOne(t *testing.T) {
 	home := t.TempDir()
 	collection, _, _ := fixturePaths(home)
-	mustSaveCollection(t, collection, []Album{{ReleaseID: 1, Artist: "A", Title: "B"}})
+	mustSaveCollection(t, collection, []disc.Album{{ReleaseID: 1, Artist: "A", Title: "B"}})
 
 	code, _, stderr := runHelperSplit(t, home, "open", "--print")
 	if code != 1 {

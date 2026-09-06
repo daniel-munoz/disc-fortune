@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"errors"
@@ -53,18 +53,18 @@ func containsAny(values []string, needle string) bool {
 	return false
 }
 
-// yearRange is an inclusive span of years. A single year is a range of one.
-type yearRange struct{ start, end int }
+// YearRange is an inclusive span of years. A single year is a range of one.
+type YearRange struct{ Start, End int }
 
-func (r yearRange) contains(year int) bool { return year >= r.start && year <= r.end }
+func (r YearRange) contains(year int) bool { return year >= r.Start && year <= r.End }
 
 // YearFilter is FieldFilter's shape over parsed ranges, because --year
 // compares numerically rather than by substring. --decade appends to it: they
 // are two spellings of one field, so --year 1959 --decade 70s means "1959 or
 // the 70s" rather than the empty intersection of two AND-ed fields.
 type YearFilter struct {
-	Include []yearRange
-	Exclude []yearRange
+	Include []YearRange
+	Exclude []YearRange
 }
 
 // matches reports whether an album's year passes. A zero year means Discogs
@@ -94,35 +94,35 @@ func (yf YearFilter) matches(year int) bool {
 // have already seen and scripted against.
 var errBadYearFormat = errors.New("invalid year format. Use --year 1975 or --year 1970-1980")
 
-// parseYearValue parses one --year value: a single year, or a "start-end"
+// ParseYearValue parses one --year value: a single year, or a "start-end"
 // range whose ends are swapped when given backwards.
-func parseYearValue(s string) (yearRange, error) {
+func ParseYearValue(s string) (YearRange, error) {
 	s = strings.TrimSpace(s)
 
 	if strings.Contains(s, "-") {
 		parts := strings.Split(s, "-")
 		if len(parts) != 2 {
-			return yearRange{}, errBadYearFormat
+			return YearRange{}, errBadYearFormat
 		}
 		start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
 		end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err1 != nil || err2 != nil {
-			return yearRange{}, errBadYearFormat
+			return YearRange{}, errBadYearFormat
 		}
 		if start > end {
 			start, end = end, start
 		}
-		return yearRange{start, end}, nil
+		return YearRange{start, end}, nil
 	}
 
 	year, err := strconv.Atoi(s)
 	if err != nil {
-		return yearRange{}, errBadYearFormat
+		return YearRange{}, errBadYearFormat
 	}
-	return yearRange{year, year}, nil
+	return YearRange{year, year}, nil
 }
 
-// parseDecadeValue parses one --decade value into the ten years it names.
+// ParseDecadeValue parses one --decade value into the ten years it names.
 // Accepted: 1970s, 1970, any year within a decade, and the two-digit forms
 // 30s through 90s -- unambiguous because there are no 2030s pressings yet.
 // Refused: 00s, 10s and 20s, which could name either century.
@@ -132,28 +132,28 @@ func parseYearValue(s string) (yearRange, error) {
 // that has begun", which silently changes what --decade 30s means in 2030 and
 // forces every test onto a fixed clock. Refusing the three genuinely
 // ambiguous inputs is the only rule that is both stable and honest.
-func parseDecadeValue(s string) (yearRange, error) {
+func ParseDecadeValue(s string) (YearRange, error) {
 	badFormat := fmt.Errorf("invalid decade %q. Use --decade 70s or --decade 1970s", s)
 
 	v := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(s)), "s")
 	if len(v) != 2 && len(v) != 4 {
-		return yearRange{}, badFormat
+		return YearRange{}, badFormat
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 0 {
-		return yearRange{}, badFormat
+		return YearRange{}, badFormat
 	}
 
 	if len(v) == 2 {
 		d := n - n%10
 		if d < 30 {
-			return yearRange{}, fmt.Errorf("ambiguous decade %q: write 19%02ds or 20%02ds", s, d, d)
+			return YearRange{}, fmt.Errorf("ambiguous decade %q: write 19%02ds or 20%02ds", s, d, d)
 		}
 		n = 1900 + d
 	}
 
 	start := n - n%10
-	return yearRange{start, start + 9}, nil
+	return YearRange{start, start + 9}, nil
 }
 
 // filterField describes one substring-matched filter: the flag name it is
@@ -166,57 +166,58 @@ func parseDecadeValue(s string) (yearRange, error) {
 // them numerically, and two flag names (--year and --decade) feed it, so
 // forcing it into this shape would cost more than the duplication saves.
 type filterField struct {
-	name       string
-	help       string
-	albumValue func(Album) []string
-	part       func(*Filter) *FieldFilter
+	Name       string
+	Help       string
+	AlbumValue func(Album) []string
+	Part       func(*Filter) *FieldFilter
 }
 
-// queryField is the index of the query entry below. Query is special twice
+// QueryField is the index of the query entry below. Query is special twice
 // over: it is the one field that satisfies favorite's "requires a query"
 // rule, and the one whose inclusions do not count as narrowing.
 // TestQueryIsTheFirstFilterField pins this.
-const queryField = 0
+const QueryField = 0
 
-var filterFields = []filterField{
+// Fields is the table of substring-matched filters, in flag order.
+var Fields = []filterField{
 	{
-		name:       "query",
-		help:       `Filter by "Artist - Title" (case-insensitive substring)`,
-		albumValue: func(a Album) []string { return []string{a.Key()} },
-		part:       func(f *Filter) *FieldFilter { return &f.Query },
+		Name:       "query",
+		Help:       `Filter by "Artist - Title" (case-insensitive substring)`,
+		AlbumValue: func(a Album) []string { return []string{a.Key()} },
+		Part:       func(f *Filter) *FieldFilter { return &f.Query },
 	},
 	{
-		name:       "artist",
-		help:       "Filter by artist",
-		albumValue: func(a Album) []string { return []string{a.Artist} },
-		part:       func(f *Filter) *FieldFilter { return &f.Artist },
+		Name:       "artist",
+		Help:       "Filter by artist",
+		AlbumValue: func(a Album) []string { return []string{a.Artist} },
+		Part:       func(f *Filter) *FieldFilter { return &f.Artist },
 	},
 	{
-		name:       "title",
-		help:       "Filter by title",
-		albumValue: func(a Album) []string { return []string{a.Title} },
-		part:       func(f *Filter) *FieldFilter { return &f.Title },
+		Name:       "title",
+		Help:       "Filter by title",
+		AlbumValue: func(a Album) []string { return []string{a.Title} },
+		Part:       func(f *Filter) *FieldFilter { return &f.Title },
 	},
 	{
-		name:       "genre",
-		help:       "Filter by genre",
-		albumValue: func(a Album) []string { return a.Genres },
-		part:       func(f *Filter) *FieldFilter { return &f.Genre },
+		Name:       "genre",
+		Help:       "Filter by genre",
+		AlbumValue: func(a Album) []string { return a.Genres },
+		Part:       func(f *Filter) *FieldFilter { return &f.Genre },
 	},
 	{
-		name:       "label",
-		help:       "Filter by label",
-		albumValue: func(a Album) []string { return []string{a.Label} },
-		part:       func(f *Filter) *FieldFilter { return &f.Label },
+		Name:       "label",
+		Help:       "Filter by label",
+		AlbumValue: func(a Album) []string { return []string{a.Label} },
+		Part:       func(f *Filter) *FieldFilter { return &f.Label },
 	},
 	{
-		name: "format",
+		Name: "format",
 		// Format matches any entry of Album.Formats, which includes the
 		// format name, its descriptions, and its free text -- the last
 		// being where Discogs records a pressing's colour.
-		help:       "Filter by format or colour",
-		albumValue: func(a Album) []string { return a.Formats },
-		part:       func(f *Filter) *FieldFilter { return &f.Format },
+		Help:       "Filter by format or colour",
+		AlbumValue: func(a Album) []string { return a.Formats },
+		Part:       func(f *Filter) *FieldFilter { return &f.Format },
 	},
 }
 
@@ -235,7 +236,7 @@ type Filter struct {
 // Apply returns the albums matching the filter. An unset filter returns the
 // input untouched rather than copying it.
 func (f Filter) Apply(albums []Album) []Album {
-	if !f.any() {
+	if !f.Any() {
 		return albums
 	}
 
@@ -248,13 +249,13 @@ func (f Filter) Apply(albums []Album) []Album {
 	return filtered
 }
 
-// any reports whether the filter constrains anything at all.
-func (f Filter) any() bool {
+// Any reports whether the filter constrains anything at all.
+func (f Filter) Any() bool {
 	if f.ReleaseID != 0 || len(f.Year.Include) > 0 || len(f.Year.Exclude) > 0 {
 		return true
 	}
-	for _, field := range filterFields {
-		p := field.part(&f)
+	for _, field := range Fields {
+		p := field.Part(&f)
 		if len(p.Include) > 0 || len(p.Exclude) > 0 {
 			return true
 		}
@@ -266,38 +267,38 @@ func (f Filter) matches(album Album) bool {
 	if f.ReleaseID != 0 && album.ReleaseID != f.ReleaseID {
 		return false
 	}
-	for _, field := range filterFields {
-		if !field.part(&f).matches(field.albumValue(album)) {
+	for _, field := range Fields {
+		if !field.Part(&f).matches(field.AlbumValue(album)) {
 			return false
 		}
 	}
 	return f.Year.matches(album.Year)
 }
 
-// matchStatus classifies what a filter selected: exactly one record, none, or
+// MatchStatus classifies what a filter selected: exactly one record, none, or
 // several. favorite, unfavorite and open all act on a single record and all
 // need the same three-way answer, so the classification lives here rather
 // than being spelled out at each call site.
-type matchStatus int
+type MatchStatus int
 
 const (
-	matchedOne matchStatus = iota
-	matchedNone
-	matchedMany
+	matchedOne MatchStatus = iota
+	MatchedNone
+	MatchedMany
 )
 
-// matchAlbums applies filter and classifies the result. The returned Album is
-// meaningful only for matchedOne, and the slice only for matchedMany; the
+// MatchAlbums applies filter and classifies the result. The returned Album is
+// meaningful only for matchedOne, and the slice only for MatchedMany; the
 // other is left at its zero value so a caller reading the wrong one gets
 // nothing rather than something plausible.
-func matchAlbums(albums []Album, filter Filter) (Album, []Album, matchStatus) {
+func MatchAlbums(albums []Album, filter Filter) (Album, []Album, MatchStatus) {
 	matches := filter.Apply(albums)
 	switch len(matches) {
 	case 0:
-		return Album{}, nil, matchedNone
+		return Album{}, nil, MatchedNone
 	case 1:
 		return matches[0], nil, matchedOne
 	default:
-		return Album{}, matches, matchedMany
+		return Album{}, matches, MatchedMany
 	}
 }

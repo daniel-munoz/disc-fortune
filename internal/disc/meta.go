@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"encoding/json"
@@ -23,9 +23,9 @@ type Meta struct {
 	LegacyNoticeShown bool `json:"legacy_notice_shown,omitempty"`
 }
 
-// loadMeta reads meta.json. A missing file is not an error: it means nothing
+// LoadMeta reads meta.json. A missing file is not an error: it means nothing
 // has been recorded yet, which is what a fresh install looks like.
-func loadMeta(path string) (Meta, error) {
+func LoadMeta(path string) (Meta, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -42,22 +42,22 @@ func loadMeta(path string) (Meta, error) {
 
 // saveMeta writes meta.json atomically.
 func saveMeta(path string, m Meta) error {
-	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding meta: %w", err)
 	}
-	return writeFileAtomic(path, data, collectionFilePerms)
+	return writeFileAtomic(path, data, FilePerms)
 }
 
-// recordSync stamps the time of a completed sync, preserving whatever other
+// RecordSync stamps the time of a completed sync, preserving whatever other
 // metadata is already on disk. Unreadable metadata is discarded rather than
 // propagated: the timestamp is advisory, and a sync that fetched an entire
 // collection successfully must not fail over it.
-func recordSync(path string, at time.Time) error {
-	m, err := loadMeta(path)
+func RecordSync(path string, at time.Time) error {
+	m, err := LoadMeta(path)
 	if err != nil {
 		m = Meta{}
 	}
@@ -77,17 +77,17 @@ func staleNotice(m Meta, now time.Time) string {
 		return ""
 	}
 	return fmt.Sprintf("Your collection was last synced %s. Run `disc-fortune sync` to refresh it.\n",
-		formatTimestamp(m.SyncedAt))
+		FormatTimestamp(m.SyncedAt))
 }
 
-// syncNotice returns the staleness nudge for the metadata at path, or "" when
+// SyncNotice returns the staleness nudge for the metadata at path, or "" when
 // notices are disabled or the metadata cannot be read. Advisory output is
 // never allowed to break the command it is decorating.
-func syncNotice(path string, now time.Time, enabled bool) string {
+func SyncNotice(path string, now time.Time, enabled bool) string {
 	if !enabled {
 		return ""
 	}
-	m, err := loadMeta(path)
+	m, err := LoadMeta(path)
 	if err != nil {
 		return ""
 	}

@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"encoding/json"
@@ -9,15 +9,17 @@ import (
 	"strconv"
 )
 
+// DirPerms and FilePerms are the modes the config directory and the data
+// files inside it are created with, before the process umask is applied.
 const (
-	configDirPerms      = 0755
-	collectionFilePerms = 0644
+	DirPerms  = 0755
+	FilePerms = 0644
 )
 
 // Album represents a single record with metadata.
 type Album struct {
 	// ReleaseID is the Discogs release ID. It is zero for entries written
-	// before v2.2.0, which is what Identity and sameAlbum fall back for.
+	// before v2.2.0, which is what Identity and SameAlbum fall back for.
 	ReleaseID int      `json:"release_id,omitempty"`
 	Artist    string   `json:"artist"`
 	Title     string   `json:"title"`
@@ -47,24 +49,24 @@ func (a Album) Identity() string {
 	return "name:" + a.Key()
 }
 
-// sameAlbum reports whether two entries are the same record. It is
+// SameAlbum reports whether two entries are the same record. It is
 // deliberately lenient when either side predates the release ID: a pre-2.2
 // favorite and that same record freshly synced must not look like two
 // different albums, or favoriting it again would append a duplicate.
 //
-// The consequence is that sameAlbum is not transitive -- an entry with no ID
+// The consequence is that SameAlbum is not transitive -- an entry with no ID
 // acts as a wildcard for its name. That is fine inside a linear "is this
-// already in the list?" scan, and it is exactly why Identity, not sameAlbum,
+// already in the list?" scan, and it is exactly why Identity, not SameAlbum,
 // is what sync dedup uses: a non-transitive comparison there would make the
 // surviving set depend on fetch order.
-func sameAlbum(a, b Album) bool {
+func SameAlbum(a, b Album) bool {
 	if a.ReleaseID != 0 && b.ReleaseID != 0 {
 		return a.ReleaseID == b.ReleaseID
 	}
 	return a.Key() == b.Key()
 }
 
-func loadCollectionFrom(path string) ([]Album, error) {
+func LoadCollectionFrom(path string) ([]Album, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -76,37 +78,37 @@ func loadCollectionFrom(path string) ([]Album, error) {
 	return albums, nil
 }
 
-func saveCollectionTo(path string, albums []Album) error {
-	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
+func SaveCollectionTo(path string, albums []Album) error {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(albums, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding collection: %w", err)
 	}
-	return writeFileAtomic(path, data, collectionFilePerms)
+	return writeFileAtomic(path, data, FilePerms)
 }
 
 var (
-	// errNoCollection means no collection file exists yet.
-	errNoCollection = errors.New("no collection")
-	// errEmptyCollection means the collection file exists but holds no albums.
-	errEmptyCollection = errors.New("collection is empty")
+	// ErrNoCollection means no collection file exists yet.
+	ErrNoCollection = errors.New("no collection")
+	// ErrEmptyCollection means the collection file exists but holds no albums.
+	ErrEmptyCollection = errors.New("collection is empty")
 )
 
-// loadCollectionChecked loads the collection and distinguishes the two
+// LoadCollectionChecked loads the collection and distinguishes the two
 // "nothing to work with" states from genuine load failures, so callers can
 // print the right guidance without repeating the checks.
-func loadCollectionChecked(path string) ([]Album, error) {
-	albums, err := loadCollectionFrom(path)
+func LoadCollectionChecked(path string) ([]Album, error) {
+	albums, err := LoadCollectionFrom(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, errNoCollection
+			return nil, ErrNoCollection
 		}
 		return nil, err
 	}
 	if len(albums) == 0 {
-		return nil, errEmptyCollection
+		return nil, ErrEmptyCollection
 	}
 	return albums, nil
 }

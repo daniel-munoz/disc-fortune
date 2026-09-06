@@ -3,10 +3,12 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 func TestFormatAlbum(t *testing.T) {
-	album := Album{
+	album := disc.Album{
 		Artist:  "Miles Davis",
 		Title:   "Kind of Blue",
 		Year:    1959,

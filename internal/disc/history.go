@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"encoding/json"
@@ -17,8 +17,8 @@ type HistoryEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// loadHistory loads history entries from disk.
-func loadHistory(path string) ([]HistoryEntry, error) {
+// LoadHistory loads history entries from disk.
+func LoadHistory(path string) ([]HistoryEntry, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -33,25 +33,25 @@ func loadHistory(path string) ([]HistoryEntry, error) {
 	return entries, nil
 }
 
-// saveHistory saves history entries to disk.
-func saveHistory(path string, entries []HistoryEntry) error {
-	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
+// SaveHistory saves history entries to disk.
+func SaveHistory(path string, entries []HistoryEntry) error {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding history: %w", err)
 	}
-	return writeFileAtomic(path, data, collectionFilePerms)
+	return writeFileAtomic(path, data, FilePerms)
 }
 
-// addToHistory appends an album to history.
+// AddToHistory appends an album to history.
 //
 // The whole load-append-save runs under the file lock: `sync`'s backfill
 // rewrites this same file, and without the lock one of the two writes is lost.
-func addToHistory(path string, album Album) error {
+func AddToHistory(path string, album Album) error {
 	return withFileLock(path, func() error {
-		entries, err := loadHistory(path)
+		entries, err := LoadHistory(path)
 		if err != nil {
 			return err
 		}
@@ -59,12 +59,12 @@ func addToHistory(path string, album Album) error {
 			Album:     album,
 			Timestamp: time.Now(),
 		})
-		return saveHistory(path, entries)
+		return SaveHistory(path, entries)
 	})
 }
 
-// formatTimestamp formats a timestamp as relative time or date.
-func formatTimestamp(ts time.Time) string {
+// FormatTimestamp formats a timestamp as relative time or date.
+func FormatTimestamp(ts time.Time) string {
 	now := time.Now()
 	diff := now.Sub(ts)
 
@@ -94,8 +94,8 @@ func formatTimestamp(ts time.Time) string {
 	}
 }
 
-// formatHistory formats history entries for display.
-func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
+// FormatHistory formats history entries for display.
+func FormatHistory(entries []HistoryEntry, limit int, useColor bool) string {
 	if len(entries) == 0 {
 		return "No history yet\n"
 	}
@@ -115,7 +115,7 @@ func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
 		entry := entries[i]
 		idx := len(entries) - i
 
-		sb.WriteString(fmt.Sprintf("  %d. %s: ", idx, formatTimestamp(entry.Timestamp)))
+		sb.WriteString(fmt.Sprintf("  %d. %s: ", idx, FormatTimestamp(entry.Timestamp)))
 
 		if useColor {
 			sb.WriteString(term.BoldCyan)
@@ -136,4 +136,13 @@ func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
 	}
 
 	return sb.String()
+}
+
+// Plural returns one or many according to n. It is a formatting helper like
+// FormatTimestamp, and lives beside it.
+func Plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }

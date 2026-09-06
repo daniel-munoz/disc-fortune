@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"bytes"
@@ -14,14 +14,14 @@ func TestAddFavorite(t *testing.T) {
 	favPath := filepath.Join(tmpDir, "favorites.json")
 
 	album := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	err := addFavorite(favPath, album)
+	err := AddFavorite(favPath, album)
 	if err != nil {
-		t.Fatalf("addFavorite failed: %v", err)
+		t.Fatalf("AddFavorite failed: %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites failed: %v", err)
+		t.Fatalf("LoadFavorites failed: %v", err)
 	}
 	if len(favs) != 1 {
 		t.Fatalf("got %d favorites, want 1", len(favs))
@@ -36,8 +36,8 @@ func TestAddFavoriteDuplicate(t *testing.T) {
 	favPath := filepath.Join(tmpDir, "favorites.json")
 
 	album := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	addFavorite(favPath, album)
-	err := addFavorite(favPath, album)
+	AddFavorite(favPath, album)
+	err := AddFavorite(favPath, album)
 
 	if !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Errorf("error = %v, want ErrAlreadyInFavorites", err)
@@ -49,16 +49,16 @@ func TestRemoveFavorite(t *testing.T) {
 	favPath := filepath.Join(tmpDir, "favorites.json")
 
 	album := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	addFavorite(favPath, album)
+	AddFavorite(favPath, album)
 
-	err := removeFavorite(favPath, album)
+	err := RemoveFavorite(favPath, album)
 	if err != nil {
-		t.Fatalf("removeFavorite failed: %v", err)
+		t.Fatalf("RemoveFavorite failed: %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites failed: %v", err)
+		t.Fatalf("LoadFavorites failed: %v", err)
 	}
 	if len(favs) != 0 {
 		t.Errorf("got %d favorites, want 0", len(favs))
@@ -73,9 +73,9 @@ func TestFavoriteByQuery_SingleMatch(t *testing.T) {
 		{Artist: "John Coltrane", Title: "Giant Steps"},
 	}
 
-	outcome, err := favoriteByQuery(collection, Filter{Query: include("kind of")}, favPath)
+	outcome, err := FavoriteByQuery(collection, Filter{Query: include("kind of")}, favPath)
 	if err != nil {
-		t.Fatalf("favoriteByQuery: %v", err)
+		t.Fatalf("FavoriteByQuery: %v", err)
 	}
 	if outcome.Status != FavoriteAdded {
 		t.Errorf("Status = %v, want FavoriteAdded", outcome.Status)
@@ -83,9 +83,9 @@ func TestFavoriteByQuery_SingleMatch(t *testing.T) {
 	if outcome.Album.Title != "Kind of Blue" {
 		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
 	}
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 1 || favs[0].Title != "Kind of Blue" {
 		t.Errorf("favorites = %+v, want one Kind of Blue", favs)
@@ -99,16 +99,16 @@ func TestFavoriteByQuery_NoMatch(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
 
-	outcome, err := favoriteByQuery(collection, Filter{Query: include("zzzz")}, favPath)
+	outcome, err := FavoriteByQuery(collection, Filter{Query: include("zzzz")}, favPath)
 	if err != nil {
-		t.Fatalf("favoriteByQuery: %v", err)
+		t.Fatalf("FavoriteByQuery: %v", err)
 	}
 	if outcome.Status != FavoriteNoMatch {
 		t.Errorf("Status = %v, want FavoriteNoMatch", outcome.Status)
 	}
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 0 {
 		t.Errorf("favorites should be empty after no match, got %d", len(favs))
@@ -124,9 +124,9 @@ func TestFavoriteByQuery_MultiMatch(t *testing.T) {
 		{Artist: "John Coltrane", Title: "Giant Steps"},
 	}
 
-	outcome, err := favoriteByQuery(collection, Filter{Query: include("miles")}, favPath)
+	outcome, err := FavoriteByQuery(collection, Filter{Query: include("miles")}, favPath)
 	if err != nil {
-		t.Fatalf("favoriteByQuery: %v", err)
+		t.Fatalf("FavoriteByQuery: %v", err)
 	}
 	if outcome.Status != FavoriteMultiMatch {
 		t.Errorf("Status = %v, want FavoriteMultiMatch", outcome.Status)
@@ -134,9 +134,9 @@ func TestFavoriteByQuery_MultiMatch(t *testing.T) {
 	if len(outcome.Matches) != 2 {
 		t.Errorf("got %d matches, want 2", len(outcome.Matches))
 	}
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 0 {
 		t.Errorf("favorites should be empty after multi-match, got %d", len(favs))
@@ -150,12 +150,12 @@ func TestFavoriteByQuery_AlreadyFavorited(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
 
-	if _, err := favoriteByQuery(collection, Filter{Query: include("kind of")}, favPath); err != nil {
-		t.Fatalf("first favoriteByQuery: %v", err)
+	if _, err := FavoriteByQuery(collection, Filter{Query: include("kind of")}, favPath); err != nil {
+		t.Fatalf("first FavoriteByQuery: %v", err)
 	}
-	outcome, err := favoriteByQuery(collection, Filter{Query: include("kind of")}, favPath)
+	outcome, err := FavoriteByQuery(collection, Filter{Query: include("kind of")}, favPath)
 	if err != nil {
-		t.Fatalf("second favoriteByQuery: %v", err)
+		t.Fatalf("second FavoriteByQuery: %v", err)
 	}
 	if outcome.Status != FavoriteAlreadyFav {
 		t.Errorf("Status = %v, want FavoriteAlreadyFav", outcome.Status)
@@ -163,9 +163,9 @@ func TestFavoriteByQuery_AlreadyFavorited(t *testing.T) {
 	if outcome.Album.Title != "Kind of Blue" {
 		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
 	}
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 1 {
 		t.Errorf("got %d favorites, want 1 (still only one)", len(favs))
@@ -180,9 +180,9 @@ func TestFavoriteByQuery_ComposesWithFilter(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
 	}
 
-	outcome, err := favoriteByQuery(collection, Filter{Query: include("miles"), Year: years(t, "1959")}, favPath)
+	outcome, err := FavoriteByQuery(collection, Filter{Query: include("miles"), Year: years(t, "1959")}, favPath)
 	if err != nil {
-		t.Fatalf("favoriteByQuery: %v", err)
+		t.Fatalf("FavoriteByQuery: %v", err)
 	}
 	if outcome.Status != FavoriteAdded {
 		t.Errorf("Status = %v, want FavoriteAdded", outcome.Status)
@@ -195,18 +195,18 @@ func TestFavoriteByQuery_ComposesWithFilter(t *testing.T) {
 func TestUnfavoriteByQuerySingleMatch(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 	album := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
-	if err := addFavorite(favPath, album); err != nil {
-		t.Fatalf("addFavorite: %v", err)
+	if err := AddFavorite(favPath, album); err != nil {
+		t.Fatalf("AddFavorite: %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 
-	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("kind of blue")}, favPath)
+	outcome, err := UnfavoriteByQuery(favs, Filter{Query: include("kind of blue")}, favPath)
 	if err != nil {
-		t.Fatalf("unfavoriteByQuery: %v", err)
+		t.Fatalf("UnfavoriteByQuery: %v", err)
 	}
 	if outcome.Status != UnfavoriteRemoved {
 		t.Fatalf("Status = %v, want UnfavoriteRemoved", outcome.Status)
@@ -215,9 +215,9 @@ func TestUnfavoriteByQuerySingleMatch(t *testing.T) {
 		t.Errorf("Album.Title = %q, want Kind of Blue", outcome.Album.Title)
 	}
 
-	after, err := loadFavorites(favPath)
+	after, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(after) != 0 {
 		t.Errorf("got %d favorites after removal, want 0", len(after))
@@ -227,20 +227,20 @@ func TestUnfavoriteByQuerySingleMatch(t *testing.T) {
 func TestUnfavoriteByQueryNoMatch(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 	album := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	if err := addFavorite(favPath, album); err != nil {
-		t.Fatalf("addFavorite: %v", err)
+	if err := AddFavorite(favPath, album); err != nil {
+		t.Fatalf("AddFavorite: %v", err)
 	}
-	favs, _ := loadFavorites(favPath)
+	favs, _ := LoadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("nonexistent")}, favPath)
+	outcome, err := UnfavoriteByQuery(favs, Filter{Query: include("nonexistent")}, favPath)
 	if err != nil {
-		t.Fatalf("unfavoriteByQuery: %v", err)
+		t.Fatalf("UnfavoriteByQuery: %v", err)
 	}
 	if outcome.Status != UnfavoriteNoMatch {
 		t.Fatalf("Status = %v, want UnfavoriteNoMatch", outcome.Status)
 	}
 
-	after, _ := loadFavorites(favPath)
+	after, _ := LoadFavorites(favPath)
 	if len(after) != 1 {
 		t.Errorf("got %d favorites, want 1 (unchanged)", len(after))
 	}
@@ -252,15 +252,15 @@ func TestUnfavoriteByQueryMultiMatch(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 		{Artist: "Miles Davis", Title: "Bitches Brew"},
 	} {
-		if err := addFavorite(favPath, a); err != nil {
-			t.Fatalf("addFavorite: %v", err)
+		if err := AddFavorite(favPath, a); err != nil {
+			t.Fatalf("AddFavorite: %v", err)
 		}
 	}
-	favs, _ := loadFavorites(favPath)
+	favs, _ := LoadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("miles")}, favPath)
+	outcome, err := UnfavoriteByQuery(favs, Filter{Query: include("miles")}, favPath)
 	if err != nil {
-		t.Fatalf("unfavoriteByQuery: %v", err)
+		t.Fatalf("UnfavoriteByQuery: %v", err)
 	}
 	if outcome.Status != UnfavoriteMultiMatch {
 		t.Fatalf("Status = %v, want UnfavoriteMultiMatch", outcome.Status)
@@ -269,7 +269,7 @@ func TestUnfavoriteByQueryMultiMatch(t *testing.T) {
 		t.Errorf("got %d matches, want 2", len(outcome.Matches))
 	}
 
-	after, _ := loadFavorites(favPath)
+	after, _ := LoadFavorites(favPath)
 	if len(after) != 2 {
 		t.Errorf("got %d favorites, want 2 (unchanged)", len(after))
 	}
@@ -281,15 +281,15 @@ func TestUnfavoriteByQueryNarrowedByFilter(t *testing.T) {
 		{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959},
 		{Artist: "Miles Davis", Title: "Bitches Brew", Year: 1970},
 	} {
-		if err := addFavorite(favPath, a); err != nil {
-			t.Fatalf("addFavorite: %v", err)
+		if err := AddFavorite(favPath, a); err != nil {
+			t.Fatalf("AddFavorite: %v", err)
 		}
 	}
-	favs, _ := loadFavorites(favPath)
+	favs, _ := LoadFavorites(favPath)
 
-	outcome, err := unfavoriteByQuery(favs, Filter{Query: include("miles"), Year: years(t, "1959")}, favPath)
+	outcome, err := UnfavoriteByQuery(favs, Filter{Query: include("miles"), Year: years(t, "1959")}, favPath)
 	if err != nil {
-		t.Fatalf("unfavoriteByQuery: %v", err)
+		t.Fatalf("UnfavoriteByQuery: %v", err)
 	}
 	if outcome.Status != UnfavoriteRemoved {
 		t.Fatalf("Status = %v, want UnfavoriteRemoved", outcome.Status)
@@ -305,9 +305,9 @@ func TestUnfavoriteByQueryAlreadyRemovedIsNoMatch(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 	stale := []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}
 
-	outcome, err := unfavoriteByQuery(stale, Filter{Query: include("kind of blue")}, favPath)
+	outcome, err := UnfavoriteByQuery(stale, Filter{Query: include("kind of blue")}, favPath)
 	if err != nil {
-		t.Fatalf("unfavoriteByQuery: %v", err)
+		t.Fatalf("UnfavoriteByQuery: %v", err)
 	}
 	if outcome.Status != UnfavoriteNoMatch {
 		t.Fatalf("Status = %v, want UnfavoriteNoMatch", outcome.Status)
@@ -316,20 +316,20 @@ func TestUnfavoriteByQueryAlreadyRemovedIsNoMatch(t *testing.T) {
 
 func TestLoadFavoritesCheckedEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "favorites.json")
-	_, err := loadFavoritesChecked(path)
-	if !errors.Is(err, errNoFavorites) {
-		t.Errorf("err = %v, want errNoFavorites", err)
+	_, err := LoadFavoritesChecked(path)
+	if !errors.Is(err, ErrNoFavorites) {
+		t.Errorf("err = %v, want ErrNoFavorites", err)
 	}
 }
 
 func TestLoadFavoritesCheckedPopulated(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "favorites.json")
-	if err := addFavorite(path, Album{Artist: "Ride", Title: "Nowhere"}); err != nil {
-		t.Fatalf("addFavorite: %v", err)
+	if err := AddFavorite(path, Album{Artist: "Ride", Title: "Nowhere"}); err != nil {
+		t.Fatalf("AddFavorite: %v", err)
 	}
-	favs, err := loadFavoritesChecked(path)
+	favs, err := LoadFavoritesChecked(path)
 	if err != nil {
-		t.Fatalf("loadFavoritesChecked: %v", err)
+		t.Fatalf("LoadFavoritesChecked: %v", err)
 	}
 	if len(favs) != 1 {
 		t.Errorf("got %d favorites, want 1", len(favs))
@@ -344,35 +344,35 @@ func TestAddFavoriteKeepsDistinctPressings(t *testing.T) {
 	first := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959}
 	second := Album{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1997}
 
-	if err := addFavorite(favPath, first); err != nil {
-		t.Fatalf("addFavorite(first): %v", err)
+	if err := AddFavorite(favPath, first); err != nil {
+		t.Fatalf("AddFavorite(first): %v", err)
 	}
-	if err := addFavorite(favPath, second); err != nil {
-		t.Fatalf("addFavorite(second): %v", err)
+	if err := AddFavorite(favPath, second); err != nil {
+		t.Fatalf("AddFavorite(second): %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 2 {
 		t.Fatalf("got %d favorites, want 2", len(favs))
 	}
 }
 
-// TestAddFavoriteLegacyEntryIsNotDuplicated is the reason sameAlbum is
+// TestAddFavoriteLegacyEntryIsNotDuplicated is the reason SameAlbum is
 // lenient: a favorite written by v2.1.0 has no ID, and re-favoriting that
 // same record after a sync must not append a second copy.
 func TestAddFavoriteLegacyEntryIsNotDuplicated(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
 	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	if err := saveFavorites(favPath, []Album{legacy}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{legacy}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
 	synced := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}
-	err := addFavorite(favPath, synced)
+	err := AddFavorite(favPath, synced)
 	if !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Errorf("error = %v, want ErrAlreadyInFavorites", err)
 	}
@@ -384,18 +384,18 @@ func TestRemoveFavoriteLegacyEntry(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
 	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	if err := saveFavorites(favPath, []Album{legacy}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{legacy}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
 	synced := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}
-	if err := removeFavorite(favPath, synced); err != nil {
-		t.Fatalf("removeFavorite: %v", err)
+	if err := RemoveFavorite(favPath, synced); err != nil {
+		t.Fatalf("RemoveFavorite: %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 0 {
 		t.Errorf("got %d favorites, want 0", len(favs))
@@ -408,18 +408,18 @@ func TestRemoveFavoriteSurvivesRetitle(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
 	stored := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind Of Blue"}
-	if err := saveFavorites(favPath, []Album{stored}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{stored}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
 	retitled := Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue (1959)"}
-	if err := removeFavorite(favPath, retitled); err != nil {
-		t.Fatalf("removeFavorite: %v", err)
+	if err := RemoveFavorite(favPath, retitled); err != nil {
+		t.Fatalf("RemoveFavorite: %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 0 {
 		t.Errorf("got %d favorites, want 0", len(favs))
@@ -427,7 +427,7 @@ func TestRemoveFavoriteSurvivesRetitle(t *testing.T) {
 }
 
 // TestRemoveFavoriteRemovesOnlyFirstMatch is the guard for the silent data
-// loss a filter-all removal caused: sameAlbum is not transitive, so an
+// loss a filter-all removal caused: SameAlbum is not transitive, so an
 // un-ID'd target matches every stored pressing sharing its name. Removing
 // all of them would delete records the user never named -- and the CLI would
 // still print a single "Removed from favorites" line.
@@ -438,20 +438,20 @@ func TestRemoveFavoriteRemovesOnlyFirstMatch(t *testing.T) {
 		{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959},
 		{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1997},
 	}
-	if err := saveFavorites(favPath, stored); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, stored); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
 	// The un-ID'd album `unfavorite` with no query hands over, taken from
 	// the last history entry.
 	target := Album{Artist: "Miles Davis", Title: "Kind of Blue"}
-	if err := removeFavorite(favPath, target); err != nil {
-		t.Fatalf("removeFavorite: %v", err)
+	if err := RemoveFavorite(favPath, target); err != nil {
+		t.Fatalf("RemoveFavorite: %v", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 1 {
 		t.Fatalf("got %d favorites, want 1 (only the first match removed)", len(favs))
@@ -466,11 +466,11 @@ func TestRemoveFavoriteRemovesOnlyFirstMatch(t *testing.T) {
 func TestRemoveFavoriteNoMatchStillErrors(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
-	if err := saveFavorites(favPath, []Album{{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{ReleaseID: 1, Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
-	err := removeFavorite(favPath, Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"})
+	err := RemoveFavorite(favPath, Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"})
 	if !errors.Is(err, ErrNotInFavorites) {
 		t.Errorf("error = %v, want ErrNotInFavorites", err)
 	}
@@ -481,18 +481,18 @@ func TestRemoveFavoriteNoMatchStillErrors(t *testing.T) {
 func TestAddFavoriteStampsIDOntoLegacyMatch(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
-	if err := saveFavorites(favPath, []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
-	err := addFavorite(favPath, Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"})
+	err := AddFavorite(favPath, Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"})
 	if !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 1 {
 		t.Fatalf("got %d favorites, want 1", len(favs))
@@ -511,19 +511,19 @@ func TestAddFavoriteResolvesWithTheNamedPressingsMetadata(t *testing.T) {
 
 	// The ambiguous legacy entry happens to hold the 1959 pressing's details.
 	legacy := Album{Artist: "Miles Davis", Title: "Kind of Blue", Year: 1959, Label: "Columbia", CatNo: "CL 1355"}
-	if err := saveFavorites(favPath, []Album{legacy}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{legacy}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
 	// The user names the 1997 reissue instead.
 	named := Album{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue", Year: 1997, Label: "Legacy", CatNo: "CK 64935"}
-	if err := addFavorite(favPath, named); !errors.Is(err, ErrAlreadyInFavorites) {
+	if err := AddFavorite(favPath, named); !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 1 {
 		t.Fatalf("got %d favorites, want 1", len(favs))
@@ -542,18 +542,18 @@ func TestAddFavoriteDoesNotOverwriteAnExistingID(t *testing.T) {
 		{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"},
 		{Artist: "Miles Davis", Title: "Kind of Blue"},
 	}
-	if err := saveFavorites(favPath, stored); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, stored); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 
-	err := addFavorite(favPath, Album{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"})
+	err := AddFavorite(favPath, Album{ReleaseID: 222, Artist: "Miles Davis", Title: "Kind of Blue"})
 	if !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if len(favs) != 2 {
 		t.Fatalf("got %d favorites, want 2", len(favs))
@@ -571,15 +571,15 @@ func TestAddFavoriteDoesNotOverwriteAnExistingID(t *testing.T) {
 func TestAddFavoriteWithoutIDStampsNothing(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
-	if err := saveFavorites(favPath, []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 	before, err := os.ReadFile(favPath)
 	if err != nil {
 		t.Fatalf("read favorites: %v", err)
 	}
 
-	err = addFavorite(favPath, Album{Artist: "Miles Davis", Title: "Kind of Blue"})
+	err = AddFavorite(favPath, Album{Artist: "Miles Davis", Title: "Kind of Blue"})
 	if !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
 	}
@@ -598,15 +598,15 @@ func TestAddFavoriteWithoutIDStampsNothing(t *testing.T) {
 func TestAddFavoriteAlreadyIDdStampsNothing(t *testing.T) {
 	favPath := filepath.Join(t.TempDir(), "favorites.json")
 
-	if err := saveFavorites(favPath, []Album{{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 	before, err := os.ReadFile(favPath)
 	if err != nil {
 		t.Fatalf("read favorites: %v", err)
 	}
 
-	err = addFavorite(favPath, Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue (1959)"})
+	err = AddFavorite(favPath, Album{ReleaseID: 111, Artist: "Miles Davis", Title: "Kind of Blue (1959)"})
 	if !errors.Is(err, ErrAlreadyInFavorites) {
 		t.Fatalf("error = %v, want ErrAlreadyInFavorites", err)
 	}

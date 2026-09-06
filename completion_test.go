@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -205,7 +206,7 @@ func TestGeneratedScriptsAreSyntacticallyValid(t *testing.T) {
 			}
 
 			path := t.TempDir() + "/completion." + shell
-			if err := writeFileAtomic(path, []byte(script), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(script), 0644); err != nil {
 				t.Fatalf("writing script: %v", err)
 			}
 			out, err := exec.Command(bin, append(check[1:], path)...).CombinedOutput()

@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // formatAlbum formats an album for display with optional color.
-func formatAlbum(album Album, useColor bool) string {
+func formatAlbum(album disc.Album, useColor bool) string {
 	var sb strings.Builder
 
 	// First line: Artist - Title

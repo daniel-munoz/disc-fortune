@@ -3,6 +3,8 @@ package main
 import (
 	"io"
 	"path/filepath"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 // app carries what every command needs but no command's flags describe:
@@ -14,17 +16,17 @@ import (
 // called directly in a test and its output read back from a buffer, instead
 // of only being exercisable by spawning a subprocess.
 type app struct {
-	loc    configLocation
+	loc    disc.Location
 	stdout io.Writer
 	stderr io.Writer
 }
 
 // newApp resolves the config location for this run. getenv and homeDir are
 // injected so the decision can be tested without touching the real
-// environment, matching resolveConfigDir's existing contract. stdout and
+// environment, matching disc.ResolveDir's existing contract. stdout and
 // stderr are injected the same way, for the same reason.
 func newApp(getenv func(string) string, homeDir func() (string, error), stdout, stderr io.Writer) (app, error) {
-	loc, err := resolveConfigDir(getenv, homeDir)
+	loc, err := disc.ResolveDir(getenv, homeDir)
 	if err != nil {
 		return app{stdout: stdout, stderr: stderr}, err
 	}

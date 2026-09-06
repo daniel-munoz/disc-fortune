@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"math/rand/v2"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 // drawMode selects how pick draws from the candidate pool.
@@ -60,11 +62,11 @@ func antiRepeatWindow(poolSize int) int {
 //
 // This is the single point where picking decides what "the same record" means,
 // and it scans backwards and stops at the first match. That is the only shape
-// sameAlbum is safe in: an entry with no release ID is a wildcard for its
+// disc.SameAlbum is safe in: an entry with no release ID is a wildcard for its
 // name, so a comparison that kept scanning would conflate distinct pressings.
-func lastPlayedIndex(entries []HistoryEntry, album Album) (int, bool) {
+func lastPlayedIndex(entries []disc.HistoryEntry, album disc.Album) (int, bool) {
 	for i := len(entries) - 1; i >= 0; i-- {
-		if sameAlbum(album, entries[i].Album) {
+		if disc.SameAlbum(album, entries[i].Album) {
 			return i, true
 		}
 	}
@@ -72,9 +74,9 @@ func lastPlayedIndex(entries []HistoryEntry, album Album) (int, bool) {
 }
 
 // containsAlbum reports whether album matches any entry of list.
-func containsAlbum(list []Album, album Album) bool {
+func containsAlbum(list []disc.Album, album disc.Album) bool {
 	for _, a := range list {
-		if sameAlbum(a, album) {
+		if disc.SameAlbum(a, album) {
 			return true
 		}
 	}
@@ -86,11 +88,11 @@ func containsAlbum(list []Album, album Album) bool {
 //
 // Distinct albums rather than raw entries: playing one record ten times in a
 // row should not spend the whole window on that one record.
-func recentlyPlayed(entries []HistoryEntry, n int) []Album {
+func recentlyPlayed(entries []disc.HistoryEntry, n int) []disc.Album {
 	if n <= 0 {
 		return nil
 	}
-	var recent []Album
+	var recent []disc.Album
 	for i := len(entries) - 1; i >= 0 && len(recent) < n; i-- {
 		album := entries[i].Album
 		if containsAlbum(recent, album) {
@@ -108,8 +110,8 @@ func recentlyPlayed(entries []HistoryEntry, n int) []Album {
 // the file says which pressing was actually played, and calling the others
 // unheard would assert more than the data supports. The backfill retires
 // these entries on the first sync after upgrade.
-func unheardOnly(pool []Album, entries []HistoryEntry) []Album {
-	var out []Album
+func unheardOnly(pool []disc.Album, entries []disc.HistoryEntry) []disc.Album {
+	var out []disc.Album
 	for _, album := range pool {
 		if _, played := lastPlayedIndex(entries, album); !played {
 			out = append(out, album)
@@ -123,7 +125,7 @@ func unheardOnly(pool []Album, entries []HistoryEntry) []Album {
 // pool must not be empty; the caller reports that case with its own message
 // and exit code, because what to say about it depends on which filters were
 // responsible.
-func pickAlbum(pool []Album, entries []HistoryEntry, mode drawMode, rng *rand.Rand) Album {
+func pickAlbum(pool []disc.Album, entries []disc.HistoryEntry, mode drawMode, rng *rand.Rand) disc.Album {
 	if mode == drawAny {
 		return pool[rng.IntN(len(pool))]
 	}
@@ -148,8 +150,8 @@ func pickAlbum(pool []Album, entries []HistoryEntry, mode drawMode, rng *rand.Ra
 // favorite played moments earlier would be immediately re-pickable. The same
 // went for records sold out of the collection, whose entries linger in history
 // forever and would quietly weaken every future pick.
-func entriesInPool(entries []HistoryEntry, pool []Album) []HistoryEntry {
-	kept := make([]HistoryEntry, 0, len(entries))
+func entriesInPool(entries []disc.HistoryEntry, pool []disc.Album) []disc.HistoryEntry {
+	kept := make([]disc.HistoryEntry, 0, len(entries))
 	for _, e := range entries {
 		if containsAlbum(pool, e.Album) {
 			kept = append(kept, e)
@@ -165,13 +167,13 @@ func entriesInPool(entries []HistoryEntry, pool []Album) []HistoryEntry {
 // of excluded *names*, and a history entry with no release ID matches every
 // pressing of its title: three identically-titled pressings and one un-ID'd
 // entry empty a pool with a window of one.
-func excludeRecent(pool []Album, entries []HistoryEntry) []Album {
+func excludeRecent(pool []disc.Album, entries []disc.HistoryEntry) []disc.Album {
 	recent := recentlyPlayed(entriesInPool(entries, pool), antiRepeatWindow(len(pool)))
 	if len(recent) == 0 {
 		return pool
 	}
 
-	var kept []Album
+	var kept []disc.Album
 	for _, album := range pool {
 		if !containsAlbum(recent, album) {
 			kept = append(kept, album)
@@ -192,7 +194,7 @@ func excludeRecent(pool []Album, entries []HistoryEntry) []Album {
 // Linear rather than exponential: the records that would justify a sharper
 // curve are the recently played ones, and excludeRecent has already removed
 // them.
-func staleWeights(candidates []Album, entries []HistoryEntry) []int {
+func staleWeights(candidates []disc.Album, entries []disc.HistoryEntry) []int {
 	weights := make([]int, len(candidates))
 	for i, album := range candidates {
 		idx, played := lastPlayedIndex(entries, album)

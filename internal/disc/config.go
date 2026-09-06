@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"fmt"
@@ -10,9 +10,9 @@ import (
 // config root is in effect.
 const appName = "disc-fortune"
 
-// configLocation says where disc-fortune's data lives, and where it ought to
+// Location says where disc-fortune's data lives, and where it ought to
 // live if those differ.
-type configLocation struct {
+type Location struct {
 	// Dir is the directory actually used for reads and writes.
 	Dir string
 	// Preferred is the XDG-derived directory that Dir is standing in for,
@@ -42,7 +42,7 @@ func hasData(dir string) bool {
 	return false
 }
 
-// resolveConfigDir decides where the data files live, honoring
+// ResolveDir decides where the data files live, honoring
 // XDG_CONFIG_HOME. getenv and homeDir are injected so the decision can be
 // tested without touching the real environment.
 //
@@ -52,7 +52,7 @@ func hasData(dir string) bool {
 // appear to vanish. So an XDG directory holding no data never displaces a
 // legacy directory that does — the legacy path keeps being used, and
 // Preferred records where a migration would put it.
-func resolveConfigDir(getenv func(string) string, homeDir func() (string, error)) (configLocation, error) {
+func ResolveDir(getenv func(string) string, homeDir func() (string, error)) (Location, error) {
 	xdg := getenv("XDG_CONFIG_HOME")
 	// The XDG basedir spec says a relative path is invalid and must be
 	// ignored, falling back to the default.
@@ -69,18 +69,18 @@ func resolveConfigDir(getenv func(string) string, homeDir func() (string, error)
 
 	if xdg == "" {
 		if homeErr != nil {
-			return configLocation{}, fmt.Errorf("cannot determine home directory: %w", homeErr)
+			return Location{}, fmt.Errorf("cannot determine home directory: %w", homeErr)
 		}
-		return configLocation{Dir: legacy}, nil
+		return Location{Dir: legacy}, nil
 	}
 
 	xdgDir := filepath.Join(xdg, appName)
 	if hasData(xdgDir) {
-		return configLocation{Dir: xdgDir}, nil
+		return Location{Dir: xdgDir}, nil
 	}
 	if legacy != "" && hasData(legacy) {
-		return configLocation{Dir: legacy, Preferred: xdgDir}, nil
+		return Location{Dir: legacy, Preferred: xdgDir}, nil
 	}
 	// No data anywhere: a fresh install goes straight to the right place.
-	return configLocation{Dir: xdgDir}, nil
+	return Location{Dir: xdgDir}, nil
 }

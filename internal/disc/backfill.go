@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"fmt"
@@ -101,10 +101,10 @@ func backfillSummary(fav, hist backfillResult) string {
 	if fav.Updated > 0 || hist.Updated > 0 {
 		var parts []string
 		if fav.Updated > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", fav.Updated, plural(fav.Updated, "favorite", "favorites")))
+			parts = append(parts, fmt.Sprintf("%d %s", fav.Updated, Plural(fav.Updated, "favorite", "favorites")))
 		}
 		if hist.Updated > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", hist.Updated, plural(hist.Updated, "history entry", "history entries")))
+			parts = append(parts, fmt.Sprintf("%d %s", hist.Updated, Plural(hist.Updated, "history entry", "history entries")))
 		}
 		sb.WriteString("Filled in release IDs for ")
 		sb.WriteString(strings.Join(parts, " and "))
@@ -121,14 +121,7 @@ func backfillSummary(fav, hist backfillResult) string {
 	return sb.String()
 }
 
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}
-
-// runBackfill stamps release IDs into the favorites and history files from
+// RunBackfill stamps release IDs into the favorites and history files from
 // the freshly synced collection, and returns sync's report on what it did.
 //
 // A file is rewritten only when something actually changed, so a user who
@@ -139,10 +132,10 @@ func plural(n int, one, many string) string {
 // are written before history is even read, so a failure in the second half
 // would otherwise leave the user with changed favorites and nothing but a
 // warning telling them so.
-func runBackfill(favPath, histPath string, collection []Album) (string, error) {
+func RunBackfill(favPath, histPath string, collection []Album) (string, error) {
 	var favRes backfillResult
 	err := withFileLock(favPath, func() error {
-		favorites, err := loadFavorites(favPath)
+		favorites, err := LoadFavorites(favPath)
 		if err != nil {
 			return fmt.Errorf("loading favorites: %w", err)
 		}
@@ -151,7 +144,7 @@ func runBackfill(favPath, histPath string, collection []Album) (string, error) {
 		if res.Updated == 0 {
 			return nil
 		}
-		if err := saveFavorites(favPath, filled); err != nil {
+		if err := SaveFavorites(favPath, filled); err != nil {
 			return fmt.Errorf("saving favorites: %w", err)
 		}
 		return nil
@@ -163,7 +156,7 @@ func runBackfill(favPath, histPath string, collection []Album) (string, error) {
 
 	var histRes backfillResult
 	err = withFileLock(histPath, func() error {
-		history, err := loadHistory(histPath)
+		history, err := LoadHistory(histPath)
 		if err != nil {
 			return fmt.Errorf("loading history: %w", err)
 		}
@@ -172,7 +165,7 @@ func runBackfill(favPath, histPath string, collection []Album) (string, error) {
 		if res.Updated == 0 {
 			return nil
 		}
-		if err := saveHistory(histPath, filled); err != nil {
+		if err := SaveHistory(histPath, filled); err != nil {
 			return fmt.Errorf("saving history: %w", err)
 		}
 		return nil

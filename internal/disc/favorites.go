@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"encoding/json"
@@ -15,8 +15,8 @@ var (
 	ErrNotInFavorites = errors.New("not in favorites")
 )
 
-// loadFavorites loads favorite albums from disk.
-func loadFavorites(path string) ([]Album, error) {
+// LoadFavorites loads favorite albums from disk.
+func LoadFavorites(path string) ([]Album, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -31,34 +31,34 @@ func loadFavorites(path string) ([]Album, error) {
 	return albums, nil
 }
 
-// saveFavorites saves favorite albums to disk.
-func saveFavorites(path string, albums []Album) error {
-	if err := os.MkdirAll(filepath.Dir(path), configDirPerms); err != nil {
+// SaveFavorites saves favorite albums to disk.
+func SaveFavorites(path string, albums []Album) error {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerms); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	data, err := json.MarshalIndent(albums, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding favorites: %w", err)
 	}
-	return writeFileAtomic(path, data, collectionFilePerms)
+	return writeFileAtomic(path, data, FilePerms)
 }
 
-// addFavorite adds an album to favorites if not already present.
+// AddFavorite adds an album to favorites if not already present.
 //
-// Locked for the same reason as addToHistory: `sync`'s backfill rewrites
+// Locked for the same reason as AddToHistory: `sync`'s backfill rewrites
 // favorites.json wholesale, and without the lock one of the two writes is lost.
-func addFavorite(path string, album Album) error {
+func AddFavorite(path string, album Album) error {
 	return withFileLock(path, func() error {
-		favorites, err := loadFavorites(path)
+		favorites, err := LoadFavorites(path)
 		if err != nil {
 			return err
 		}
 
-		// sameAlbum rather than Key: two pressings of one title are two
+		// SameAlbum rather than Key: two pressings of one title are two
 		// favorites, but an entry written before release IDs existed is still
 		// the same record as its freshly synced self.
 		for i, fav := range favorites {
-			if !sameAlbum(fav, album) {
+			if !SameAlbum(fav, album) {
 				continue
 			}
 
@@ -78,7 +78,7 @@ func addFavorite(path string, album Album) error {
 			// backfillAlbums skips every entry that already has an ID.
 			if album.ReleaseID != 0 && fav.ReleaseID == 0 {
 				favorites[i] = album
-				if err := saveFavorites(path, favorites); err != nil {
+				if err := SaveFavorites(path, favorites); err != nil {
 					return err
 				}
 			}
@@ -86,28 +86,28 @@ func addFavorite(path string, album Album) error {
 		}
 
 		favorites = append(favorites, album)
-		return saveFavorites(path, favorites)
+		return SaveFavorites(path, favorites)
 	})
 }
 
-// removeFavorite removes the first favorite matching album.
+// RemoveFavorite removes the first favorite matching album.
 //
-// First match only, never every match: sameAlbum is not transitive, so an
+// First match only, never every match: SameAlbum is not transitive, so an
 // entry with no release ID matches every stored pressing sharing its name.
 // Filtering all matches out would silently delete distinct pressings the
 // user never named -- and `unfavorite` would still report removing one.
-func removeFavorite(path string, album Album) error {
+func RemoveFavorite(path string, album Album) error {
 	return withFileLock(path, func() error {
-		favorites, err := loadFavorites(path)
+		favorites, err := LoadFavorites(path)
 		if err != nil {
 			return err
 		}
 
 		for i, fav := range favorites {
-			if sameAlbum(fav, album) {
+			if SameAlbum(fav, album) {
 				// The three-index slice forces append to allocate rather than
 				// alias favorites' backing array and clobber it in place.
-				return saveFavorites(path, append(favorites[:i:i], favorites[i+1:]...))
+				return SaveFavorites(path, append(favorites[:i:i], favorites[i+1:]...))
 			}
 		}
 
@@ -125,26 +125,26 @@ const (
 	FavoriteMultiMatch
 )
 
-// FavoriteOutcome holds the result of favoriteByQuery.
+// FavoriteOutcome holds the result of FavoriteByQuery.
 type FavoriteOutcome struct {
 	Status  FavoriteStatus
 	Album   Album   // populated when Status is FavoriteAdded or FavoriteAlreadyFav
 	Matches []Album // populated when Status is FavoriteMultiMatch
 }
 
-// favoriteByQuery is the testable core of `favorite QUERY`. The query is
+// FavoriteByQuery is the testable core of `favorite QUERY`. The query is
 // already part of filter (parseFavorite puts the positional QUERY and --query
 // in the same place), so this only applies it and acts on the result.
-func favoriteByQuery(collection []Album, filter Filter, favPath string) (FavoriteOutcome, error) {
-	album, matches, status := matchAlbums(collection, filter)
+func FavoriteByQuery(collection []Album, filter Filter, favPath string) (FavoriteOutcome, error) {
+	album, matches, status := MatchAlbums(collection, filter)
 	switch status {
-	case matchedNone:
+	case MatchedNone:
 		return FavoriteOutcome{Status: FavoriteNoMatch}, nil
-	case matchedMany:
+	case MatchedMany:
 		return FavoriteOutcome{Status: FavoriteMultiMatch, Matches: matches}, nil
 	}
 
-	if err := addFavorite(favPath, album); err != nil {
+	if err := AddFavorite(favPath, album); err != nil {
 		if errors.Is(err, ErrAlreadyInFavorites) {
 			return FavoriteOutcome{Status: FavoriteAlreadyFav, Album: album}, nil
 		}
@@ -162,29 +162,29 @@ const (
 	UnfavoriteMultiMatch
 )
 
-// UnfavoriteOutcome holds the result of unfavoriteByQuery.
+// UnfavoriteOutcome holds the result of UnfavoriteByQuery.
 type UnfavoriteOutcome struct {
 	Status  UnfavoriteStatus
 	Album   Album   // populated when Status is UnfavoriteRemoved
 	Matches []Album // populated when Status is UnfavoriteMultiMatch
 }
 
-// unfavoriteByQuery is the testable core of `unfavorite QUERY`. The query is
+// UnfavoriteByQuery is the testable core of `unfavorite QUERY`. The query is
 // already part of filter (parseFavorite puts the positional QUERY and --query
 // in the same place), so this applies filter to the favorites list — not the
 // collection, since favorites is the set being removed from — and removes the
 // album when exactly one matches. An album that is already absent is reported
 // as UnfavoriteNoMatch rather than an error: removal is idempotent.
-func unfavoriteByQuery(favorites []Album, filter Filter, favPath string) (UnfavoriteOutcome, error) {
-	album, matches, status := matchAlbums(favorites, filter)
+func UnfavoriteByQuery(favorites []Album, filter Filter, favPath string) (UnfavoriteOutcome, error) {
+	album, matches, status := MatchAlbums(favorites, filter)
 	switch status {
-	case matchedNone:
+	case MatchedNone:
 		return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
-	case matchedMany:
+	case MatchedMany:
 		return UnfavoriteOutcome{Status: UnfavoriteMultiMatch, Matches: matches}, nil
 	}
 
-	if err := removeFavorite(favPath, album); err != nil {
+	if err := RemoveFavorite(favPath, album); err != nil {
 		if errors.Is(err, ErrNotInFavorites) {
 			return UnfavoriteOutcome{Status: UnfavoriteNoMatch}, nil
 		}
@@ -193,18 +193,18 @@ func unfavoriteByQuery(favorites []Album, filter Filter, favPath string) (Unfavo
 	return UnfavoriteOutcome{Status: UnfavoriteRemoved, Album: album}, nil
 }
 
-// errNoFavorites means the favorites list is empty or absent.
-var errNoFavorites = errors.New("no favorites")
+// ErrNoFavorites means the favorites list is empty or absent.
+var ErrNoFavorites = errors.New("no favorites")
 
-// loadFavoritesChecked loads favorites and reports an empty list as
-// errNoFavorites, so callers can print guidance without repeating the check.
-func loadFavoritesChecked(path string) ([]Album, error) {
-	favorites, err := loadFavorites(path)
+// LoadFavoritesChecked loads favorites and reports an empty list as
+// ErrNoFavorites, so callers can print guidance without repeating the check.
+func LoadFavoritesChecked(path string) ([]Album, error) {
+	favorites, err := LoadFavorites(path)
 	if err != nil {
 		return nil, err
 	}
 	if len(favorites) == 0 {
-		return nil, errNoFavorites
+		return nil, ErrNoFavorites
 	}
 	return favorites, nil
 }

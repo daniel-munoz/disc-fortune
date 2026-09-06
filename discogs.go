@@ -9,6 +9,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 var discogsBaseURL = "https://api.discogs.com"
@@ -301,8 +303,8 @@ type collectionPage struct {
 }
 
 // getCollectionReleases paginates through all releases in a folder.
-func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]Album, error) {
-	var albums []Album
+func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]disc.Album, error) {
+	var albums []disc.Album
 	page := 1
 
 	for {
@@ -341,7 +343,7 @@ func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]
 				}
 			}
 
-			albums = append(albums, Album{
+			albums = append(albums, disc.Album{
 				ReleaseID: r.BasicInformation.ID,
 				Artist:    artist,
 				Title:     r.BasicInformation.Title,

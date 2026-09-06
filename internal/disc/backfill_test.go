@@ -1,4 +1,4 @@
-package main
+package disc
 
 import (
 	"bytes"
@@ -226,34 +226,34 @@ func TestRunBackfillWritesBothFiles(t *testing.T) {
 	favPath := filepath.Join(dir, "favorites.json")
 	histPath := filepath.Join(dir, "history.json")
 
-	if err := saveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
-	if err := saveHistory(histPath, []HistoryEntry{
+	if err := SaveHistory(histPath, []HistoryEntry{
 		{Album: Album{Artist: "Slowdive", Title: "Souvlaki"}, Timestamp: time.Now()},
 	}); err != nil {
-		t.Fatalf("saveHistory: %v", err)
+		t.Fatalf("SaveHistory: %v", err)
 	}
 
-	report, err := runBackfill(favPath, histPath, testCollection())
+	report, err := RunBackfill(favPath, histPath, testCollection())
 	if err != nil {
-		t.Fatalf("runBackfill: %v", err)
+		t.Fatalf("RunBackfill: %v", err)
 	}
 	if report != "Filled in release IDs for 1 favorite and 1 history entry.\n" {
 		t.Errorf("report = %q", report)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if favs[0].ReleaseID != 111 {
 		t.Errorf("favorite ReleaseID = %d, want 111", favs[0].ReleaseID)
 	}
 
-	entries, err := loadHistory(histPath)
+	entries, err := LoadHistory(histPath)
 	if err != nil {
-		t.Fatalf("loadHistory: %v", err)
+		t.Fatalf("LoadHistory: %v", err)
 	}
 	if entries[0].Album.ReleaseID != 111 {
 		t.Errorf("history ReleaseID = %d, want 111", entries[0].Album.ReleaseID)
@@ -267,17 +267,17 @@ func TestRunBackfillIsIdempotent(t *testing.T) {
 	favPath := filepath.Join(dir, "favorites.json")
 	histPath := filepath.Join(dir, "history.json")
 
-	if err := saveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
-	if err := saveHistory(histPath, []HistoryEntry{
+	if err := SaveHistory(histPath, []HistoryEntry{
 		{Album: Album{Artist: "Slowdive", Title: "Souvlaki"}, Timestamp: time.Now()},
 	}); err != nil {
-		t.Fatalf("saveHistory: %v", err)
+		t.Fatalf("SaveHistory: %v", err)
 	}
 
-	if _, err := runBackfill(favPath, histPath, testCollection()); err != nil {
-		t.Fatalf("first runBackfill: %v", err)
+	if _, err := RunBackfill(favPath, histPath, testCollection()); err != nil {
+		t.Fatalf("first RunBackfill: %v", err)
 	}
 	favBefore, err := os.ReadFile(favPath)
 	if err != nil {
@@ -288,9 +288,9 @@ func TestRunBackfillIsIdempotent(t *testing.T) {
 		t.Fatalf("read history: %v", err)
 	}
 
-	report, err := runBackfill(favPath, histPath, testCollection())
+	report, err := RunBackfill(favPath, histPath, testCollection())
 	if err != nil {
-		t.Fatalf("second runBackfill: %v", err)
+		t.Fatalf("second RunBackfill: %v", err)
 	}
 	if report != "" {
 		t.Errorf("second run reported %q, want nothing", report)
@@ -319,9 +319,9 @@ func TestRunBackfillLeavesAbsentFilesAlone(t *testing.T) {
 	favPath := filepath.Join(dir, "favorites.json")
 	histPath := filepath.Join(dir, "history.json")
 
-	report, err := runBackfill(favPath, histPath, testCollection())
+	report, err := RunBackfill(favPath, histPath, testCollection())
 	if err != nil {
-		t.Fatalf("runBackfill: %v", err)
+		t.Fatalf("RunBackfill: %v", err)
 	}
 	if report != "" {
 		t.Errorf("report = %q, want nothing", report)
@@ -343,8 +343,8 @@ func TestRunBackfillReportsWorkDoneBeforeAFailure(t *testing.T) {
 	favPath := filepath.Join(dir, "favorites.json")
 	histPath := filepath.Join(dir, "history.json")
 
-	if err := saveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
-		t.Fatalf("saveFavorites: %v", err)
+	if err := SaveFavorites(favPath, []Album{{Artist: "Slowdive", Title: "Souvlaki"}}); err != nil {
+		t.Fatalf("SaveFavorites: %v", err)
 	}
 	// Unparseable history, so the pass fails only after favorites landed.
 	// Not a live data path -- t.TempDir -- so the atomic saver is not owed.
@@ -352,17 +352,17 @@ func TestRunBackfillReportsWorkDoneBeforeAFailure(t *testing.T) {
 		t.Fatalf("write history: %v", err)
 	}
 
-	report, err := runBackfill(favPath, histPath, testCollection())
+	report, err := RunBackfill(favPath, histPath, testCollection())
 	if err == nil {
-		t.Fatal("runBackfill: got nil error, want the history failure")
+		t.Fatal("RunBackfill: got nil error, want the history failure")
 	}
 	if want := "Filled in release IDs for 1 favorite.\n"; report != want {
 		t.Errorf("report = %q, want %q", report, want)
 	}
 
-	favs, err := loadFavorites(favPath)
+	favs, err := LoadFavorites(favPath)
 	if err != nil {
-		t.Fatalf("loadFavorites: %v", err)
+		t.Fatalf("LoadFavorites: %v", err)
 	}
 	if favs[0].ReleaseID != 111 {
 		t.Errorf("favorite ReleaseID = %d, want 111 (the write the report describes)", favs[0].ReleaseID)

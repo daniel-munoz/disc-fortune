@@ -6,19 +6,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
 // seedCollectionAt writes a one-album collection.json into dir.
-func seedCollectionAt(t *testing.T, dir string, album Album) {
+func seedCollectionAt(t *testing.T, dir string, album disc.Album) {
 	t.Helper()
-	if err := os.MkdirAll(dir, configDirPerms); err != nil {
+	if err := os.MkdirAll(dir, disc.DirPerms); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
-	data, err := json.Marshal([]Album{album})
+	data, err := json.Marshal([]disc.Album{album})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "collection.json"), data, collectionFilePerms); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "collection.json"), data, disc.FilePerms); err != nil {
 		t.Fatalf("seeding collection: %v", err)
 	}
 }
@@ -28,7 +30,7 @@ const escape = "\033["
 func TestBinaryHonorsXDGConfigHome(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
-	seedCollectionAt(t, filepath.Join(xdg, "disc-fortune"), Album{Artist: "Sun Ra", Title: "Lanquidity"})
+	seedCollectionAt(t, filepath.Join(xdg, "disc-fortune"), disc.Album{Artist: "Sun Ra", Title: "Lanquidity"})
 
 	code, stdout, stderr := runHelperEnv(t, home, []string{"XDG_CONFIG_HOME=" + xdg}, "list")
 	if code != 0 {
@@ -45,7 +47,7 @@ func TestBinaryHonorsXDGConfigHome(t *testing.T) {
 func TestBinaryFindsLegacyCollectionWhenXDGIsEmpty(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Alice Coltrane", Title: "Ptah, the El Daoud"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Alice Coltrane", Title: "Ptah, the El Daoud"})
 
 	code, stdout, stderr := runHelperEnv(t, home, []string{"XDG_CONFIG_HOME=" + xdg}, "list")
 	if code != 0 {
@@ -59,7 +61,7 @@ func TestBinaryFindsLegacyCollectionWhenXDGIsEmpty(t *testing.T) {
 func TestBinaryNotifiesAboutPendingMigrationOnce(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Don Cherry", Title: "Brown Rice"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Don Cherry", Title: "Brown Rice"})
 	env := []string{"XDG_CONFIG_HOME=" + xdg}
 
 	// stderr is a pipe here, not a TTY, so the notice is suppressed the same
@@ -73,7 +75,7 @@ func TestBinaryNotifiesAboutPendingMigrationOnce(t *testing.T) {
 func TestBinaryMigrateMovesCollectionToXDG(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Pharoah Sanders", Title: "Karma"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Pharoah Sanders", Title: "Karma"})
 	env := []string{"XDG_CONFIG_HOME=" + xdg}
 
 	code, stdout, stderr := runHelperEnv(t, home, env, "migrate")
@@ -98,7 +100,7 @@ func TestBinaryMigrateMovesCollectionToXDG(t *testing.T) {
 func TestBinaryMigrateIsANoopWhenAlreadyCorrect(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
-	seedCollectionAt(t, filepath.Join(xdg, "disc-fortune"), Album{Artist: "Sun Ra", Title: "Lanquidity"})
+	seedCollectionAt(t, filepath.Join(xdg, "disc-fortune"), disc.Album{Artist: "Sun Ra", Title: "Lanquidity"})
 
 	code, stdout, _ := runHelperEnv(t, home, []string{"XDG_CONFIG_HOME=" + xdg}, "migrate")
 	if code != 0 {
@@ -113,7 +115,7 @@ func TestBinaryMigrateIsANoopWhenAlreadyCorrect(t *testing.T) {
 // `disc-fortune list | less -R` case the roadmap calls out.
 func TestBinaryColorAlwaysSurvivesAPipe(t *testing.T) {
 	home := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Miles Davis", Title: "Kind of Blue"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Miles Davis", Title: "Kind of Blue"})
 
 	_, stdout, stderr := runHelperEnv(t, home, nil, "list", "--color", "always")
 	if !strings.Contains(stdout, escape) {
@@ -123,7 +125,7 @@ func TestBinaryColorAlwaysSurvivesAPipe(t *testing.T) {
 
 func TestBinaryColorNeverEmitsNoEscapes(t *testing.T) {
 	home := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Miles Davis", Title: "Kind of Blue"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Miles Davis", Title: "Kind of Blue"})
 
 	_, stdout, _ := runHelperEnv(t, home, nil, "list", "--color", "never")
 	if strings.Contains(stdout, escape) {
@@ -133,7 +135,7 @@ func TestBinaryColorNeverEmitsNoEscapes(t *testing.T) {
 
 func TestBinaryNoColorBeatsAutoButNotExplicitAlways(t *testing.T) {
 	home := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Miles Davis", Title: "Kind of Blue"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Miles Davis", Title: "Kind of Blue"})
 	noColor := []string{"NO_COLOR=1"}
 
 	if _, stdout, _ := runHelperEnv(t, home, noColor, "list"); strings.Contains(stdout, escape) {
@@ -147,7 +149,7 @@ func TestBinaryNoColorBeatsAutoButNotExplicitAlways(t *testing.T) {
 
 func TestBinaryRejectsBadColorValue(t *testing.T) {
 	home := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Miles Davis", Title: "Kind of Blue"})
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Miles Davis", Title: "Kind of Blue"})
 
 	code, _, stderr := runHelperEnv(t, home, nil, "list", "--color", "sometimes")
 	if code != 1 {
@@ -191,8 +193,8 @@ func TestBinaryDataCommandFailsClearlyWithoutAHomeDirectory(t *testing.T) {
 func TestBinarySurvivesAnEmptyXDGDirectory(t *testing.T) {
 	home := t.TempDir()
 	xdg := t.TempDir()
-	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), Album{Artist: "Don Cherry", Title: "Brown Rice"})
-	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), configDirPerms); err != nil {
+	seedCollectionAt(t, filepath.Join(home, ".config", "disc-fortune"), disc.Album{Artist: "Don Cherry", Title: "Brown Rice"})
+	if err := os.MkdirAll(filepath.Join(xdg, "disc-fortune"), disc.DirPerms); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	env := []string{"XDG_CONFIG_HOME=" + xdg}
