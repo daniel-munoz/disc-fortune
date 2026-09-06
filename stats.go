@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -92,15 +93,15 @@ func computeStats(pool, favorites []disc.Album, entries []disc.HistoryEntry, tot
 	}
 
 	for _, album := range pool {
-		if containsAlbum(favorites, album) {
+		if pick.ContainsAlbum(favorites, album) {
 			s.Favorites++
 		}
 
-		// lastPlayedIndex, not a map: disc.SameAlbum is not transitive when an
-		// entry has no release ID, and a map key would silently assume it
-		// was. This is the same backwards first-match scan every other
-		// history comparison goes through.
-		idx, played := lastPlayedIndex(entries, album)
+		// pick.LastPlayedIndex, not a map: disc.SameAlbum is not transitive
+		// when an entry has no release ID, and a map key would silently
+		// assume it was. This is the same backwards first-match scan every
+		// other history comparison goes through.
+		idx, played := pick.LastPlayedIndex(entries, album)
 		if !played {
 			continue
 		}

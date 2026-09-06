@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -151,14 +152,14 @@ func (a app) runPick(cfg selection) error {
 	}
 
 	if cfg.unheard {
-		albums = unheardOnly(albums, entries)
+		albums = pick.UnheardOnly(albums, entries)
 		if len(albums) == 0 {
 			return errors.New("Every album matching your filters has already been played.\n" +
 				"Drop --unheard, or try `disc-fortune pick --draw stale` for whatever you have left longest.")
 		}
 	}
 
-	album := pickAlbum(albums, entries, cfg.draw, newRNG())
+	album := pick.Draw(albums, entries, cfg.draw, pick.NewRNG())
 
 	if err := disc.AddToHistory(a.historyPath(), album); err != nil {
 		return fmt.Errorf("Error saving history: %v", err)
@@ -191,7 +192,7 @@ func (a app) runList(cfg selection) error {
 		if err != nil {
 			return fmt.Errorf("Error loading history: %v", err)
 		}
-		albums = unheardOnly(albums, entries)
+		albums = pick.UnheardOnly(albums, entries)
 		if len(albums) == 0 {
 			return errors.New("Every album matching your filters has already been played.")
 		}

@@ -705,11 +705,11 @@ func TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw(t *testing.T) {
 }
 
 // TestPickDefaultDrawAvoidsRepeatsAcrossSequentialRuns closes a gap the unit
-// tests leave open: TestPickAlbumFreshExcludesRecent (picker_test.go) pins
-// pickAlbum directly, and TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw
+// tests leave open: TestPickAlbumFreshExcludesRecent (internal/pick) pins
+// pick.Draw directly, and TestPickFavoritesStaysAHardFilterUnderTheDefaultDraw
 // above never asserts anti-repeat happened at all. Nothing exercises the
-// wiring at main.go's runPick -- pickAlbum(albums, entries, cfg.draw,
-// newRNG()) -- so a future change that hardcoded drawAny there, or dropped
+// wiring at main.go's runPick -- pick.Draw(albums, entries, cfg.draw,
+// pick.NewRNG()) -- so a future change that hardcoded pick.Any there, or dropped
 // draw from the selection parseSelection returns, would leave the whole
 // suite green while plain `disc-fortune` silently reverted to pre-2.3
 // behavior. This runs the real binary with no flags, the default this

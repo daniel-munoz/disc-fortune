@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -264,7 +265,7 @@ type selection struct {
 	unheard bool
 	// draw is how pick chooses from the candidates. It is meaningless for
 	// list, which never sets it.
-	draw   drawMode
+	draw   pick.Mode
 	filter disc.Filter
 	color  term.Mode
 	// json switches the data channel to the documented machine-readable
@@ -354,9 +355,9 @@ func parseSelection(name string, args []string) (selection, error) {
 		return selection{}, fmt.Errorf("%s: %v", name, err)
 	}
 
-	mode := drawFresh
+	mode := pick.Fresh
 	if draw != nil {
-		m, err := parseDrawMode(*draw)
+		m, err := pick.ParseMode(*draw)
 		if err != nil {
 			return selection{}, fmt.Errorf("%s: %v", name, err)
 		}

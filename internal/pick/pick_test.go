@@ -1,4 +1,4 @@
-package main
+package pick
 
 import (
 	"math/rand/v2"
@@ -12,26 +12,26 @@ import (
 func TestParseDrawMode(t *testing.T) {
 	cases := []struct {
 		in   string
-		want drawMode
+		want Mode
 	}{
-		{"fresh", drawFresh},
-		{"any", drawAny},
-		{"stale", drawStale},
+		{"fresh", Fresh},
+		{"any", Any},
+		{"stale", Stale},
 	}
 	for _, c := range cases {
-		got, err := parseDrawMode(c.in)
+		got, err := ParseMode(c.in)
 		if err != nil {
-			t.Errorf("parseDrawMode(%q): %v", c.in, err)
+			t.Errorf("ParseMode(%q): %v", c.in, err)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("parseDrawMode(%q) = %v, want %v", c.in, got, c.want)
+			t.Errorf("ParseMode(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }
 
 func TestParseDrawModeRejectsUnknown(t *testing.T) {
-	_, err := parseDrawMode("weighted")
+	_, err := ParseMode("weighted")
 	if err == nil {
 		t.Fatal("expected an error for an unknown --draw value")
 	}
@@ -40,12 +40,12 @@ func TestParseDrawModeRejectsUnknown(t *testing.T) {
 	}
 }
 
-// drawFresh must be the zero value: a selection built without an explicit
+// Fresh must be the zero value: a selection built without an explicit
 // mode has to get the default, not an unfiltered draw.
 func TestDrawFreshIsZeroValue(t *testing.T) {
-	var m drawMode
-	if m != drawFresh {
-		t.Errorf("zero drawMode = %v, want drawFresh", m)
+	var m Mode
+	if m != Fresh {
+		t.Errorf("zero Mode = %v, want Fresh", m)
 	}
 }
 
@@ -82,7 +82,7 @@ func TestLastPlayedIndexFindsMostRecent(t *testing.T) {
 	b := disc.Album{ReleaseID: 2, Artist: "Ride", Title: "Nowhere"}
 	entries := histOf(a, b, a)
 
-	idx, played := lastPlayedIndex(entries, a)
+	idx, played := LastPlayedIndex(entries, a)
 	if !played {
 		t.Fatal("played = false, want true")
 	}
@@ -93,7 +93,7 @@ func TestLastPlayedIndexFindsMostRecent(t *testing.T) {
 
 func TestLastPlayedIndexNeverPlayed(t *testing.T) {
 	entries := histOf(disc.Album{ReleaseID: 1, Artist: "Ride", Title: "Nowhere"})
-	if _, played := lastPlayedIndex(entries, disc.Album{ReleaseID: 2, Artist: "Lush", Title: "Spooky"}); played {
+	if _, played := LastPlayedIndex(entries, disc.Album{ReleaseID: 2, Artist: "Lush", Title: "Spooky"}); played {
 		t.Error("played = true for an album that is not in history")
 	}
 }
@@ -104,7 +104,7 @@ func TestLastPlayedIndexNeverPlayed(t *testing.T) {
 func TestLastPlayedIndexMatchesUnIDdEntry(t *testing.T) {
 	stored := disc.Album{Artist: "Slowdive", Title: "Souvlaki"}
 	synced := disc.Album{ReleaseID: 42, Artist: "Slowdive", Title: "Souvlaki"}
-	if _, played := lastPlayedIndex(histOf(stored), synced); !played {
+	if _, played := LastPlayedIndex(histOf(stored), synced); !played {
 		t.Error("an un-ID'd history entry did not match its synced self")
 	}
 }
@@ -139,7 +139,7 @@ func TestUnheardOnlyKeepsNeverPlayed(t *testing.T) {
 	played := disc.Album{ReleaseID: 1, Artist: "A", Title: "1"}
 	fresh := disc.Album{ReleaseID: 2, Artist: "B", Title: "2"}
 
-	got := unheardOnly([]disc.Album{played, fresh}, histOf(played))
+	got := UnheardOnly([]disc.Album{played, fresh}, histOf(played))
 	if len(got) != 1 {
 		t.Fatalf("len = %d, want 1; got %+v", len(got), got)
 	}
@@ -150,7 +150,7 @@ func TestUnheardOnlyKeepsNeverPlayed(t *testing.T) {
 
 func TestUnheardOnlyEmptyHistoryKeepsEverything(t *testing.T) {
 	pool := []disc.Album{{ReleaseID: 1, Artist: "A", Title: "1"}, {ReleaseID: 2, Artist: "B", Title: "2"}}
-	if got := unheardOnly(pool, nil); len(got) != 2 {
+	if got := UnheardOnly(pool, nil); len(got) != 2 {
 		t.Errorf("len = %d, want 2", len(got))
 	}
 }
@@ -164,7 +164,7 @@ func TestUnheardOnlyIsConservativeAboutUnIDdEntries(t *testing.T) {
 	}
 	entries := histOf(disc.Album{Artist: "Slowdive", Title: "Souvlaki"})
 
-	if got := unheardOnly(pool, entries); len(got) != 0 {
+	if got := UnheardOnly(pool, entries); len(got) != 0 {
 		t.Errorf("len = %d, want 0; an un-ID'd entry must hide every pressing of its title", len(got))
 	}
 }
@@ -187,9 +187,9 @@ func TestPickAlbumIsDeterministicUnderASeed(t *testing.T) {
 	pool := poolOf(20)
 	entries := histOf(pool[0], pool[1], pool[2])
 
-	for _, mode := range []drawMode{drawAny, drawFresh, drawStale} {
-		first := pickAlbum(pool, entries, mode, seededRNG())
-		second := pickAlbum(pool, entries, mode, seededRNG())
+	for _, mode := range []Mode{Any, Fresh, Stale} {
+		first := Draw(pool, entries, mode, seededRNG())
+		second := Draw(pool, entries, mode, seededRNG())
 		if first.ReleaseID != second.ReleaseID {
 			t.Errorf("mode %v: got %d then %d from the same seed", mode, first.ReleaseID, second.ReleaseID)
 		}
@@ -205,7 +205,7 @@ func TestPickAlbumFreshExcludesRecent(t *testing.T) {
 	// same value 200 times and assert nothing the first draw did not.
 	rng := seededRNG()
 	for range 200 {
-		got := pickAlbum(pool, entries, drawFresh, rng)
+		got := Draw(pool, entries, Fresh, rng)
 		if got.ReleaseID <= 3 {
 			t.Fatalf("fresh returned release %d, which is inside the anti-repeat window", got.ReleaseID)
 		}
@@ -219,7 +219,7 @@ func TestPickAlbumAnyIgnoresHistory(t *testing.T) {
 	seen := make(map[int]bool)
 	rng := seededRNG()
 	for range 200 {
-		seen[pickAlbum(pool, entries, drawAny, rng).ReleaseID] = true
+		seen[Draw(pool, entries, Any, rng).ReleaseID] = true
 	}
 	if len(seen) != 3 {
 		t.Errorf("saw %d distinct albums, want 3; --draw any must not consult history", len(seen))
@@ -237,15 +237,15 @@ func TestPickAlbumFallsBackWhenExclusionEmptiesThePool(t *testing.T) {
 	}
 	entries := histOf(disc.Album{Artist: "Slowdive", Title: "Souvlaki"})
 
-	got := pickAlbum(pool, entries, drawFresh, seededRNG())
+	got := Draw(pool, entries, Fresh, seededRNG())
 	if got.ReleaseID == 0 {
-		t.Fatal("pickAlbum returned the zero Album instead of falling back to the full pool")
+		t.Fatal("Draw returned the zero Album instead of falling back to the full pool")
 	}
 }
 
 func TestPickAlbumSinglePool(t *testing.T) {
 	pool := poolOf(1)
-	got := pickAlbum(pool, histOf(pool[0]), drawFresh, seededRNG())
+	got := Draw(pool, histOf(pool[0]), Fresh, seededRNG())
 	if got.ReleaseID != 1 {
 		t.Errorf("got release %d, want 1", got.ReleaseID)
 	}
@@ -287,7 +287,7 @@ func TestPickAlbumAnyReturnsValidAlbums(t *testing.T) {
 	seen := make(map[string]bool)
 	rng := seededRNG()
 	for range 100 {
-		seen[pickAlbum(albums, nil, drawAny, rng).Key()] = true
+		seen[Draw(albums, nil, Any, rng).Key()] = true
 	}
 	if len(seen) < 2 {
 		t.Errorf("expected multiple different albums over 100 picks, got %d unique", len(seen))

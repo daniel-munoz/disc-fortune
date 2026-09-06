@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 )
 
 // include and years mirror the fixture helpers in internal/disc's
@@ -731,8 +732,8 @@ func TestParseSelectionDrawDefaultsToFresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSelection: %v", err)
 	}
-	if cfg.draw != drawFresh {
-		t.Errorf("draw = %v, want drawFresh", cfg.draw)
+	if cfg.draw != pick.Fresh {
+		t.Errorf("draw = %v, want pick.Fresh", cfg.draw)
 	}
 }
 
@@ -741,8 +742,8 @@ func TestParseSelectionDrawFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSelection: %v", err)
 	}
-	if cfg.draw != drawStale {
-		t.Errorf("draw = %v, want drawStale", cfg.draw)
+	if cfg.draw != pick.Stale {
+		t.Errorf("draw = %v, want pick.Stale", cfg.draw)
 	}
 }
 

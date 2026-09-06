@@ -140,7 +140,7 @@ func TestComputeStatsPicked(t *testing.T) {
 
 // A history entry with no release ID is a name wildcard: it matches every
 // pressing of its title, so all of them count as picked. This mirrors what
-// unheardOnly already does and is why the share is conservative.
+// pick.UnheardOnly already does and is why the share is conservative.
 func TestComputeStatsUnIDdHistoryEntryCountsEveryPressing(t *testing.T) {
 	one := disc.Album{ReleaseID: 1, Artist: "Miles Davis", Title: "Kind of Blue"}
 	two := disc.Album{ReleaseID: 2, Artist: "Miles Davis", Title: "Kind of Blue"}

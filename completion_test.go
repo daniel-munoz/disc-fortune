@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -124,8 +125,8 @@ func hasFlag(flags []completionFlag, name string) bool {
 // pins them to what the parsers actually accept rather than to a comment.
 func TestCompletionEnumValuesAreAccepted(t *testing.T) {
 	for _, v := range flagValues["draw"] {
-		if _, err := parseDrawMode(v); err != nil {
-			t.Errorf("completion offers --draw %q but parseDrawMode rejects it: %v", v, err)
+		if _, err := pick.ParseMode(v); err != nil {
+			t.Errorf("completion offers --draw %q but pick.ParseMode rejects it: %v", v, err)
 		}
 	}
 	for _, v := range flagValues["color"] {
@@ -133,8 +134,8 @@ func TestCompletionEnumValuesAreAccepted(t *testing.T) {
 			t.Errorf("completion offers --color %q but term.ParseMode rejects it: %v", v, err)
 		}
 	}
-	if _, err := parseDrawMode("nonsense"); err == nil {
-		t.Error("parseDrawMode accepted nonsense; the test above proves nothing")
+	if _, err := pick.ParseMode("nonsense"); err == nil {
+		t.Error("pick.ParseMode accepted nonsense; the test above proves nothing")
 	}
 	if _, err := term.ParseMode("nonsense"); err == nil {
 		t.Error("term.ParseMode accepted nonsense; the test above proves nothing")

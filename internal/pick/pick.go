@@ -1,4 +1,4 @@
-package main
+package pick
 
 import (
 	"fmt"
@@ -7,33 +7,33 @@ import (
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
-// drawMode selects how pick draws from the candidate pool.
-type drawMode int
+// Mode selects how pick draws from the candidate pool.
+type Mode int
 
 const (
-	// drawFresh excludes the recently played. It is the zero value so a
+	// Fresh excludes the recently played. It is the zero value so a
 	// selection built without an explicit mode gets the default rather than
 	// silently falling back to an unfiltered draw.
-	drawFresh drawMode = iota
-	// drawAny is a uniform draw; history is not consulted at all. This is
+	Fresh Mode = iota
+	// Any is a uniform draw; history is not consulted at all. This is
 	// what restores pre-2.3 behavior for anyone scripting against it.
-	drawAny
-	// drawStale is drawFresh's exclusion followed by a bias toward the
+	Any
+	// Stale is Fresh's exclusion followed by a bias toward the
 	// records left unplayed longest.
-	drawStale
+	Stale
 )
 
-// parseDrawMode converts the --draw flag value to a drawMode.
-func parseDrawMode(s string) (drawMode, error) {
+// ParseMode converts the --draw flag value to a Mode.
+func ParseMode(s string) (Mode, error) {
 	switch s {
 	case "fresh":
-		return drawFresh, nil
+		return Fresh, nil
 	case "any":
-		return drawAny, nil
+		return Any, nil
 	case "stale":
-		return drawStale, nil
+		return Stale, nil
 	default:
-		return drawFresh, fmt.Errorf("invalid --draw value %q (want any, fresh, or stale)", s)
+		return Fresh, fmt.Errorf("invalid --draw value %q (want any, fresh, or stale)", s)
 	}
 }
 
@@ -57,14 +57,14 @@ func antiRepeatWindow(poolSize int) int {
 	return n
 }
 
-// lastPlayedIndex returns the index in entries of the most recent pick of
+// LastPlayedIndex returns the index in entries of the most recent pick of
 // album, and whether it was ever picked.
 //
 // This is the single point where picking decides what "the same record" means,
 // and it scans backwards and stops at the first match. That is the only shape
 // disc.SameAlbum is safe in: an entry with no release ID is a wildcard for its
 // name, so a comparison that kept scanning would conflate distinct pressings.
-func lastPlayedIndex(entries []disc.HistoryEntry, album disc.Album) (int, bool) {
+func LastPlayedIndex(entries []disc.HistoryEntry, album disc.Album) (int, bool) {
 	for i := len(entries) - 1; i >= 0; i-- {
 		if disc.SameAlbum(album, entries[i].Album) {
 			return i, true
@@ -73,8 +73,8 @@ func lastPlayedIndex(entries []disc.HistoryEntry, album disc.Album) (int, bool) 
 	return 0, false
 }
 
-// containsAlbum reports whether album matches any entry of list.
-func containsAlbum(list []disc.Album, album disc.Album) bool {
+// ContainsAlbum reports whether album matches any entry of list.
+func ContainsAlbum(list []disc.Album, album disc.Album) bool {
 	for _, a := range list {
 		if disc.SameAlbum(a, album) {
 			return true
@@ -95,7 +95,7 @@ func recentlyPlayed(entries []disc.HistoryEntry, n int) []disc.Album {
 	var recent []disc.Album
 	for i := len(entries) - 1; i >= 0 && len(recent) < n; i-- {
 		album := entries[i].Album
-		if containsAlbum(recent, album) {
+		if ContainsAlbum(recent, album) {
 			continue
 		}
 		recent = append(recent, album)
@@ -103,38 +103,38 @@ func recentlyPlayed(entries []disc.HistoryEntry, n int) []disc.Album {
 	return recent
 }
 
-// unheardOnly returns the albums in pool that never appear in entries.
+// UnheardOnly returns the albums in pool that never appear in entries.
 //
 // Conservative by construction: a history entry with no release ID matches
 // every pressing of its title, so none of them count as unheard. Nothing in
 // the file says which pressing was actually played, and calling the others
 // unheard would assert more than the data supports. The backfill retires
 // these entries on the first sync after upgrade.
-func unheardOnly(pool []disc.Album, entries []disc.HistoryEntry) []disc.Album {
+func UnheardOnly(pool []disc.Album, entries []disc.HistoryEntry) []disc.Album {
 	var out []disc.Album
 	for _, album := range pool {
-		if _, played := lastPlayedIndex(entries, album); !played {
+		if _, played := LastPlayedIndex(entries, album); !played {
 			out = append(out, album)
 		}
 	}
 	return out
 }
 
-// pickAlbum chooses one album from pool, consulting entries per mode.
+// Draw chooses one album from pool, consulting entries per mode.
 //
 // pool must not be empty; the caller reports that case with its own message
 // and exit code, because what to say about it depends on which filters were
 // responsible.
-func pickAlbum(pool []disc.Album, entries []disc.HistoryEntry, mode drawMode, rng *rand.Rand) disc.Album {
-	if mode == drawAny {
+func Draw(pool []disc.Album, entries []disc.HistoryEntry, mode Mode, rng *rand.Rand) disc.Album {
+	if mode == Any {
 		return pool[rng.IntN(len(pool))]
 	}
 
-	// drawStale is drawFresh plus a bias, not an alternative to it, so the
+	// Stale is Fresh plus a bias, not an alternative to it, so the
 	// anti-repeat guarantee holds whatever --draw says.
 	candidates := excludeRecent(pool, entries)
 
-	if mode == drawStale {
+	if mode == Stale {
 		return candidates[weightedIndex(staleWeights(candidates, entries), rng)]
 	}
 	return candidates[rng.IntN(len(candidates))]
@@ -153,7 +153,7 @@ func pickAlbum(pool []disc.Album, entries []disc.HistoryEntry, mode drawMode, rn
 func entriesInPool(entries []disc.HistoryEntry, pool []disc.Album) []disc.HistoryEntry {
 	kept := make([]disc.HistoryEntry, 0, len(entries))
 	for _, e := range entries {
-		if containsAlbum(pool, e.Album) {
+		if ContainsAlbum(pool, e.Album) {
 			kept = append(kept, e)
 		}
 	}
@@ -175,7 +175,7 @@ func excludeRecent(pool []disc.Album, entries []disc.HistoryEntry) []disc.Album 
 
 	var kept []disc.Album
 	for _, album := range pool {
-		if !containsAlbum(recent, album) {
+		if !ContainsAlbum(recent, album) {
 			kept = append(kept, album)
 		}
 	}
@@ -197,7 +197,7 @@ func excludeRecent(pool []disc.Album, entries []disc.HistoryEntry) []disc.Album 
 func staleWeights(candidates []disc.Album, entries []disc.HistoryEntry) []int {
 	weights := make([]int, len(candidates))
 	for i, album := range candidates {
-		idx, played := lastPlayedIndex(entries, album)
+		idx, played := LastPlayedIndex(entries, album)
 		if !played {
 			weights[i] = len(entries) + 1
 			continue
@@ -226,9 +226,9 @@ func weightedIndex(weights []int, rng *rand.Rand) int {
 	return len(weights) - 1
 }
 
-// newRNG seeds a generator from the global source. pickAlbum takes an explicit
+// NewRNG seeds a generator from the global source. Draw takes an explicit
 // *rand.Rand rather than calling rand.IntN so that tests can pin the sequence;
 // this is where production gets a real one.
-func newRNG() *rand.Rand {
+func NewRNG() *rand.Rand {
 	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 }
