@@ -239,7 +239,7 @@ type command struct {
 	name    string
 	summary string // one line, listed by `help`
 	usage   string // full block, shown by `help <cmd>` and on usage error
-	run     func(a app, args []string)
+	run     func(a app, args []string) error
 	// needsConfig marks the commands that read or write data files. Only
 	// those fail when the config directory cannot be resolved; help,
 	// version and folders must keep working on a machine with no usable
@@ -780,12 +780,15 @@ Flags:
                    entirely; stale favors what you have left longest.
   --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseSelection("pick", args)
 				if handleParseErr("pick", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runPick(cfg)
+				return a.runPick(cfg)
 			},
 		},
 		{
@@ -801,12 +804,15 @@ Flags:
   --unheard        List only albums you have never picked
   --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseSelection("list", args)
 				if handleParseErr("list", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runList(cfg)
+				return a.runList(cfg)
 			},
 		},
 		{
@@ -822,12 +828,15 @@ Flags:
   --folder NAME    Sync only this folder (repeatable)
 
 Run ` + "`disc-fortune folders`" + ` to see available folder names.`,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseSync(args)
 				if handleParseErr("sync", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runSync(cfg)
+				return a.runSync(cfg)
 			},
 		},
 		{
@@ -837,11 +846,11 @@ Run ` + "`disc-fortune folders`" + ` to see available folder names.`,
 
 Lists the folder names in your Discogs collection, for use with
 ` + "`disc-fortune sync --folder`" + `. Requires DISCOGS_TOKEN to be set.`,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				if handleParseErr("folders", parseNoArgs("folders", args)) {
-					return
+					return nil
 				}
-				a.runFolders()
+				return a.runFolders()
 			},
 		},
 		{
@@ -854,12 +863,15 @@ Shows the last N picks. N defaults to 10; 0 shows all of them.
 
 Flags:
   --json           Emit machine-readable JSON instead of text`,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseHistory(args)
 				if handleParseErr("history", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runHistory(cfg)
+				return a.runHistory(cfg)
 			},
 		},
 		{
@@ -876,12 +888,15 @@ Flags:
   --favorites      Describe favorites only
   --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseStats(args)
 				if handleParseErr("stats", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runStats(cfg)
+				return a.runStats(cfg)
 			},
 		},
 		{
@@ -901,12 +916,15 @@ store-exclusive colours, say -- so --release-id is the one that always works.
 The QUERY can also be given as --query, which is the only difference between
 the two spellings. --release-id needs neither.
 ` + filterFlagHelp,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseFavorite("favorite", args)
 				if handleParseErr("favorite", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runFavorite(cfg)
+				return a.runFavorite(cfg)
 			},
 		},
 		{
@@ -922,12 +940,15 @@ something that is not favorited succeeds quietly.
 The QUERY can also be given as --query, which is the only difference between
 the two spellings. --release-id needs neither.
 ` + filterFlagHelp,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseFavorite("unfavorite", args)
 				if handleParseErr("unfavorite", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runUnfavorite(cfg)
+				return a.runUnfavorite(cfg)
 			},
 		},
 		{
@@ -947,12 +968,15 @@ URL is printed instead and the command still succeeds.
 Flags:
   --print          Print the URL instead of opening a browser
 ` + filterFlagHelp,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				cfg, err := parseOpen(args)
 				if handleParseErr("open", err) {
-					return
+					// handleParseErr has already decided the process's
+					// fate: usage to stdout and exit 0 for --help, or its
+					// own exit 1 for a usage error.
+					return nil
 				}
-				a.runOpen(cfg)
+				return a.runOpen(cfg)
 			},
 		},
 		{
@@ -968,11 +992,11 @@ disc-fortune keeps using the legacy directory when it already holds your data,
 even with XDG_CONFIG_HOME set, so that an upgrade never appears to lose your
 collection. This command performs the move once you are ready. It refuses to
 run if the destination already contains files.`,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				if handleParseErr("migrate", parseNoArgs("migrate", args)) {
-					return
+					return nil
 				}
-				a.runMigrate()
+				return a.runMigrate()
 			},
 		},
 		{
@@ -1000,39 +1024,41 @@ Command and flag names are completed, as are the fixed values of --draw and
 --color. Values that would have to be read from your collection, such as those
 of --genre and --label, are not: a completion should never depend on a file
 that a sync may be rewriting.`,
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				shell, err := parseCompletion(args)
 				if handleParseErr("completion", err) {
-					return
+					return nil
 				}
-				runCompletion(shell)
+				return runCompletion(shell)
 			},
 		},
 		{
 			name:    "version",
 			summary: "Print the version",
 			usage:   "Usage: disc-fortune version\n\nPrints the disc-fortune version and exits.",
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				if handleParseErr("version", parseNoArgs("version", args)) {
-					return
+					return nil
 				}
 				fmt.Printf("disc-fortune %s\n", version)
+				return nil
 			},
 		},
 		{
 			name:    "help",
 			summary: "Show help for a command",
 			usage:   "Usage: disc-fortune help [COMMAND]\n\nShows general help, or detailed help for one command.",
-			run: func(a app, args []string) {
+			run: func(a app, args []string) error {
 				topic, err := parseHelp(args)
 				if handleParseErr("help", err) {
-					return
+					return nil
 				}
 				out, err := helpText(topic)
 				if err != nil {
-					fatal("%v", err)
+					return err
 				}
 				fmt.Println(out)
+				return nil
 			},
 		},
 	}
@@ -1062,5 +1088,11 @@ func dispatch(args []string) {
 	} else if cmd.needsConfig {
 		fmt.Fprint(os.Stderr, migrationNotice(a.loc, a.metaPath(), isTTY(os.Stderr)))
 	}
-	cmd.run(a, rest)
+	// The one exit point for a command failure. The printer adds no prefix:
+	// fatal never did either, and the two messages above carry their own
+	// "disc-fortune: " in their text.
+	if err := cmd.run(a, rest); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

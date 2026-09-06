@@ -33,26 +33,26 @@ func (a *arrayFlags) Set(value string) error {
 }
 
 // runSync fetches the collection from Discogs and caches it locally.
-func (a app) runSync(cfg syncConfig) {
+func (a app) runSync(cfg syncConfig) error {
 	client, err := newDiscogsClient()
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 	client.progress = syncProgress(os.Stderr, isTTY(os.Stderr))
 
 	username, err := client.getUsername()
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 
 	folderIDs, err := resolveFolderIDs(client, username, cfg.folders)
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 
 	albums, err := collectAlbums(client, username, folderIDs)
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 
 	// Read before the write below overwrites it: comparing the two is what
@@ -61,13 +61,13 @@ func (a app) runSync(cfg syncConfig) {
 	previous, _ := loadCollectionFrom(a.collectionPath())
 
 	if err := saveCollectionTo(a.collectionPath(), albums); err != nil {
-		fatal("Error saving collection: %v", err)
+		return fmt.Errorf("Error saving collection: %v", err)
 	}
 
 	// Recorded after the collection lands, so a stale timestamp never claims
 	// a sync that did not actually persist.
 	if err := recordSync(a.metaPath(), time.Now()); err != nil {
-		fatal("Error saving sync metadata: %v", err)
+		return fmt.Errorf("Error saving sync metadata: %v", err)
 	}
 
 	// Also after the collection lands, so IDs are never stamped from a
@@ -91,31 +91,33 @@ func (a app) runSync(cfg syncConfig) {
 	fmt.Printf("Synced %d albums (%d with full metadata)\n", len(albums), withMetadata)
 	fmt.Print(unmergeNotice(previous, albums))
 	fmt.Print(backfillReport)
+	return nil
 }
 
 // runFolders lists the user's Discogs collection folders.
-func (a app) runFolders() {
+func (a app) runFolders() error {
 	client, err := newDiscogsClient()
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 	username, err := client.getUsername()
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
-	printFolders(client, username)
+	return printFolders(client, username)
 }
 
 // printFolders lists the user's Discogs collection folders.
-func printFolders(client *discogsClient, username string) {
+func printFolders(client *discogsClient, username string) error {
 	folders, err := client.getFolders(username)
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 	fmt.Println("Available folders:")
 	for _, f := range folders {
 		fmt.Printf("  %s\n", f.Name)
 	}
+	return nil
 }
 
 // resolveFolderIDs maps folder names to IDs, defaulting to folder 0 ("All").

@@ -348,10 +348,11 @@ func sortedKeys(m map[string][]string) []string {
 	return keys
 }
 
-func runCompletion(shell string) {
+func runCompletion(shell string) error {
 	script, err := completionScript(shell)
 	if err != nil {
-		fatal("Error: %v", err)
+		return fmt.Errorf("Error: %v", err)
 	}
 	fmt.Print(script)
+	return nil
 }
