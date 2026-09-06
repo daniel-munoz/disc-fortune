@@ -680,8 +680,10 @@ func TestRunListWritesToInjectedStdout(t *testing.T) {
 	}
 }
 
-// TestRunListEmptyMatchReturnsErrorAndWritesNothing pins the contract that a
-// failing command leaves stdout untouched -- the rule --json depends on.
+// TestRunListEmptyMatchReturnsErrorAndWritesNothing guards that the empty-match
+// branch returns before writing anything to stdout. It does not prove writer
+// routing -- the pre-refactor code did not write here either -- but it stops a
+// future edit moving the write above the empty check.
 func TestRunListEmptyMatchReturnsErrorAndWritesNothing(t *testing.T) {
 	dir := t.TempDir()
 	writeTestCollection(t, filepath.Join(dir, "collection.json"))
@@ -1284,7 +1286,24 @@ Run: `go test . -run 'TestRunHistoryEmpty|TestMissingCollection' -v`
 Expected: PASS. If the second fails on wording, Task 4 Step 1 drifted — fix the
 error value, not the test.
 
-- [ ] **Step 3: Refresh two comments the refactor made stale**
+- [ ] **Step 3: Finish the writer injection in `cli.go`**
+
+Task 5 injected `a.stdout`/`a.stderr` throughout `main.go`, `sync.go` and
+`migrate.go`, but its brief scoped the work to those three files. The `version`
+and `help` command entries in `cli.go` already receive `a` in their `run`
+closures and ignore it, still calling bare `fmt.Printf`/`fmt.Println`. Route
+both through `a.stdout`. It is a two-line change with `a` already in scope, and
+without it those two commands stay permanently untestable in process — which is
+the goal the whole `app` refactor exists to serve.
+
+Leave `handleParseErr` alone. It is a free function with no `app` at any call
+site, so injecting it is a real signature change rather than a two-line fix,
+and it is out of scope for this plan.
+
+Behaviour must stay byte-identical: `a.stdout` is the real `os.Stdout` in
+production, so the harness must still pass.
+
+- [ ] **Step 4: Refresh two comments the refactor made stale**
 
 Neither is an assertion, so both are safe to edit.
 
@@ -1299,7 +1318,7 @@ produces. Do not weaken or remove any assertion around it.
 `main_test.go:172` still mentions `configDir()`, deleted in Task 3. Update or
 drop the mention.
 
-- [ ] **Step 4: Update `README.md`**
+- [ ] **Step 5: Update `README.md`**
 
 Search for any description of the layout:
 
@@ -1310,12 +1329,12 @@ grep -n 'package main\|repository root\|\.go' README.md
 Update anything claiming the code is flat. If the README says nothing about
 layout, add nothing — this is not an invitation to document the structure.
 
-- [ ] **Step 5: Decide on release notes**
+- [ ] **Step 6: Decide on release notes**
 
 This release has **no user-visible change**. If a version is cut, its notes say
 exactly that. If no release is planned, create no file and skip this step.
 
-- [ ] **Step 6: Full verification**
+- [ ] **Step 7: Full verification**
 
 ```bash
 go build ./... && go test ./... && gofmt -l . && go vet ./...
@@ -1325,7 +1344,7 @@ scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base
 
 Expected: everything green, `behaviour-diff: OK`.
 
-- [ ] **Step 7: Commit and clean up the baseline**
+- [ ] **Step 8: Commit and clean up the baseline**
 
 ```bash
 git add -A
