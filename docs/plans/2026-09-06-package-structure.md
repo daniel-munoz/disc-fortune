@@ -96,7 +96,7 @@ echo '.refactor-baseline/' >> .gitignore
 Create `scripts/behaviour-diff.sh`:
 
 ```bash
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 # Compares the current tree's binary against a baseline build across a fixed
 # set of invocations, asserting stdout, stderr and exit code are identical.
 #
@@ -197,8 +197,8 @@ if [ "$FAIL" -eq 0 ]; then echo "behaviour-diff: OK (${#PROBES[@]} probes + 4 pi
 exit "$FAIL"
 ```
 
-Note the `${=2}` word-splitting: the script must be run with `zsh` or have that
-line changed to `$2` under bash. Make it executable:
+The `${=2}` word-splitting is zsh-only, which is why the shebang is zsh. Make it
+executable:
 
 ```bash
 chmod +x scripts/behaviour-diff.sh
@@ -206,7 +206,7 @@ chmod +x scripts/behaviour-diff.sh
 
 - [ ] **Step 3: Verify the harness passes against an unchanged tree**
 
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: `behaviour-diff: OK (27 probes + 4 pick probes)` and exit 0.
 
 If it reports a mismatch here, the harness is wrong (nothing has changed yet) —
@@ -267,7 +267,7 @@ Edit each file Step 1 listed, changing `RELEASE_NOTES_vX.Y.Z.md` to
 
 - [ ] **Step 4: Verify nothing broke**
 
-Run: `go test ./... && zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `go test ./... && scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: tests PASS, harness OK.
 
 - [ ] **Step 5: Commit**
@@ -440,7 +440,7 @@ usable home directory.
 Run: `go build ./... && go test ./... && gofmt -l . && go vet ./...`
 Expected: builds, tests PASS, gofmt silent, vet silent.
 
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: `behaviour-diff: OK`.
 
 If `env_conventions_test.go` fails, the likely cause is config resolution
@@ -607,7 +607,7 @@ already decided the process's fate.
 Run: `go test ./... && gofmt -l . && go vet ./...`
 Expected: PASS / silent / silent.
 
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: `behaviour-diff: OK`.
 
 Run: `grep -n 'fatal(' *.go | grep -v _test`
@@ -777,7 +777,7 @@ Leave `dispatch`'s own writes on `os.Stderr` — it has an `app` only after
 Run: `go test . -run TestRunList -v`
 Expected: PASS.
 
-Run: `go test ./... && zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `go test ./... && scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: PASS and `behaviour-diff: OK`.
 
 - [ ] **Step 7: Commit**
@@ -847,8 +847,8 @@ identifiers only, no assertion changes.
 
 - [ ] **Step 4: Update every consumer**
 
-`cli.go`, `main.go`, `sync.go`, `history.go`, `stats.go` reference the renamed
-symbols through the `term.` qualifier. The compiler enumerates them all; there
+`cli.go`, `main.go`, `sync.go`, `history.go`, `stats.go` and `app_test.go`
+reference the renamed symbols through the `term.` qualifier. The compiler enumerates them all; there
 is nothing to guess. `git rm color.go color_test.go`.
 
 - [ ] **Step 5: Verify**
@@ -856,7 +856,7 @@ is nothing to guess. `git rm color.go color_test.go`.
 Run: `go build ./... && go test ./... && gofmt -l . && go vet ./...`
 Expected: builds, PASS, silent, silent.
 
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: `behaviour-diff: OK`.
 
 - [ ] **Step 6: Commit**
@@ -943,11 +943,20 @@ from `backfill_test.go` to `history_test.go` unchanged.
 
 - [ ] **Step 5: Qualify every reference at the root**
 
-Add the import to `main.go`, `cli.go`, `sync.go`, `json.go` and `app.go`:
+Add the import to `main.go`, `cli.go`, `sync.go`, `json.go`, `app.go`,
+`app_test.go` — **and to `picker.go`, `stats.go` and `discogs.go`**:
 
 ```go
 "github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 ```
+
+Those last three are easy to miss. They stay in `package main` until Tasks 8, 9
+and 10, so the moment `internal/disc` exists they become cross-package consumers
+of `Album`, `HistoryEntry`, `Meta`, `sameAlbum`, `formatTimestamp` and `plural`.
+`internal/disc` therefore has to export **`SameAlbum`** in this task, not in
+Task 8: rename `sameAlbum` → `SameAlbum` and update its callers inside `disc`
+(`favorites.go` and the tests). Keep its doc comment verbatim — the roadmap's
+Phase 2 notes depend on that ID-then-name fallback being understood.
 
 `app.go`'s field becomes `loc disc.Location`, and `newApp` calls
 `disc.ResolveDir`. The compiler enumerates the rest — build repeatedly and fix
@@ -963,7 +972,7 @@ Expected: both succeed. **This is the step that catches a broken
 `lock_unix.go` / `lock_other.go` build-tag pair**, which is invisible when
 building only for macOS.
 
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: `behaviour-diff: OK`.
 
 - [ ] **Step 7: Commit**
@@ -990,7 +999,7 @@ backfill.go to history.go, beside the other formatting helpers."
 - Modify: `main.go`, `cli.go`
 
 **Interfaces:**
-- Consumes: `disc.Album`, `disc.HistoryEntry`, and `disc.SameAlbum` — which Task 7 left unexported. **Export `SameAlbum` in this task**, since `pick` is its first cross-package consumer.
+- Consumes: `disc.Album`, `disc.HistoryEntry`, `disc.SameAlbum` (already exported in Task 7).
 - Produces: `pick.Mode` (was `drawMode`), `pick.ParseMode`, `pick.Fresh`/`pick.Any`/`pick.Stale`, `pick.Draw(pool, entries, mode, rng) disc.Album` (was `pickAlbum`), `pick.UnheardOnly`, `pick.NewRNG`, `pick.ContainsAlbum`, `pick.LastPlayedIndex`
 
 - [ ] **Step 1: Move and repackage**
@@ -1002,14 +1011,7 @@ git mv picker.go picker_test.go internal/pick/
 
 `package main` → `package pick` in both. Import `internal/disc`.
 
-- [ ] **Step 2: Export `SameAlbum` in `internal/disc`**
-
-In `internal/disc/collection.go`, rename `sameAlbum` → `SameAlbum` and update
-its callers inside `disc` (`favorites.go`, and the tests). Its doc comment
-already explains the ID-then-name fallback; keep it verbatim — the roadmap's
-Phase 2 notes depend on that behaviour being understood.
-
-- [ ] **Step 3: Rename to remove stutter**
+- [ ] **Step 2: Rename to remove stutter**
 
 `pickAlbum` → `pick.Album` would collide conceptually with `disc.Album`, so use
 **`pick.Draw`**. `drawMode` → `Mode`, `drawFresh`/`drawAny`/`drawStale` →
@@ -1022,21 +1024,20 @@ unexported.
 The `--draw` flag's accepted values (`fresh`, `any`, `stale`) and its error text
 are user-facing and unchanged.
 
-- [ ] **Step 4: Verify**
+- [ ] **Step 3: Verify**
 
 Run: `go build ./... && go test ./... && gofmt -l . && go vet ./...`
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: builds, PASS, silent, silent, `behaviour-diff: OK`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
 git commit -m "refactor: extract internal/pick
 
 picker.go becomes internal/pick. pickAlbum is now pick.Draw -- pick.Album
-would have read as a type. disc.SameAlbum is exported here, its first
-cross-package consumer."
+would have read as a type."
 ```
 
 ---
@@ -1121,7 +1122,7 @@ actually occur.
 - [ ] **Step 5: Verify**
 
 Run: `go build ./... && go test ./... && gofmt -l . && go vet ./...`
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: builds, PASS, silent, silent, `behaviour-diff: OK`.
 
 - [ ] **Step 6: Commit**
@@ -1178,7 +1179,7 @@ Keep `topN`, `maxBarWidth` and every piece of output formatting byte-identical �
 
 Run: `go build ./... && go test ./... && gofmt -l . && go vet ./...`
 Run: `GOOS=windows go build ./... && GOOS=linux go build ./...`
-Run: `zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
+Run: `scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base`
 Expected: all green, `behaviour-diff: OK`.
 
 - [ ] **Step 5: Confirm the end state matches the design**
@@ -1296,7 +1297,7 @@ exactly that. If no release is planned, create no file and skip this step.
 ```bash
 go build ./... && go test ./... && gofmt -l . && go vet ./...
 GOOS=windows go build ./... && GOOS=linux go build ./...
-zsh scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base
+scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base
 ```
 
 Expected: everything green, `behaviour-diff: OK`.
