@@ -753,6 +753,14 @@ In `main.go` (28 sites), `sync.go` (7) and `migrate.go` (2):
 - `fmt.Fprintln(os.Stderr, x)` → `fmt.Fprintln(a.stderr, x)`
 - `writeJSON(os.Stdout, v)` → `writeJSON(a.stdout, v)`
 
+**`reportAmbiguous` writes to two different streams and must keep doing so.**
+Task 4 established that its candidate list goes to **stdout** (asserted at
+`main_test.go:389` and `main_test.go:409`) while the trailing "Be more
+specific…" text travels back as the returned error and is printed to stderr by
+`dispatch`. When you inject writers, the list must go to `a.stdout` — not
+`a.stderr`. Getting this backwards moves user-facing output between streams and
+breaks the two assertions above.
+
 `stdoutColor` becomes a method, since whether to colourise depends on whether
 the *real* stdout is a terminal:
 
@@ -1276,7 +1284,22 @@ Run: `go test . -run 'TestRunHistoryEmpty|TestMissingCollection' -v`
 Expected: PASS. If the second fails on wording, Task 4 Step 1 drifted — fix the
 error value, not the test.
 
-- [ ] **Step 3: Update `README.md`**
+- [ ] **Step 3: Refresh two comments the refactor made stale**
+
+Neither is an assertion, so both are safe to edit.
+
+`main_test.go:63-64` explains the subprocess harness by naming
+`selectAlbums`, `loadCollectionOrExit` and `loadFavoritesOrExit` and saying
+`os.Exit` lives inside them. After Task 4 none of that is true — the first was
+renamed and the other two no longer exist, and no command function calls
+`os.Exit` any more. Rewrite the comment to say what is now true: the harness
+exists to observe the process's real exit code, which `dispatch` alone
+produces. Do not weaken or remove any assertion around it.
+
+`main_test.go:172` still mentions `configDir()`, deleted in Task 3. Update or
+drop the mention.
+
+- [ ] **Step 4: Update `README.md`**
 
 Search for any description of the layout:
 
@@ -1287,12 +1310,12 @@ grep -n 'package main\|repository root\|\.go' README.md
 Update anything claiming the code is flat. If the README says nothing about
 layout, add nothing — this is not an invitation to document the structure.
 
-- [ ] **Step 4: Decide on release notes**
+- [ ] **Step 5: Decide on release notes**
 
 This release has **no user-visible change**. If a version is cut, its notes say
 exactly that. If no release is planned, create no file and skip this step.
 
-- [ ] **Step 5: Full verification**
+- [ ] **Step 6: Full verification**
 
 ```bash
 go build ./... && go test ./... && gofmt -l . && go vet ./...
@@ -1302,7 +1325,7 @@ scripts/behaviour-diff.sh .refactor-baseline/disc-fortune-base
 
 Expected: everything green, `behaviour-diff: OK`.
 
-- [ ] **Step 6: Commit and clean up the baseline**
+- [ ] **Step 7: Commit and clean up the baseline**
 
 ```bash
 git add -A
