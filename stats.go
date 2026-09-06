@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // topN is how many genres and how many labels `stats` lists.
@@ -349,12 +351,12 @@ func heading(s string, useColor bool) string {
 	if !useColor {
 		return s
 	}
-	return colorBoldWhite + s + colorReset
+	return term.BoldWhite + s + term.Reset
 }
 
 func dim(s string, useColor bool) string {
 	if !useColor || s == "" {
 		return s
 	}
-	return colorDim + s + colorReset
+	return term.Dim + s + term.Reset
 }

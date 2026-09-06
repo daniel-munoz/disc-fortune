@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // syncProgress returns a progressFunc writing to w, or nil when progress is
@@ -38,7 +40,7 @@ func (a app) runSync(cfg syncConfig) error {
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	client.progress = syncProgress(a.stderr, isTTY(os.Stderr))
+	client.progress = syncProgress(a.stderr, term.IsTTY(os.Stderr))
 
 	username, err := client.getUsername()
 	if err != nil {

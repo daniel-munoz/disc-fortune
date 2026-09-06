@@ -4,6 +4,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // The guard that makes "completion is generated, not hardcoded" true rather
@@ -126,15 +128,15 @@ func TestCompletionEnumValuesAreAccepted(t *testing.T) {
 		}
 	}
 	for _, v := range flagValues["color"] {
-		if _, err := parseColorMode(v); err != nil {
-			t.Errorf("completion offers --color %q but parseColorMode rejects it: %v", v, err)
+		if _, err := term.ParseMode(v); err != nil {
+			t.Errorf("completion offers --color %q but term.ParseMode rejects it: %v", v, err)
 		}
 	}
 	if _, err := parseDrawMode("nonsense"); err == nil {
 		t.Error("parseDrawMode accepted nonsense; the test above proves nothing")
 	}
-	if _, err := parseColorMode("nonsense"); err == nil {
-		t.Error("parseColorMode accepted nonsense; the test above proves nothing")
+	if _, err := term.ParseMode("nonsense"); err == nil {
+		t.Error("term.ParseMode accepted nonsense; the test above proves nothing")
 	}
 }
 

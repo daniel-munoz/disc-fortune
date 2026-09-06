@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // HistoryEntry represents a single pick with timestamp.
@@ -116,19 +118,19 @@ func formatHistory(entries []HistoryEntry, limit int, useColor bool) string {
 		sb.WriteString(fmt.Sprintf("  %d. %s: ", idx, formatTimestamp(entry.Timestamp)))
 
 		if useColor {
-			sb.WriteString(colorBoldCyan)
+			sb.WriteString(term.BoldCyan)
 		}
 		sb.WriteString(entry.Album.Artist)
 		if useColor {
-			sb.WriteString(colorReset)
+			sb.WriteString(term.Reset)
 		}
 		sb.WriteString(" - ")
 		if useColor {
-			sb.WriteString(colorBoldWhite)
+			sb.WriteString(term.BoldWhite)
 		}
 		sb.WriteString(entry.Album.Title)
 		if useColor {
-			sb.WriteString(colorReset)
+			sb.WriteString(term.Reset)
 		}
 		sb.WriteString("\n")
 	}

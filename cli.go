@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // globalFlags holds the flags every command accepts. They are registered in
@@ -19,8 +21,8 @@ type globalFlags struct {
 }
 
 // mode resolves the global flags into the values commands actually use.
-func (g *globalFlags) mode() (colorMode, error) {
-	return parseColorMode(*g.color)
+func (g *globalFlags) mode() (term.Mode, error) {
+	return term.ParseMode(*g.color)
 }
 
 // newFlagSet builds a FlagSet that never prints or exits on its own, so the
@@ -263,7 +265,7 @@ type selection struct {
 	// list, which never sets it.
 	draw   drawMode
 	filter Filter
-	color  colorMode
+	color  term.Mode
 	// json switches the data channel to the documented machine-readable
 	// payload. It changes the format only: exit codes, stderr advice and
 	// history side effects are identical either way.
@@ -276,13 +278,13 @@ type selection struct {
 type favoriteConfig struct {
 	query  string
 	filter Filter
-	color  colorMode
+	color  term.Mode
 }
 
 // historyConfig is the parsed form of history. A limit of 0 means "all".
 type historyConfig struct {
 	limit int
-	color colorMode
+	color term.Mode
 	json  bool
 }
 
@@ -290,7 +292,7 @@ type historyConfig struct {
 type statsConfig struct {
 	favoritesOnly bool
 	filter        Filter
-	color         colorMode
+	color         term.Mode
 	json          bool
 }
 
@@ -440,7 +442,7 @@ func parseFavorite(name string, args []string) (favoriteConfig, error) {
 type openConfig struct {
 	query     string
 	filter    Filter
-	color     colorMode
+	color     term.Mode
 	printOnly bool
 }
 
@@ -1086,7 +1088,7 @@ func dispatch(args []string) {
 			fatal("disc-fortune: %v", cfgErr)
 		}
 	} else if cmd.needsConfig {
-		fmt.Fprint(os.Stderr, migrationNotice(a.loc, a.metaPath(), isTTY(os.Stderr)))
+		fmt.Fprint(os.Stderr, migrationNotice(a.loc, a.metaPath(), term.IsTTY(os.Stderr)))
 	}
 	// The one exit point for a command failure. The printer adds no prefix:
 	// fatal never did either, and the two messages above carry their own

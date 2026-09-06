@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 const version = "2.5.0"
@@ -64,8 +66,8 @@ func (a app) favorites() ([]Album, error) {
 // --color flag, NO_COLOR, and whether stdout is a terminal. It deliberately
 // still asks os.Stdout rather than a.stdout: colour depends on where output
 // actually lands, and a test's bytes.Buffer is never a terminal anyway.
-func (a app) stdoutColor(mode colorMode) bool {
-	return useColor(mode, isTTY(os.Stdout), os.Getenv)
+func (a app) stdoutColor(mode term.Mode) bool {
+	return term.Use(mode, term.IsTTY(os.Stdout), os.Getenv)
 }
 
 // selectAlbums loads the collection or favorites per cfg and applies its filter.
@@ -97,7 +99,7 @@ func formatMatch(album Album, useColor bool) string {
 	}
 	line := fmt.Sprintf("release %d", album.ReleaseID)
 	if useColor {
-		line = colorDim + line + colorReset
+		line = term.Dim + line + term.Reset
 	}
 	return out + "\n" + line
 }
@@ -171,7 +173,7 @@ func (a app) runPick(cfg selection) error {
 
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
-	fmt.Fprint(a.stderr, syncNotice(a.metaPath(), time.Now(), isTTY(os.Stderr)))
+	fmt.Fprint(a.stderr, syncNotice(a.metaPath(), time.Now(), term.IsTTY(os.Stderr)))
 	return nil
 }
 
@@ -316,7 +318,7 @@ func (cfg openConfig) describe() string {
 // answer to the query, and only the trailing advice belongs on stderr. So the
 // list is printed here and just the advice is carried by the error, which
 // dispatch prints to stderr before exiting 1.
-func (a app) reportAmbiguous(matches []Album, color colorMode) error {
+func (a app) reportAmbiguous(matches []Album, color term.Mode) error {
 	fmt.Fprint(a.stdout, formatList(matches, a.stdoutColor(color), true))
 	return errors.New("Be more specific, add filters, or use --release-id.")
 }

@@ -4,6 +4,8 @@ import (
 	"flag"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 func TestPickAcceptsColorFlag(t *testing.T) {
@@ -11,8 +13,8 @@ func TestPickAcceptsColorFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSelection: %v", err)
 	}
-	if cfg.color != colorAlways {
-		t.Errorf("color = %v, want colorAlways", cfg.color)
+	if cfg.color != term.Always {
+		t.Errorf("color = %v, want term.Always", cfg.color)
 	}
 }
 
@@ -31,8 +33,8 @@ func TestHistoryAcceptsColorFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseHistory: %v", err)
 	}
-	if cfg.color != colorNever {
-		t.Errorf("color = %v, want colorNever", cfg.color)
+	if cfg.color != term.Never {
+		t.Errorf("color = %v, want term.Never", cfg.color)
 	}
 	if cfg.limit != 5 {
 		t.Errorf("limit = %d, want 5", cfg.limit)
@@ -44,8 +46,8 @@ func TestFavoriteAcceptsColorFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseFavorite: %v", err)
 	}
-	if cfg.color != colorNever {
-		t.Errorf("color = %v, want colorNever", cfg.color)
+	if cfg.color != term.Never {
+		t.Errorf("color = %v, want term.Never", cfg.color)
 	}
 }
 

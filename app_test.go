@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // TestRunListWritesToInjectedStdout is the acceptance test for the whole
@@ -21,7 +23,7 @@ func TestRunListWritesToInjectedStdout(t *testing.T) {
 		stderr: &errOut,
 	}
 
-	if err := a.runList(selection{color: colorNever}); err != nil {
+	if err := a.runList(selection{color: term.Never}); err != nil {
 		t.Fatalf("runList: %v", err)
 	}
 	if !strings.Contains(out.String(), "Miles Davis - Kind of Blue") {
@@ -43,7 +45,7 @@ func TestRunListEmptyMatchReturnsErrorAndWritesNothing(t *testing.T) {
 
 	filter := Filter{Query: FieldFilter{Include: []string{"zzzz-no-such-album"}}}
 
-	err := a.runList(selection{color: colorNever, filter: filter})
+	err := a.runList(selection{color: term.Never, filter: filter})
 	if err == nil {
 		t.Fatal("expected an error for an empty match")
 	}

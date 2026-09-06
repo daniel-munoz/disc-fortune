@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 func TestComputeStatsCountsAndFavorites(t *testing.T) {
@@ -252,10 +254,10 @@ func TestFormatStatsOmitsAbsentLines(t *testing.T) {
 func TestFormatStatsColorsHeadingsAndBars(t *testing.T) {
 	s := Stats{Count: 1, Total: 1, Decades: []DecadeBucket{{1970, 1}}}
 	out := formatStats(s, true)
-	if !strings.Contains(out, colorBoldWhite+"Decades"+colorReset) {
+	if !strings.Contains(out, term.BoldWhite+"Decades"+term.Reset) {
 		t.Errorf("heading not bold:\n%q", out)
 	}
-	if !strings.Contains(out, colorDim) {
+	if !strings.Contains(out, term.Dim) {
 		t.Errorf("bar not dimmed:\n%q", out)
 	}
 }
