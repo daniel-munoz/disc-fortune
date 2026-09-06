@@ -61,15 +61,18 @@ func TestRunListSingular(t *testing.T) {
 
 // --- Exit-code coverage -----------------------------------------------
 //
-// No command function calls os.Exit any more -- each returns an error, and
-// dispatch is the one place that turns a non-nil error (or a resolve/config
-// failure) into os.Exit(1). That exit code is still only observable by
-// letting a real process actually exit, since calling dispatch in-process
-// would kill the test binary itself. The standard fix is the Go self-exec
-// helper pattern (as used by package os/exec's own tests): re-run this same
-// test binary as a subprocess restricted to TestHelperProcess, which calls
-// dispatch and lets any os.Exit take down that subprocess instead of us,
-// then inspect the subprocess's real exit code.
+// Command functions return errors rather than exiting; dispatch turns a
+// non-nil error, or a resolve/config failure, into os.Exit(1). The
+// exception is handleParseErr, called from inside every command's run
+// closure: it still exits directly for a usage error, or prints usage to
+// stdout and returns for flag.ErrHelp (a success, exit 0). Either way the
+// exit code is only observable by letting a real process actually exit,
+// since calling dispatch in-process would kill the test binary itself. The
+// standard fix is the Go self-exec helper pattern (as used by package
+// os/exec's own tests): re-run this same test binary as a subprocess
+// restricted to TestHelperProcess, which calls dispatch and lets any
+// os.Exit take down that subprocess instead of us, then inspect the
+// subprocess's real exit code.
 
 // TestHelperProcess is not a real test. It stays inert under a normal `go
 // test` run because DISC_FORTUNE_HELPER is unset; runHelper (below) sets it
