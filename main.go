@@ -24,8 +24,8 @@ func main() {
 
 // loadCollectionOrExit loads the collection, explaining what to do and exiting 1
 // when there is nothing to work with.
-func loadCollectionOrExit() []Album {
-	albums, err := loadCollectionChecked(collectionPath())
+func (a app) loadCollectionOrExit() []Album {
+	albums, err := loadCollectionChecked(a.collectionPath())
 	switch {
 	case errors.Is(err, errNoCollection):
 		fatal("No collection found. Run `disc-fortune sync` to fetch your Discogs collection.")
@@ -39,8 +39,8 @@ func loadCollectionOrExit() []Album {
 
 // loadFavoritesOrExit loads favorites, explaining what to do and exiting 1 when
 // there are none.
-func loadFavoritesOrExit() []Album {
-	favorites, err := loadFavoritesChecked(favoritesPath())
+func (a app) loadFavoritesOrExit() []Album {
+	favorites, err := loadFavoritesChecked(a.favoritesPath())
 	switch {
 	case errors.Is(err, errNoFavorites):
 		fatal("No favorites yet. Use `disc-fortune favorite` after a pick you like.")
@@ -57,12 +57,12 @@ func stdoutColor(mode colorMode) bool {
 }
 
 // selectAlbums loads the collection or favorites per cfg and applies its filter.
-func selectAlbums(cfg selection) []Album {
+func (a app) selectAlbums(cfg selection) []Album {
 	var albums []Album
 	if cfg.favoritesOnly {
-		albums = loadFavoritesOrExit()
+		albums = a.loadFavoritesOrExit()
 	} else {
-		albums = loadCollectionOrExit()
+		albums = a.loadCollectionOrExit()
 	}
 	return cfg.filter.Apply(albums)
 }
@@ -112,8 +112,8 @@ func formatList(albums []Album, useColor, showIDs bool) string {
 	return sb.String()
 }
 
-func runPick(cfg selection) {
-	albums := selectAlbums(cfg)
+func (a app) runPick(cfg selection) {
+	albums := a.selectAlbums(cfg)
 	if len(albums) == 0 {
 		fatal("No albums match the specified filters")
 	}
@@ -121,7 +121,7 @@ func runPick(cfg selection) {
 	// History is read for the decision and then read again by addToHistory,
 	// which takes its own lock. Deciding from a marginally stale history is
 	// harmless, and it means no lock is held across the decision.
-	entries, err := loadHistory(historyPath())
+	entries, err := loadHistory(a.historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
 	}
@@ -136,7 +136,7 @@ func runPick(cfg selection) {
 
 	album := pickAlbum(albums, entries, cfg.draw, newRNG())
 
-	if err := addToHistory(historyPath(), album); err != nil {
+	if err := addToHistory(a.historyPath(), album); err != nil {
 		fatal("Error saving history: %v", err)
 	}
 
@@ -150,16 +150,16 @@ func runPick(cfg selection) {
 
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
-	fmt.Fprint(os.Stderr, syncNotice(metaPath(), time.Now(), isTTY(os.Stderr)))
+	fmt.Fprint(os.Stderr, syncNotice(a.metaPath(), time.Now(), isTTY(os.Stderr)))
 }
 
-func runList(cfg selection) {
-	albums := selectAlbums(cfg)
+func (a app) runList(cfg selection) {
+	albums := a.selectAlbums(cfg)
 
 	// Only load history when it is actually needed: `list` has never
 	// required a readable history.json and must not start now.
 	if cfg.unheard && len(albums) > 0 {
-		entries, err := loadHistory(historyPath())
+		entries, err := loadHistory(a.historyPath())
 		if err != nil {
 			fatal("Error loading history: %v", err)
 		}
@@ -188,8 +188,8 @@ func runList(cfg selection) {
 	fmt.Print(out)
 }
 
-func runHistory(cfg historyConfig) {
-	entries, err := loadHistory(historyPath())
+func (a app) runHistory(cfg historyConfig) {
+	entries, err := loadHistory(a.historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
 	}
@@ -209,12 +209,12 @@ func runHistory(cfg historyConfig) {
 	fmt.Print(formatHistory(entries, limit, stdoutColor(cfg.color)))
 }
 
-func runStats(cfg statsConfig) {
+func (a app) runStats(cfg statsConfig) {
 	var source []Album
 	if cfg.favoritesOnly {
-		source = loadFavoritesOrExit()
+		source = a.loadFavoritesOrExit()
 	} else {
-		source = loadCollectionOrExit()
+		source = a.loadCollectionOrExit()
 	}
 	pool := cfg.filter.Apply(source)
 	if len(pool) == 0 {
@@ -227,19 +227,19 @@ func runStats(cfg statsConfig) {
 	// Metadata is advisory and never sinks the run. History is the
 	// exception: it feeds a headline figure, so an unreadable history fails
 	// loudly.
-	entries, err := loadHistory(historyPath())
+	entries, err := loadHistory(a.historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
 	}
 
 	// Favorites are counted, not required. Someone with none gets a zero,
 	// not an error.
-	favorites, err := loadFavorites(favoritesPath())
+	favorites, err := loadFavorites(a.favoritesPath())
 	if err != nil {
 		fatal("Error loading favorites: %v", err)
 	}
 
-	m, err := loadMeta(metaPath())
+	m, err := loadMeta(a.metaPath())
 	if err != nil {
 		m = Meta{}
 	}
@@ -284,16 +284,16 @@ func reportAmbiguous(matches []Album, color colorMode) {
 	os.Exit(1)
 }
 
-func runFavorite(cfg favoriteConfig) {
+func (a app) runFavorite(cfg favoriteConfig) {
 	// An empty query means "the last pick" -- unless --release-id already
 	// names a record, which is a selection in its own right.
 	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
-		favoriteLastPick()
+		a.favoriteLastPick()
 		return
 	}
 
-	albums := loadCollectionOrExit()
-	outcome, err := favoriteByQuery(albums, cfg.filter, favoritesPath())
+	albums := a.loadCollectionOrExit()
+	outcome, err := favoriteByQuery(albums, cfg.filter, a.favoritesPath())
 	if err != nil {
 		fatal("Error adding favorite: %v", err)
 	}
@@ -310,10 +310,10 @@ func runFavorite(cfg favoriteConfig) {
 	}
 }
 
-func runUnfavorite(cfg favoriteConfig) {
+func (a app) runUnfavorite(cfg favoriteConfig) {
 	// As in runFavorite: --release-id is a selection, not a missing query.
 	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
-		unfavoriteLastPick()
+		a.unfavoriteLastPick()
 		return
 	}
 
@@ -322,7 +322,7 @@ func runUnfavorite(cfg favoriteConfig) {
 	// list that has nothing in it (or nothing matching) is a no-op, not an
 	// error. Load directly rather than through loadFavoritesOrExit so that
 	// case reaches UnfavoriteNoMatch instead of fatal-ing.
-	favorites, err := loadFavoritesChecked(favoritesPath())
+	favorites, err := loadFavoritesChecked(a.favoritesPath())
 	if err != nil && !errors.Is(err, errNoFavorites) {
 		fatal("Error loading favorites: %v", err)
 	}
@@ -331,7 +331,7 @@ func runUnfavorite(cfg favoriteConfig) {
 		return
 	}
 
-	outcome, err := unfavoriteByQuery(favorites, cfg.filter, favoritesPath())
+	outcome, err := unfavoriteByQuery(favorites, cfg.filter, a.favoritesPath())
 	if err != nil {
 		fatal("Error removing favorite: %v", err)
 	}
@@ -347,8 +347,8 @@ func runUnfavorite(cfg favoriteConfig) {
 	}
 }
 
-func favoriteLastPick() {
-	entries, err := loadHistory(historyPath())
+func (a app) favoriteLastPick() {
+	entries, err := loadHistory(a.historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
 	}
@@ -357,7 +357,7 @@ func favoriteLastPick() {
 	}
 
 	lastAlbum := entries[len(entries)-1].Album
-	if err := addFavorite(favoritesPath(), lastAlbum); err != nil {
+	if err := addFavorite(a.favoritesPath(), lastAlbum); err != nil {
 		if errors.Is(err, ErrAlreadyInFavorites) {
 			fmt.Println("Already in favorites")
 			return
@@ -368,8 +368,8 @@ func favoriteLastPick() {
 	fmt.Printf("Added to favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
 }
 
-func unfavoriteLastPick() {
-	entries, err := loadHistory(historyPath())
+func (a app) unfavoriteLastPick() {
+	entries, err := loadHistory(a.historyPath())
 	if err != nil {
 		fatal("Error loading history: %v", err)
 	}
@@ -378,7 +378,7 @@ func unfavoriteLastPick() {
 	}
 
 	lastAlbum := entries[len(entries)-1].Album
-	if err := removeFavorite(favoritesPath(), lastAlbum); err != nil {
+	if err := removeFavorite(a.favoritesPath(), lastAlbum); err != nil {
 		if errors.Is(err, ErrNotInFavorites) {
 			fmt.Println("Last pick was not in favorites")
 			return
@@ -393,10 +393,10 @@ func unfavoriteLastPick() {
 // named, or the single match for the query. Like favorite, it exits rather
 // than returning on every empty or ambiguous outcome, because what to say
 // about each depends on what was asked.
-func resolveOpenTarget(cfg openConfig) Album {
+func resolveOpenTarget(a app, cfg openConfig) Album {
 	// As in runFavorite: --release-id is a selection, not a missing query.
 	if cfg.query == "" && cfg.filter.ReleaseID == 0 {
-		entries, err := loadHistory(historyPath())
+		entries, err := loadHistory(a.historyPath())
 		if err != nil {
 			fatal("Error loading history: %v", err)
 		}
@@ -406,7 +406,7 @@ func resolveOpenTarget(cfg openConfig) Album {
 		return entries[len(entries)-1].Album
 	}
 
-	album, matches, status := matchAlbums(loadCollectionOrExit(), cfg.filter)
+	album, matches, status := matchAlbums(a.loadCollectionOrExit(), cfg.filter)
 	switch status {
 	case matchedNone:
 		fatal("No albums match %s", cfg.describe())
@@ -416,8 +416,8 @@ func resolveOpenTarget(cfg openConfig) Album {
 	return album
 }
 
-func runOpen(cfg openConfig) {
-	album := resolveOpenTarget(cfg)
+func (a app) runOpen(cfg openConfig) {
+	album := resolveOpenTarget(a, cfg)
 	if album.ReleaseID == 0 {
 		fatal("This record predates release IDs and sync could not identify it.\n" +
 			"Run `disc-fortune sync`, or name the record with --release-id.")

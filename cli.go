@@ -239,7 +239,7 @@ type command struct {
 	name    string
 	summary string // one line, listed by `help`
 	usage   string // full block, shown by `help <cmd>` and on usage error
-	run     func(args []string)
+	run     func(a app, args []string)
 	// needsConfig marks the commands that read or write data files. Only
 	// those fail when the config directory cannot be resolved; help,
 	// version and folders must keep working on a machine with no usable
@@ -780,12 +780,12 @@ Flags:
                    entirely; stale favors what you have left longest.
   --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseSelection("pick", args)
 				if handleParseErr("pick", err) {
 					return
 				}
-				runPick(cfg)
+				a.runPick(cfg)
 			},
 		},
 		{
@@ -801,12 +801,12 @@ Flags:
   --unheard        List only albums you have never picked
   --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseSelection("list", args)
 				if handleParseErr("list", err) {
 					return
 				}
-				runList(cfg)
+				a.runList(cfg)
 			},
 		},
 		{
@@ -822,12 +822,12 @@ Flags:
   --folder NAME    Sync only this folder (repeatable)
 
 Run ` + "`disc-fortune folders`" + ` to see available folder names.`,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseSync(args)
 				if handleParseErr("sync", err) {
 					return
 				}
-				runSync(cfg)
+				a.runSync(cfg)
 			},
 		},
 		{
@@ -837,11 +837,11 @@ Run ` + "`disc-fortune folders`" + ` to see available folder names.`,
 
 Lists the folder names in your Discogs collection, for use with
 ` + "`disc-fortune sync --folder`" + `. Requires DISCOGS_TOKEN to be set.`,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				if handleParseErr("folders", parseNoArgs("folders", args)) {
 					return
 				}
-				runFolders()
+				a.runFolders()
 			},
 		},
 		{
@@ -854,12 +854,12 @@ Shows the last N picks. N defaults to 10; 0 shows all of them.
 
 Flags:
   --json           Emit machine-readable JSON instead of text`,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseHistory(args)
 				if handleParseErr("history", err) {
 					return
 				}
-				runHistory(cfg)
+				a.runHistory(cfg)
 			},
 		},
 		{
@@ -876,12 +876,12 @@ Flags:
   --favorites      Describe favorites only
   --json           Emit machine-readable JSON instead of text
 ` + filterFlagHelp,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseStats(args)
 				if handleParseErr("stats", err) {
 					return
 				}
-				runStats(cfg)
+				a.runStats(cfg)
 			},
 		},
 		{
@@ -901,12 +901,12 @@ store-exclusive colours, say -- so --release-id is the one that always works.
 The QUERY can also be given as --query, which is the only difference between
 the two spellings. --release-id needs neither.
 ` + filterFlagHelp,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseFavorite("favorite", args)
 				if handleParseErr("favorite", err) {
 					return
 				}
-				runFavorite(cfg)
+				a.runFavorite(cfg)
 			},
 		},
 		{
@@ -922,12 +922,12 @@ something that is not favorited succeeds quietly.
 The QUERY can also be given as --query, which is the only difference between
 the two spellings. --release-id needs neither.
 ` + filterFlagHelp,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseFavorite("unfavorite", args)
 				if handleParseErr("unfavorite", err) {
 					return
 				}
-				runUnfavorite(cfg)
+				a.runUnfavorite(cfg)
 			},
 		},
 		{
@@ -947,12 +947,12 @@ URL is printed instead and the command still succeeds.
 Flags:
   --print          Print the URL instead of opening a browser
 ` + filterFlagHelp,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				cfg, err := parseOpen(args)
 				if handleParseErr("open", err) {
 					return
 				}
-				runOpen(cfg)
+				a.runOpen(cfg)
 			},
 		},
 		{
@@ -968,11 +968,11 @@ disc-fortune keeps using the legacy directory when it already holds your data,
 even with XDG_CONFIG_HOME set, so that an upgrade never appears to lose your
 collection. This command performs the move once you are ready. It refuses to
 run if the destination already contains files.`,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				if handleParseErr("migrate", parseNoArgs("migrate", args)) {
 					return
 				}
-				runMigrate()
+				a.runMigrate()
 			},
 		},
 		{
@@ -1000,7 +1000,7 @@ Command and flag names are completed, as are the fixed values of --draw and
 --color. Values that would have to be read from your collection, such as those
 of --genre and --label, are not: a completion should never depend on a file
 that a sync may be rewriting.`,
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				shell, err := parseCompletion(args)
 				if handleParseErr("completion", err) {
 					return
@@ -1012,7 +1012,7 @@ that a sync may be rewriting.`,
 			name:    "version",
 			summary: "Print the version",
 			usage:   "Usage: disc-fortune version\n\nPrints the disc-fortune version and exits.",
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				if handleParseErr("version", parseNoArgs("version", args)) {
 					return
 				}
@@ -1023,7 +1023,7 @@ that a sync may be rewriting.`,
 			name:    "help",
 			summary: "Show help for a command",
 			usage:   "Usage: disc-fortune help [COMMAND]\n\nShows general help, or detailed help for one command.",
-			run: func(args []string) {
+			run: func(a app, args []string) {
 				topic, err := parseHelp(args)
 				if handleParseErr("help", err) {
 					return
@@ -1052,14 +1052,15 @@ func dispatch(args []string) {
 	if err != nil {
 		fatal("disc-fortune: %v", err)
 	}
-	// Resolved once, here, so every path helper below can be infallible.
+	// Resolved once, here, so every path helper on app can be infallible.
 	// A failure is only fatal for the commands that actually need it.
-	if err := initConfig(os.Getenv, os.UserHomeDir); err != nil {
+	a, cfgErr := newApp(os.Getenv, os.UserHomeDir)
+	if cfgErr != nil {
 		if cmd.needsConfig {
-			fatal("disc-fortune: %v", err)
+			fatal("disc-fortune: %v", cfgErr)
 		}
 	} else if cmd.needsConfig {
-		fmt.Fprint(os.Stderr, migrationNotice(activeConfig, metaPath(), isTTY(os.Stderr)))
+		fmt.Fprint(os.Stderr, migrationNotice(a.loc, a.metaPath(), isTTY(os.Stderr)))
 	}
-	cmd.run(rest)
+	cmd.run(a, rest)
 }

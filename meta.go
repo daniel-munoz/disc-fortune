@@ -23,10 +23,6 @@ type Meta struct {
 	LegacyNoticeShown bool `json:"legacy_notice_shown,omitempty"`
 }
 
-func metaPath() string {
-	return filepath.Join(configDir(), "meta.json")
-}
-
 // loadMeta reads meta.json. A missing file is not an error: it means nothing
 // has been recorded yet, which is what a fresh install looks like.
 func loadMeta(path string) (Meta, error) {

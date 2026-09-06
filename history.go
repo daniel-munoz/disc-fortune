@@ -15,10 +15,6 @@ type HistoryEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func historyPath() string {
-	return filepath.Join(configDir(), "history.json")
-}
-
 // loadHistory loads history entries from disk.
 func loadHistory(path string) ([]HistoryEntry, error) {
 	data, err := os.ReadFile(path)

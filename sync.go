@@ -33,7 +33,7 @@ func (a *arrayFlags) Set(value string) error {
 }
 
 // runSync fetches the collection from Discogs and caches it locally.
-func runSync(cfg syncConfig) {
+func (a app) runSync(cfg syncConfig) {
 	client, err := newDiscogsClient()
 	if err != nil {
 		fatal("Error: %v", err)
@@ -58,15 +58,15 @@ func runSync(cfg syncConfig) {
 	// Read before the write below overwrites it: comparing the two is what
 	// tells us whether this is the first sync after the identity change.
 	// Failing to read it is not an error -- it just means no notice.
-	previous, _ := loadCollectionFrom(collectionPath())
+	previous, _ := loadCollectionFrom(a.collectionPath())
 
-	if err := saveCollection(albums); err != nil {
+	if err := saveCollectionTo(a.collectionPath(), albums); err != nil {
 		fatal("Error saving collection: %v", err)
 	}
 
 	// Recorded after the collection lands, so a stale timestamp never claims
 	// a sync that did not actually persist.
-	if err := recordSync(metaPath(), time.Now()); err != nil {
+	if err := recordSync(a.metaPath(), time.Now()); err != nil {
 		fatal("Error saving sync metadata: %v", err)
 	}
 
@@ -76,7 +76,7 @@ func runSync(cfg syncConfig) {
 	// sync retries it. The report is kept and printed below either way --
 	// a partial pass may have already rewritten favorites, and the user has
 	// to be told what changed, not just that something went wrong.
-	backfillReport, err := runBackfill(favoritesPath(), historyPath(), albums)
+	backfillReport, err := runBackfill(a.favoritesPath(), a.historyPath(), albums)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not fill in release IDs: %v\n", err)
 	}
@@ -94,7 +94,7 @@ func runSync(cfg syncConfig) {
 }
 
 // runFolders lists the user's Discogs collection folders.
-func runFolders() {
+func (a app) runFolders() {
 	client, err := newDiscogsClient()
 	if err != nil {
 		fatal("Error: %v", err)

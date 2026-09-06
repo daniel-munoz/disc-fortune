@@ -15,10 +15,6 @@ var (
 	ErrNotInFavorites = errors.New("not in favorites")
 )
 
-func favoritesPath() string {
-	return filepath.Join(configDir(), "favorites.json")
-}
-
 // loadFavorites loads favorite albums from disk.
 func loadFavorites(path string) ([]Album, error) {
 	data, err := os.ReadFile(path)

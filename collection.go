@@ -64,37 +64,6 @@ func sameAlbum(a, b Album) bool {
 	return a.Key() == b.Key()
 }
 
-// activeConfig is resolved once, by initConfig, before any command runs.
-// Caching it keeps the path helpers below simple: they cannot fail, so every
-// call site does not have to thread an error it can do nothing about.
-var activeConfig configLocation
-
-// configDir returns the directory holding disc-fortune's data files. It no
-// longer exits on failure -- resolveConfigDir returns the error and initConfig
-// reports it once, at startup.
-func configDir() string {
-	return activeConfig.Dir
-}
-
-// initConfig resolves the config location for this run. It is called from
-// dispatch, before the chosen command executes.
-func initConfig(getenv func(string) string, homeDir func() (string, error)) error {
-	loc, err := resolveConfigDir(getenv, homeDir)
-	if err != nil {
-		return err
-	}
-	activeConfig = loc
-	return nil
-}
-
-func collectionPath() string {
-	return filepath.Join(configDir(), "collection.json")
-}
-
-func loadCollection() ([]Album, error) {
-	return loadCollectionFrom(collectionPath())
-}
-
 func loadCollectionFrom(path string) ([]Album, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -105,10 +74,6 @@ func loadCollectionFrom(path string) ([]Album, error) {
 		return nil, fmt.Errorf("parsing collection.json: %w", err)
 	}
 	return albums, nil
-}
-
-func saveCollection(albums []Album) error {
-	return saveCollectionTo(collectionPath(), albums)
 }
 
 func saveCollectionTo(path string, albums []Album) error {

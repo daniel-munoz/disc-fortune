@@ -138,13 +138,13 @@ func migrateConfig(from, to string) (int, error) {
 }
 
 // runMigrate moves the data directory to its XDG-preferred location.
-func runMigrate() {
-	if activeConfig.Preferred == "" {
-		fmt.Printf("Nothing to migrate: disc-fortune is already using %s\n", activeConfig.Dir)
+func (a app) runMigrate() {
+	if a.loc.Preferred == "" {
+		fmt.Printf("Nothing to migrate: disc-fortune is already using %s\n", a.loc.Dir)
 		return
 	}
 
-	from, to := activeConfig.Dir, activeConfig.Preferred
+	from, to := a.loc.Dir, a.loc.Preferred
 	moved, err := migrateConfig(from, to)
 	if err != nil {
 		fatal("Error migrating: %v", err)
