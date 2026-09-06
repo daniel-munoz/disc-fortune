@@ -32,8 +32,14 @@ const (
 	backoffJitter = 0.25
 )
 
-// SetBaseURL overrides the Discogs API base URL (used by tests).
-func SetBaseURL(url string) { discogsBaseURL = url }
+// SetBaseURL overrides the Discogs API base URL (used by tests). It returns
+// the previous value so a caller can restore it exactly, without hardcoding
+// the default and risking it drifting out of sync.
+func SetBaseURL(url string) string {
+	prev := discogsBaseURL
+	discogsBaseURL = url
+	return prev
+}
 
 // ProgressFunc reports incremental progress during a long fetch. A nil
 // ProgressFunc means progress reporting is off.

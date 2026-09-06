@@ -282,13 +282,13 @@ func (f Filter) matches(album Album) bool {
 type MatchStatus int
 
 const (
-	matchedOne MatchStatus = iota
+	MatchedOne MatchStatus = iota
 	MatchedNone
 	MatchedMany
 )
 
 // MatchAlbums applies filter and classifies the result. The returned Album is
-// meaningful only for matchedOne, and the slice only for MatchedMany; the
+// meaningful only for MatchedOne, and the slice only for MatchedMany; the
 // other is left at its zero value so a caller reading the wrong one gets
 // nothing rather than something plausible.
 func MatchAlbums(albums []Album, filter Filter) (Album, []Album, MatchStatus) {
@@ -297,7 +297,7 @@ func MatchAlbums(albums []Album, filter Filter) (Album, []Album, MatchStatus) {
 	case 0:
 		return Album{}, nil, MatchedNone
 	case 1:
-		return matches[0], nil, matchedOne
+		return matches[0], nil, MatchedOne
 	default:
 		return Album{}, matches, MatchedMany
 	}

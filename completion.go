@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 )
@@ -348,11 +349,11 @@ func sortedKeys(m map[string][]string) []string {
 	return keys
 }
 
-func runCompletion(shell string) error {
+func runCompletion(w io.Writer, shell string) error {
 	script, err := completionScript(shell)
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	fmt.Print(script)
+	fmt.Fprint(w, script)
 	return nil
 }

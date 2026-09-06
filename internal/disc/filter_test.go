@@ -580,8 +580,8 @@ func TestMatchAlbumsClassifies(t *testing.T) {
 
 	t.Run("one", func(t *testing.T) {
 		album, matches, status := MatchAlbums(pool, Filter{ReleaseID: 3})
-		if status != matchedOne {
-			t.Fatalf("status = %v, want matchedOne", status)
+		if status != MatchedOne {
+			t.Fatalf("status = %v, want MatchedOne", status)
 		}
 		if album.ReleaseID != 3 {
 			t.Errorf("album = %+v, want release 3", album)

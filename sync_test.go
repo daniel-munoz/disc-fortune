@@ -52,8 +52,8 @@ func newTestRelease(id int, title, artist string, year int) testRelease {
 // needs the same wiring for its own httptest servers.
 func newDiscogsTestClient(t *testing.T, srv *httptest.Server) *discogs.Client {
 	t.Helper()
-	discogs.SetBaseURL(srv.URL)
-	t.Cleanup(func() { discogs.SetBaseURL("https://api.discogs.com") })
+	origBase := discogs.SetBaseURL(srv.URL)
+	t.Cleanup(func() { discogs.SetBaseURL(origBase) })
 
 	t.Setenv("DISCOGS_TOKEN", "test-token")
 	client, err := discogs.New("disc-fortune/test")

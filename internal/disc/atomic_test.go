@@ -317,9 +317,29 @@ func TestSaveFavoritesReplacesRatherThanTruncates(t *testing.T) {
 // A new saver that forgets writeFileAtomic fails here even if it never gets
 // its own round-trip test.
 func TestNoDirectWriteFileInProductionCode(t *testing.T) {
-	sources, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatalf("globbing sources: %v", err)
+	// Covers this package, the root package, and every sibling package under
+	// internal/, so a new saver added anywhere in the module trips this
+	// guard rather than slipping through because it lives outside
+	// internal/disc.
+	patterns := []string{"*.go", "../../*.go", "../*/*.go"}
+	seen := map[string]bool{}
+	var sources []string
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatalf("globbing %s: %v", pattern, err)
+		}
+		for _, m := range matches {
+			abs, err := filepath.Abs(m)
+			if err != nil {
+				t.Fatalf("resolving %s: %v", m, err)
+			}
+			if seen[abs] {
+				continue
+			}
+			seen[abs] = true
+			sources = append(sources, m)
+		}
 	}
 	for _, src := range sources {
 		if strings.HasSuffix(src, "_test.go") {

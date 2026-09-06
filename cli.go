@@ -1033,7 +1033,7 @@ that a sync may be rewriting.`,
 				if handleParseErr("completion", err) {
 					return nil
 				}
-				return runCompletion(shell)
+				return runCompletion(a.stdout, shell)
 			},
 		},
 		{
@@ -1090,13 +1090,13 @@ func dispatch(args []string) {
 			fatal("disc-fortune: %v", cfgErr)
 		}
 	} else if cmd.needsConfig {
-		fmt.Fprint(os.Stderr, disc.MigrationNotice(a.loc, a.metaPath(), term.IsTTY(os.Stderr)))
+		fmt.Fprint(a.stderr, disc.MigrationNotice(a.loc, a.metaPath(), term.IsTTY(os.Stderr)))
 	}
 	// The one exit point for a command failure. The printer adds no prefix:
 	// fatal never did either, and the two messages above carry their own
 	// "disc-fortune: " in their text.
 	if err := cmd.run(a, rest); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(a.stderr, err)
 		os.Exit(1)
 	}
 }
