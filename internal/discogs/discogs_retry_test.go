@@ -23,6 +23,33 @@ func newRetryTestClient(handler http.Handler) (*Client, *httptest.Server, *[]tim
 	return c, srv, &slept
 }
 
+// TestUserAgentHeaderMatchesConstructorArgument replaces the deleted
+// TestUserAgentCarriesCurrentVersion (which pinned the header against the
+// root's `version` constant, no longer visible from this package). It stays
+// inside package discogs, asserting the header actually sent on the wire
+// against the string the caller handed to New -- the half of the drift guard
+// that version_test.go's TestDiscogsUserAgentCarriesTheCurrentVersion cannot
+// cover, since that test only inspects Client.UserAgent() and never performs
+// a request.
+func TestUserAgentHeaderMatchesConstructorArgument(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("User-Agent")
+		fmt.Fprint(w, "{}")
+	}))
+	defer srv.Close()
+
+	const want = "disc-fortune/test-agent"
+	client := &Client{token: "test-token", userAgent: want, httpClient: srv.Client()}
+	if _, err := client.get(srv.URL); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	if got != want {
+		t.Errorf("User-Agent header = %q, want %q", got, want)
+	}
+}
+
 func TestGetRetriesAfterRateLimit(t *testing.T) {
 	var calls int32
 	srv := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
