@@ -152,10 +152,11 @@ Four `internal/` packages; everything else stays at the root.
 | `internal/pick` | `picker` | 232 | `disc` |
 | `internal/stats` | `stats` | 360 | `disc`, `pick`, `term` |
 | `internal/discogs` | `discogs` | 365 | `disc` |
-| *(root)* `package main` | `main` `cli` `completion` `sync` `json` `open`, plus `formatAlbum` | 2,443 | all of the above |
+| *(root)* `package main` | `main` `cli` `completion` `sync` `json` `open` `app` `format` | 2,443 | all of the above |
 
-Root Go files drop from 49 to 16 (6 production, 10 test). With the release
-notes moved, the root listing goes from ~65 entries to ~22.
+Root Go files drop from 49 to 20 (8 production, 12 test) — the extra four are
+`app.go` and `format.go`, which this design creates, and their tests. With the
+release notes moved, the root listing goes from ~65 entries to ~26.
 
 ### Cycles found, and how each breaks
 
