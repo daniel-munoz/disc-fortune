@@ -38,7 +38,7 @@ func (a app) runSync(cfg syncConfig) error {
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	client.progress = syncProgress(os.Stderr, isTTY(os.Stderr))
+	client.progress = syncProgress(a.stderr, isTTY(os.Stderr))
 
 	username, err := client.getUsername()
 	if err != nil {
@@ -78,7 +78,7 @@ func (a app) runSync(cfg syncConfig) error {
 	// to be told what changed, not just that something went wrong.
 	backfillReport, err := runBackfill(a.favoritesPath(), a.historyPath(), albums)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not fill in release IDs: %v\n", err)
+		fmt.Fprintf(a.stderr, "Warning: could not fill in release IDs: %v\n", err)
 	}
 
 	withMetadata := 0
@@ -88,9 +88,9 @@ func (a app) runSync(cfg syncConfig) error {
 		}
 	}
 
-	fmt.Printf("Synced %d albums (%d with full metadata)\n", len(albums), withMetadata)
-	fmt.Print(unmergeNotice(previous, albums))
-	fmt.Print(backfillReport)
+	fmt.Fprintf(a.stdout, "Synced %d albums (%d with full metadata)\n", len(albums), withMetadata)
+	fmt.Fprint(a.stdout, unmergeNotice(previous, albums))
+	fmt.Fprint(a.stdout, backfillReport)
 	return nil
 }
 
@@ -104,18 +104,18 @@ func (a app) runFolders() error {
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	return printFolders(client, username)
+	return printFolders(a.stdout, client, username)
 }
 
 // printFolders lists the user's Discogs collection folders.
-func printFolders(client *discogsClient, username string) error {
+func printFolders(w io.Writer, client *discogsClient, username string) error {
 	folders, err := client.getFolders(username)
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	fmt.Println("Available folders:")
+	fmt.Fprintln(w, "Available folders:")
 	for _, f := range folders {
-		fmt.Printf("  %s\n", f.Name)
+		fmt.Fprintf(w, "  %s\n", f.Name)
 	}
 	return nil
 }

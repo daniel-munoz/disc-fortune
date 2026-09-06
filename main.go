@@ -61,8 +61,10 @@ func (a app) favorites() ([]Album, error) {
 }
 
 // stdoutColor resolves whether stdout gets escape sequences, combining the
-// --color flag, NO_COLOR, and whether stdout is a terminal.
-func stdoutColor(mode colorMode) bool {
+// --color flag, NO_COLOR, and whether stdout is a terminal. It deliberately
+// still asks os.Stdout rather than a.stdout: colour depends on where output
+// actually lands, and a test's bytes.Buffer is never a terminal anyway.
+func (a app) stdoutColor(mode colorMode) bool {
 	return useColor(mode, isTTY(os.Stdout), os.Getenv)
 }
 
@@ -160,16 +162,16 @@ func (a app) runPick(cfg selection) error {
 	}
 
 	if cfg.json {
-		if err := writeJSON(os.Stdout, pickPayload{Album: newJSONAlbum(album)}); err != nil {
+		if err := writeJSON(a.stdout, pickPayload{Album: newJSONAlbum(album)}); err != nil {
 			return fmt.Errorf("Error writing JSON: %v", err)
 		}
 	} else {
-		fmt.Println(formatAlbum(album, stdoutColor(cfg.color)))
+		fmt.Fprintln(a.stdout, formatAlbum(album, a.stdoutColor(cfg.color)))
 	}
 
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
-	fmt.Fprint(os.Stderr, syncNotice(a.metaPath(), time.Now(), isTTY(os.Stderr)))
+	fmt.Fprint(a.stderr, syncNotice(a.metaPath(), time.Now(), isTTY(os.Stderr)))
 	return nil
 }
 
@@ -196,7 +198,7 @@ func (a app) runList(cfg selection) error {
 	// always been a failure, with its message on stderr and exit 1. --json
 	// changes the format, not the semantics.
 	if cfg.json && len(albums) > 0 {
-		if err := writeJSON(os.Stdout, newListPayload(albums)); err != nil {
+		if err := writeJSON(a.stdout, newListPayload(albums)); err != nil {
 			return fmt.Errorf("Error writing JSON: %v", err)
 		}
 		return nil
@@ -204,11 +206,11 @@ func (a app) runList(cfg selection) error {
 
 	// formatList ends in a newline; the error printer in dispatch adds one of
 	// its own, so it is trimmed off here to keep stderr byte-identical.
-	out := formatList(albums, stdoutColor(cfg.color), false)
+	out := formatList(albums, a.stdoutColor(cfg.color), false)
 	if len(albums) == 0 {
 		return errors.New(strings.TrimSuffix(out, "\n"))
 	}
-	fmt.Print(out)
+	fmt.Fprint(a.stdout, out)
 	return nil
 }
 
@@ -224,13 +226,13 @@ func (a app) runHistory(cfg historyConfig) error {
 	}
 
 	if cfg.json {
-		if err := writeJSON(os.Stdout, newHistoryPayload(entries, limit)); err != nil {
+		if err := writeJSON(a.stdout, newHistoryPayload(entries, limit)); err != nil {
 			return fmt.Errorf("Error writing JSON: %v", err)
 		}
 		return nil
 	}
 
-	fmt.Print(formatHistory(entries, limit, stdoutColor(cfg.color)))
+	fmt.Fprint(a.stdout, formatHistory(entries, limit, a.stdoutColor(cfg.color)))
 	return nil
 }
 
@@ -277,12 +279,12 @@ func (a app) runStats(cfg statsConfig) error {
 	s := computeStats(pool, favorites, entries, len(source), m, cfg.favoritesOnly)
 
 	if cfg.json {
-		if err := writeJSON(os.Stdout, newStatsPayload(s)); err != nil {
+		if err := writeJSON(a.stdout, newStatsPayload(s)); err != nil {
 			return fmt.Errorf("Error writing JSON: %v", err)
 		}
 		return nil
 	}
-	fmt.Print(formatStats(s, stdoutColor(cfg.color)))
+	fmt.Fprint(a.stdout, formatStats(s, a.stdoutColor(cfg.color)))
 	return nil
 }
 
@@ -314,8 +316,8 @@ func (cfg openConfig) describe() string {
 // answer to the query, and only the trailing advice belongs on stderr. So the
 // list is printed here and just the advice is carried by the error, which
 // dispatch prints to stderr before exiting 1.
-func reportAmbiguous(matches []Album, color colorMode) error {
-	fmt.Print(formatList(matches, stdoutColor(color), true))
+func (a app) reportAmbiguous(matches []Album, color colorMode) error {
+	fmt.Fprint(a.stdout, formatList(matches, a.stdoutColor(color), true))
 	return errors.New("Be more specific, add filters, or use --release-id.")
 }
 
@@ -337,13 +339,13 @@ func (a app) runFavorite(cfg favoriteConfig) error {
 
 	switch outcome.Status {
 	case FavoriteAdded:
-		fmt.Printf("Added to favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
+		fmt.Fprintf(a.stdout, "Added to favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
 	case FavoriteAlreadyFav:
-		fmt.Println("Already in favorites")
+		fmt.Fprintln(a.stdout, "Already in favorites")
 	case FavoriteNoMatch:
 		return fmt.Errorf("No albums match %s", cfg.describe())
 	case FavoriteMultiMatch:
-		return reportAmbiguous(outcome.Matches, cfg.color)
+		return a.reportAmbiguous(outcome.Matches, cfg.color)
 	}
 	return nil
 }
@@ -364,7 +366,7 @@ func (a app) runUnfavorite(cfg favoriteConfig) error {
 		return fmt.Errorf("Error loading favorites: %v", err)
 	}
 	if errors.Is(err, errNoFavorites) {
-		fmt.Printf("No favorites match %s - nothing to remove.\n", cfg.describe())
+		fmt.Fprintf(a.stdout, "No favorites match %s - nothing to remove.\n", cfg.describe())
 		return nil
 	}
 
@@ -375,12 +377,12 @@ func (a app) runUnfavorite(cfg favoriteConfig) error {
 
 	switch outcome.Status {
 	case UnfavoriteRemoved:
-		fmt.Printf("Removed from favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
+		fmt.Fprintf(a.stdout, "Removed from favorites: %s - %s\n", outcome.Album.Artist, outcome.Album.Title)
 	case UnfavoriteNoMatch:
 		// Removal is idempotent: nothing to remove is a success.
-		fmt.Printf("No favorites match %s - nothing to remove.\n", cfg.describe())
+		fmt.Fprintf(a.stdout, "No favorites match %s - nothing to remove.\n", cfg.describe())
 	case UnfavoriteMultiMatch:
-		return reportAmbiguous(outcome.Matches, cfg.color)
+		return a.reportAmbiguous(outcome.Matches, cfg.color)
 	}
 	return nil
 }
@@ -397,13 +399,13 @@ func (a app) favoriteLastPick() error {
 	lastAlbum := entries[len(entries)-1].Album
 	if err := addFavorite(a.favoritesPath(), lastAlbum); err != nil {
 		if errors.Is(err, ErrAlreadyInFavorites) {
-			fmt.Println("Already in favorites")
+			fmt.Fprintln(a.stdout, "Already in favorites")
 			return nil
 		}
 		return fmt.Errorf("Error adding favorite: %v", err)
 	}
 
-	fmt.Printf("Added to favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
+	fmt.Fprintf(a.stdout, "Added to favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
 	return nil
 }
 
@@ -419,13 +421,13 @@ func (a app) unfavoriteLastPick() error {
 	lastAlbum := entries[len(entries)-1].Album
 	if err := removeFavorite(a.favoritesPath(), lastAlbum); err != nil {
 		if errors.Is(err, ErrNotInFavorites) {
-			fmt.Println("Last pick was not in favorites")
+			fmt.Fprintln(a.stdout, "Last pick was not in favorites")
 			return nil
 		}
 		return fmt.Errorf("Error removing favorite: %v", err)
 	}
 
-	fmt.Printf("Removed from favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
+	fmt.Fprintf(a.stdout, "Removed from favorites: %s - %s\n", lastAlbum.Artist, lastAlbum.Title)
 	return nil
 }
 
@@ -455,7 +457,7 @@ func resolveOpenTarget(a app, cfg openConfig) (Album, error) {
 	case matchedNone:
 		return Album{}, fmt.Errorf("No albums match %s", cfg.describe())
 	case matchedMany:
-		return Album{}, reportAmbiguous(matches, cfg.color)
+		return Album{}, a.reportAmbiguous(matches, cfg.color)
 	}
 	return album, nil
 }
@@ -476,9 +478,9 @@ func (a app) runOpen(cfg openConfig) error {
 		// The URL is the data channel's answer; the note explaining why
 		// nothing was launched is advisory and belongs on stderr. Exit 0:
 		// the user got what they asked for.
-		fmt.Println(url)
+		fmt.Fprintln(a.stdout, url)
 		if plan.Note != "" {
-			fmt.Fprintln(os.Stderr, plan.Note)
+			fmt.Fprintln(a.stderr, plan.Note)
 		}
 		return nil
 	}
@@ -488,7 +490,7 @@ func (a app) runOpen(cfg openConfig) error {
 		// degradation -- but print the URL anyway so the user is not left
 		// with nothing. The "disc-fortune: " prefix is part of this message's
 		// own text: dispatch's printer adds none.
-		fmt.Println(url)
+		fmt.Fprintln(a.stdout, url)
 		return fmt.Errorf("disc-fortune: could not launch %s: %v", plan.Launch[0], err)
 	}
 	return nil

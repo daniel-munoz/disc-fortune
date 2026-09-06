@@ -140,7 +140,7 @@ func migrateConfig(from, to string) (int, error) {
 // runMigrate moves the data directory to its XDG-preferred location.
 func (a app) runMigrate() error {
 	if a.loc.Preferred == "" {
-		fmt.Printf("Nothing to migrate: disc-fortune is already using %s\n", a.loc.Dir)
+		fmt.Fprintf(a.stdout, "Nothing to migrate: disc-fortune is already using %s\n", a.loc.Dir)
 		return nil
 	}
 
@@ -154,6 +154,6 @@ func (a app) runMigrate() error {
 	if moved == 1 {
 		noun = "file"
 	}
-	fmt.Printf("Moved %d %s from %s to %s\n", moved, noun, from, to)
+	fmt.Fprintf(a.stdout, "Moved %d %s from %s to %s\n", moved, noun, from, to)
 	return nil
 }

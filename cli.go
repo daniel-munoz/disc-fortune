@@ -1080,7 +1080,7 @@ func dispatch(args []string) {
 	}
 	// Resolved once, here, so every path helper on app can be infallible.
 	// A failure is only fatal for the commands that actually need it.
-	a, cfgErr := newApp(os.Getenv, os.UserHomeDir)
+	a, cfgErr := newApp(os.Getenv, os.UserHomeDir, os.Stdout, os.Stderr)
 	if cfgErr != nil {
 		if cmd.needsConfig {
 			fatal("disc-fortune: %v", cfgErr)
