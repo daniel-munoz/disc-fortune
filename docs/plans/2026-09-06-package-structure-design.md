@@ -104,13 +104,19 @@ restructure.
 
 ```go
 if err := cmd.run(a, rest); err != nil {
-	fmt.Fprintf(a.stderr, "disc-fortune: %v\n", err)
+	fmt.Fprintln(a.stderr, err)
 	os.Exit(1)
 }
 ```
 
 `activeConfig`, `configDir()` and the four package-level `*Path()` functions
 are deleted.
+
+**No prefix.** `fatal` prints its format with no prefix; only `dispatch`'s own
+two calls carry `disc-fortune: `, and they keep it in their own text. The
+generic printer above must therefore not add one, or roughly forty messages
+that never had a prefix would grow one — breaking this design's central
+promise.
 
 ### Why one struct rather than threading paths alone
 
