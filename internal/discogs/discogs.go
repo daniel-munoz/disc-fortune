@@ -1,4 +1,4 @@
-package main
+package discogs
 
 import (
 	"encoding/json"
@@ -32,42 +32,45 @@ const (
 	backoffJitter = 0.25
 )
 
-// userAgent identifies the tool to Discogs, whose API terms ask for accurate
-// identification. Deriving it from version means it cannot drift out of date
-// the way the hardcoded "disc-fortune/1.0" did.
-var userAgent = "disc-fortune/" + version
+// SetBaseURL overrides the Discogs API base URL (used by tests).
+func SetBaseURL(url string) { discogsBaseURL = url }
 
-// setBaseURL overrides the Discogs API base URL (used by tests).
-func setBaseURL(url string) { discogsBaseURL = url }
+// ProgressFunc reports incremental progress during a long fetch. A nil
+// ProgressFunc means progress reporting is off.
+type ProgressFunc func(format string, args ...any)
 
-// progressFunc reports incremental progress during a long fetch. A nil
-// progressFunc means progress reporting is off.
-type progressFunc func(format string, args ...any)
-
-// discogsClient wraps authenticated HTTP access to the Discogs API.
-type discogsClient struct {
+// Client wraps authenticated HTTP access to the Discogs API.
+type Client struct {
 	token      string
+	userAgent  string
 	httpClient *http.Client
 	// sleep waits out a backoff delay. nil means time.Sleep; tests replace it
 	// so retry behavior can be asserted without real waiting.
 	sleep func(time.Duration)
-	// progress, when non-nil, receives page-by-page fetch progress.
-	progress progressFunc
+	// Progress, when non-nil, receives page-by-page fetch progress.
+	Progress ProgressFunc
 }
 
-// newDiscogsClient creates a client using the DISCOGS_TOKEN env var.
-func newDiscogsClient() (*discogsClient, error) {
+// New returns a client identifying itself with the given User-Agent. Discogs'
+// terms ask for accurate identification, so the caller passes the real version
+// rather than this package carrying a copy that could drift. It reads the
+// token from the DISCOGS_TOKEN env var.
+func New(userAgent string) (*Client, error) {
 	token := os.Getenv("DISCOGS_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("DISCOGS_TOKEN environment variable is not set")
 	}
-	return &discogsClient{
+	return &Client{
 		token:      token,
+		userAgent:  userAgent,
 		httpClient: &http.Client{},
 	}, nil
 }
 
-func (c *discogsClient) nap(d time.Duration) {
+// UserAgent returns the User-Agent this client identifies itself with.
+func (c *Client) UserAgent() string { return c.userAgent }
+
+func (c *Client) nap(d time.Duration) {
 	if c.sleep != nil {
 		c.sleep(d)
 		return
@@ -75,9 +78,9 @@ func (c *discogsClient) nap(d time.Duration) {
 	time.Sleep(d)
 }
 
-func (c *discogsClient) report(format string, args ...any) {
-	if c.progress != nil {
-		c.progress(format, args...)
+func (c *Client) report(format string, args ...any) {
+	if c.Progress != nil {
+		c.Progress(format, args...)
 	}
 }
 
@@ -149,7 +152,7 @@ func parseRetryAfter(h string) time.Duration {
 // exponential backoff, and returns the response body. Retries are bounded by
 // both maxAttempts and maxTotalBackoff, so a persistently failing endpoint
 // still fails — loudly, and in finite time.
-func (c *discogsClient) get(url string) ([]byte, error) {
+func (c *Client) get(url string) ([]byte, error) {
 	var spent time.Duration
 
 	for attempt := 1; ; attempt++ {
@@ -178,13 +181,13 @@ func (c *discogsClient) get(url string) ([]byte, error) {
 
 // attempt performs one authenticated GET, classifying the outcome so get can
 // decide whether it is worth repeating.
-func (c *discogsClient) attempt(url string) ([]byte, error) {
+func (c *Client) attempt(url string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Discogs token="+c.token)
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", c.userAgent)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -211,8 +214,8 @@ type identityResponse struct {
 	Username string `json:"username"`
 }
 
-// getUsername retrieves the authenticated user's Discogs username.
-func (c *discogsClient) getUsername() (string, error) {
+// Username retrieves the authenticated user's Discogs username.
+func (c *Client) Username() (string, error) {
 	body, err := c.get(discogsBaseURL + "/oauth/identity")
 	if err != nil {
 		return "", fmt.Errorf("fetching identity: %w", err)
@@ -227,18 +230,18 @@ func (c *discogsClient) getUsername() (string, error) {
 	return identity.Username, nil
 }
 
-// folder represents a Discogs collection folder.
-type folder struct {
+// Folder represents a Discogs collection folder.
+type Folder struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
 type foldersResponse struct {
-	Folders []folder `json:"folders"`
+	Folders []Folder `json:"folders"`
 }
 
-// getFolders returns the user's collection folders.
-func (c *discogsClient) getFolders(username string) ([]folder, error) {
+// Folders returns the user's collection folders.
+func (c *Client) Folders(username string) ([]Folder, error) {
 	url := fmt.Sprintf("%s/users/%s/collection/folders", discogsBaseURL, username)
 	body, err := c.get(url)
 	if err != nil {
@@ -302,8 +305,8 @@ type collectionPage struct {
 	Releases []collectionRelease `json:"releases"`
 }
 
-// getCollectionReleases paginates through all releases in a folder.
-func (c *discogsClient) getCollectionReleases(username string, folderID int) ([]disc.Album, error) {
+// CollectionReleases paginates through all releases in a folder.
+func (c *Client) CollectionReleases(username string, folderID int) ([]disc.Album, error) {
 	var albums []disc.Album
 	page := 1
 

@@ -16,6 +16,9 @@ import (
 
 const version = "2.5.0"
 
+// discogsUserAgent is the single place the version reaches the API client.
+func discogsUserAgent() string { return "disc-fortune/" + version }
+
 // fatal prints an error message to stderr and exits.
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)

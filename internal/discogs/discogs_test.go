@@ -1,4 +1,4 @@
-package main
+package discogs
 
 import (
 	"encoding/json"
@@ -11,10 +11,15 @@ import (
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 )
 
-// newTestClient returns a discogsClient pointed at a test server.
-func newTestClient(handler http.Handler) (*discogsClient, *httptest.Server) {
+// include mirrors the fixture helper in cli_test.go and internal/disc's
+// filter_test.go. The packages cannot share an unexported helper, so each
+// keeps its own copy.
+func include(vals ...string) disc.FieldFilter { return disc.FieldFilter{Include: vals} }
+
+// newTestClient returns a Client pointed at a test server.
+func newTestClient(handler http.Handler) (*Client, *httptest.Server) {
 	srv := httptest.NewServer(handler)
-	return &discogsClient{
+	return &Client{
 		token:      "test-token",
 		httpClient: srv.Client(),
 	}, srv
@@ -34,12 +39,12 @@ func TestGetUsername(t *testing.T) {
 
 	// Override base URL to point at test server.
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	username, err := client.getUsername()
+	username, err := client.Username()
 	if err != nil {
-		t.Fatalf("getUsername: %v", err)
+		t.Fatalf("Username: %v", err)
 	}
 	if username != "testuser" {
 		t.Errorf("username = %q, want %q", username, "testuser")
@@ -56,10 +61,10 @@ func TestGetUsernameEmpty(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	_, err := client.getUsername()
+	_, err := client.Username()
 	if err == nil {
 		t.Fatal("expected error for empty username")
 	}
@@ -69,7 +74,7 @@ func TestGetFolders(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/testuser/collection/folders", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(foldersResponse{
-			Folders: []folder{
+			Folders: []Folder{
 				{ID: 0, Name: "All"},
 				{ID: 1, Name: "Uncategorized"},
 				{ID: 2, Name: "Vinyl 12\""},
@@ -81,12 +86,12 @@ func TestGetFolders(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	folders, err := client.getFolders("testuser")
+	folders, err := client.Folders("testuser")
 	if err != nil {
-		t.Fatalf("getFolders: %v", err)
+		t.Fatalf("Folders: %v", err)
 	}
 	if len(folders) != 3 {
 		t.Fatalf("got %d folders, want 3", len(folders))
@@ -125,12 +130,12 @@ func TestGetCollectionReleases(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 	if len(albums) != 2 {
 		t.Fatalf("got %d albums, want 2", len(albums))
@@ -159,12 +164,12 @@ func TestGetCollectionReleasesNoArtist(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 	if albums[0].Artist != "Unknown Artist" {
 		t.Errorf("expected 'Unknown Artist', got %q", albums[0].Artist)
@@ -196,12 +201,12 @@ func TestGetCollectionReleasesWithMetadata(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases failed: %v", err)
+		t.Fatalf("CollectionReleases failed: %v", err)
 	}
 	if len(albums) != 1 {
 		t.Fatalf("got %d albums, want 1", len(albums))
@@ -236,10 +241,10 @@ func TestGetAPIError(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	_, err := client.getUsername()
+	_, err := client.Username()
 	if err == nil {
 		t.Fatal("expected error for 401 response")
 	}
@@ -270,12 +275,12 @@ func TestGetCollectionReleasesCapturesReleaseID(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 	if len(albums) != 1 {
 		t.Fatalf("got %d albums, want 1", len(albums))
@@ -313,12 +318,12 @@ func TestGetCollectionReleasesCapturesFormatText(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 	if len(albums) != 1 {
 		t.Fatalf("got %d albums, want 1", len(albums))
@@ -352,12 +357,12 @@ func TestGetCollectionReleasesSkipsEmptyFormatText(t *testing.T) {
 	defer srv.Close()
 
 	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
+	SetBaseURL(srv.URL)
+	defer SetBaseURL(origBase)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 	want := []string{"Vinyl", "LP"}
 	if !reflect.DeepEqual(albums[0].Formats, want) {

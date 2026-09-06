@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/discogs"
 )
 
 // moduleMajorPattern matches the /vN suffix Go requires on a module path for
@@ -62,5 +64,19 @@ func TestVersionMatchesModulePath(t *testing.T) {
 		t.Errorf("version %q is major %d but module path %q says major %d;\n"+
 			"bump the /vN suffix in go.mod, or correct version in main.go",
 			version, major, modulePath, want)
+	}
+}
+
+// The Discogs API terms ask for accurate identification. This asserts the
+// wiring at the seam: the root owns `version` and must hand it to the client.
+func TestDiscogsUserAgentCarriesTheCurrentVersion(t *testing.T) {
+	t.Setenv("DISCOGS_TOKEN", "test-token")
+
+	c, err := discogs.New(discogsUserAgent())
+	if err != nil {
+		t.Fatalf("discogs.New: %v", err)
+	}
+	if got := c.UserAgent(); !strings.Contains(got, version) {
+		t.Errorf("User-Agent %q does not contain version %q", got, version)
 	}
 }

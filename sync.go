@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/discogs"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
-// syncProgress returns a progressFunc writing to w, or nil when progress is
-// unwanted. Progress goes to stderr and only when stderr is a terminal:
-// stdout is the data channel, and a redirected stderr means the output is
-// being captured by something that does not want a page counter in it.
-func syncProgress(w io.Writer, enabled bool) progressFunc {
+// syncProgress returns a discogs.ProgressFunc writing to w, or nil when
+// progress is unwanted. Progress goes to stderr and only when stderr is a
+// terminal: stdout is the data channel, and a redirected stderr means the
+// output is being captured by something that does not want a page counter
+// in it.
+func syncProgress(w io.Writer, enabled bool) discogs.ProgressFunc {
 	if !enabled {
 		return nil
 	}
@@ -37,13 +39,13 @@ func (a *arrayFlags) Set(value string) error {
 
 // runSync fetches the collection from Discogs and caches it locally.
 func (a app) runSync(cfg syncConfig) error {
-	client, err := newDiscogsClient()
+	client, err := discogs.New(discogsUserAgent())
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	client.progress = syncProgress(a.stderr, term.IsTTY(os.Stderr))
+	client.Progress = syncProgress(a.stderr, term.IsTTY(os.Stderr))
 
-	username, err := client.getUsername()
+	username, err := client.Username()
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
@@ -99,11 +101,11 @@ func (a app) runSync(cfg syncConfig) error {
 
 // runFolders lists the user's Discogs collection folders.
 func (a app) runFolders() error {
-	client, err := newDiscogsClient()
+	client, err := discogs.New(discogsUserAgent())
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
-	username, err := client.getUsername()
+	username, err := client.Username()
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
@@ -111,8 +113,8 @@ func (a app) runFolders() error {
 }
 
 // printFolders lists the user's Discogs collection folders.
-func printFolders(w io.Writer, client *discogsClient, username string) error {
-	folders, err := client.getFolders(username)
+func printFolders(w io.Writer, client *discogs.Client, username string) error {
+	folders, err := client.Folders(username)
 	if err != nil {
 		return fmt.Errorf("Error: %v", err)
 	}
@@ -124,12 +126,12 @@ func printFolders(w io.Writer, client *discogsClient, username string) error {
 }
 
 // resolveFolderIDs maps folder names to IDs, defaulting to folder 0 ("All").
-func resolveFolderIDs(client *discogsClient, username string, names []string) ([]int, error) {
+func resolveFolderIDs(client *discogs.Client, username string, names []string) ([]int, error) {
 	if len(names) == 0 {
 		return []int{0}, nil
 	}
 
-	folders, err := client.getFolders(username)
+	folders, err := client.Folders(username)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +143,12 @@ func resolveFolderIDs(client *discogsClient, username string, names []string) ([
 // Dedup is on Identity, not Key: two pressings of one title are two records
 // and must both survive, while one release filed in two folders is one
 // record however its title is spelled in each.
-func collectAlbums(client *discogsClient, username string, folderIDs []int) ([]disc.Album, error) {
+func collectAlbums(client *discogs.Client, username string, folderIDs []int) ([]disc.Album, error) {
 	seen := make(map[string]bool)
 	var albums []disc.Album
 
 	for _, fid := range folderIDs {
-		releases, err := client.getCollectionReleases(username, fid)
+		releases, err := client.CollectionReleases(username, fid)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +163,7 @@ func collectAlbums(client *discogsClient, username string, folderIDs []int) ([]d
 	return albums, nil
 }
 
-func resolveFolderNames(names []string, folders []folder) ([]int, error) {
+func resolveFolderNames(names []string, folders []discogs.Folder) ([]int, error) {
 	nameToID := make(map[string]int)
 	for _, f := range folders {
 		nameToID[f.Name] = f.ID

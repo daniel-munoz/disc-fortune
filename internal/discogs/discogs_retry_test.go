@@ -1,4 +1,4 @@
-package main
+package discogs
 
 import (
 	"fmt"
@@ -12,36 +12,15 @@ import (
 
 // newRetryTestClient returns a client whose sleeps are recorded instead of
 // served, so backoff can be asserted without the test actually waiting.
-func newRetryTestClient(handler http.Handler) (*discogsClient, *httptest.Server, *[]time.Duration) {
+func newRetryTestClient(handler http.Handler) (*Client, *httptest.Server, *[]time.Duration) {
 	srv := httptest.NewServer(handler)
 	var slept []time.Duration
-	c := &discogsClient{
+	c := &Client{
 		token:      "test-token",
 		httpClient: srv.Client(),
 		sleep:      func(d time.Duration) { slept = append(slept, d) },
 	}
 	return c, srv, &slept
-}
-
-func TestUserAgentCarriesCurrentVersion(t *testing.T) {
-	var got string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get("User-Agent")
-		fmt.Fprint(w, "{}")
-	}))
-	defer srv.Close()
-
-	client := &discogsClient{token: "test-token", httpClient: srv.Client()}
-	if _, err := client.get(srv.URL); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	if !strings.Contains(got, version) {
-		t.Errorf("User-Agent = %q, want it to contain version %q", got, version)
-	}
-	if want := "disc-fortune/" + version; got != want {
-		t.Errorf("User-Agent = %q, want %q", got, want)
-	}
 }
 
 func TestGetRetriesAfterRateLimit(t *testing.T) {
@@ -192,4 +171,11 @@ func TestGetDoesNotRetryClientErrors(t *testing.T) {
 	if len(*slept) != 0 {
 		t.Errorf("slept %v on a non-retryable status", *slept)
 	}
+}
+
+// TestNilProgressIsSilent moved here from the root's progress_test.go: report
+// is unexported, so only a package-discogs test can call it directly.
+func TestNilProgressIsSilent(t *testing.T) {
+	c := &Client{}
+	c.report("this must not panic %d\n", 1) // Progress is nil
 }

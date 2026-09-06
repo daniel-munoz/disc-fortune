@@ -12,6 +12,24 @@ import (
 	"testing"
 )
 
+// twoPageServer serves a two-page collection folder.
+func twoPageServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		title := "Kind of Blue"
+		if page == "2" {
+			title = "Lanquidity"
+		}
+		var cp testPage
+		cp.Pagination.Pages = 2
+		cp.Releases = []testRelease{newTestRelease(0, title, "Someone", 0)}
+		json.NewEncoder(w).Encode(cp)
+	})
+	return httptest.NewServer(mux)
+}
+
 func TestSyncProgressDisabledReturnsNil(t *testing.T) {
 	if got := syncProgress(io.Discard, false); got != nil {
 		t.Error("progress must be nil when stderr is not a TTY, so nothing is emitted")
@@ -30,44 +48,17 @@ func TestSyncProgressWritesToGivenWriter(t *testing.T) {
 	}
 }
 
-// twoPageServer serves a two-page collection folder.
-func twoPageServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/users/testuser/collection/folders/0/releases", func(w http.ResponseWriter, r *http.Request) {
-		page := r.URL.Query().Get("page")
-		title := "Kind of Blue"
-		if page == "2" {
-			title = "Lanquidity"
-		}
-		var cp collectionPage
-		cp.Pagination.Pages = 2
-		cp.Releases = []collectionRelease{{BasicInformation: releaseInfo{
-			Title:   title,
-			Artists: []releaseArtist{{Name: "Someone"}},
-		}}}
-		json.NewEncoder(w).Encode(cp)
-	})
-	return httptest.NewServer(mux)
-}
-
 func TestGetCollectionReleasesReportsEachPage(t *testing.T) {
 	srv := twoPageServer(t)
 	defer srv.Close()
-	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
 
+	client := newDiscogsTestClient(t, srv)
 	var buf bytes.Buffer
-	client := &discogsClient{
-		token:      "test-token",
-		httpClient: srv.Client(),
-		progress:   syncProgress(&buf, true),
-	}
+	client.Progress = syncProgress(&buf, true)
 
-	albums, err := client.getCollectionReleases("testuser", 0)
+	albums, err := client.CollectionReleases("testuser", 0)
 	if err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 	if len(albums) != 2 {
 		t.Fatalf("albums = %d, want 2", len(albums))
@@ -86,9 +77,6 @@ func TestGetCollectionReleasesReportsEachPage(t *testing.T) {
 func TestProgressNeverTouchesStdout(t *testing.T) {
 	srv := twoPageServer(t)
 	defer srv.Close()
-	origBase := discogsBaseURL
-	setBaseURL(srv.URL)
-	defer setBaseURL(origBase)
 
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -98,14 +86,11 @@ func TestProgressNeverTouchesStdout(t *testing.T) {
 	os.Stdout = w
 	defer func() { os.Stdout = origStdout }()
 
+	client := newDiscogsTestClient(t, srv)
 	var buf bytes.Buffer
-	client := &discogsClient{
-		token:      "test-token",
-		httpClient: srv.Client(),
-		progress:   syncProgress(&buf, true),
-	}
-	if _, err := client.getCollectionReleases("testuser", 0); err != nil {
-		t.Fatalf("getCollectionReleases: %v", err)
+	client.Progress = syncProgress(&buf, true)
+	if _, err := client.CollectionReleases("testuser", 0); err != nil {
+		t.Fatalf("CollectionReleases: %v", err)
 	}
 
 	w.Close()
@@ -118,9 +103,4 @@ func TestProgressNeverTouchesStdout(t *testing.T) {
 		t.Error("progress was on but produced nothing, so the check above proves nothing")
 	}
 	fmt.Fprint(io.Discard, "")
-}
-
-func TestNilProgressIsSilent(t *testing.T) {
-	c := &discogsClient{}
-	c.report("this must not panic %d\n", 1) // progress is nil
 }
