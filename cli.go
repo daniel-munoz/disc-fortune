@@ -1044,7 +1044,7 @@ that a sync may be rewriting.`,
 				if handleParseErr("version", parseNoArgs("version", args)) {
 					return nil
 				}
-				fmt.Printf("disc-fortune %s\n", version)
+				fmt.Fprintf(a.stdout, "disc-fortune %s\n", version)
 				return nil
 			},
 		},
@@ -1061,7 +1061,7 @@ that a sync may be rewriting.`,
 				if err != nil {
 					return err
 				}
-				fmt.Println(out)
+				fmt.Fprintln(a.stdout, out)
 				return nil
 			},
 		},

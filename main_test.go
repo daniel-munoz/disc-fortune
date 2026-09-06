@@ -61,15 +61,15 @@ func TestRunListSingular(t *testing.T) {
 
 // --- Exit-code coverage -----------------------------------------------
 //
-// None of the orchestration functions (runPick, runList, runFavorite,
-// runUnfavorite, runHistory, dispatch, selectAlbums, loadCollectionOrExit,
-// loadFavoritesOrExit) were exercised by any test: os.Exit inside those
-// functions can't be observed by calling them in-process, since it would
-// kill the test binary itself. The standard fix is the Go self-exec helper
-// pattern (as used by package os/exec's own tests): re-run this same test
-// binary as a subprocess restricted to TestHelperProcess, which actually
-// calls dispatch and lets any os.Exit take down that subprocess instead of
-// us, then inspect the subprocess's real exit code.
+// No command function calls os.Exit any more -- each returns an error, and
+// dispatch is the one place that turns a non-nil error (or a resolve/config
+// failure) into os.Exit(1). That exit code is still only observable by
+// letting a real process actually exit, since calling dispatch in-process
+// would kill the test binary itself. The standard fix is the Go self-exec
+// helper pattern (as used by package os/exec's own tests): re-run this same
+// test binary as a subprocess restricted to TestHelperProcess, which calls
+// dispatch and lets any os.Exit take down that subprocess instead of us,
+// then inspect the subprocess's real exit code.
 
 // TestHelperProcess is not a real test. It stays inert under a normal `go
 // test` run because DISC_FORTUNE_HELPER is unset; runHelper (below) sets it
@@ -171,7 +171,7 @@ func runHelperEnv(t *testing.T, home string, extraEnv []string, args ...string) 
 }
 
 // fixturePaths returns where the collection/favorites/history files live
-// under a HOME directory, matching configDir()'s layout.
+// under a HOME directory, matching disc.ResolveDir's layout.
 func fixturePaths(home string) (collection, favorites, history string) {
 	dir := filepath.Join(home, ".config", "disc-fortune")
 	return filepath.Join(dir, "collection.json"), filepath.Join(dir, "favorites.json"), filepath.Join(dir, "history.json")
