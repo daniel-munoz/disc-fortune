@@ -240,7 +240,10 @@ failure must not print an album the tool did not record.
   extra keys.
 - `ReplaceLastHistory` leaves the file byte-identical when the last entry has
   moved on, and returns `ErrHistoryChanged`.
-- No `.tmp` or `.lock` residue in the config directory afterwards.
+- No `.tmp` residue in the config directory afterwards. The `.lock` sidecar
+  persists, as it does for every other locked write — that is what
+  `isLockSidecar` exists for. `writeFileAtomic`'s existing tests cover the
+  temp-file half, since `SaveHistory` goes through it.
 - `disc-fortune help` lists `reroll`; `disc-fortune help reroll` prints its
   usage with the filter flags and the global flags appended.
 - Completion offers `reroll` and its flags in all three shells.
