@@ -38,6 +38,9 @@ var (
 	errNoCollectionGuidance    = errors.New("No collection found. Run `disc-fortune sync` to fetch your Discogs collection.")
 	errEmptyCollectionGuidance = errors.New("Collection is empty. Run `disc-fortune sync` to fetch your Discogs collection.")
 	errNoFavoritesGuidance     = errors.New("No favorites yet. Use `disc-fortune favorite` after a pick you like.")
+	errNothingToReroll         = errors.New("Nothing to reroll. Run `disc-fortune pick` first.")
+	errRerollRaced             = errors.New("The last pick changed while rerolling; nothing was replaced.\n" +
+		"Run `disc-fortune history` to see what happened.")
 )
 
 // collection loads the collection, turning "nothing to work with" into the
@@ -138,7 +141,24 @@ func formatList(albums []disc.Album, useColor, showIDs bool) string {
 	return sb.String()
 }
 
-func (a app) runPick(cfg selection) error {
+// recordMode is what a draw does to history once it has chosen. Named
+// constants rather than a boolean so the call sites say which they mean.
+type recordMode int
+
+const (
+	// recordAppend adds an entry: `pick`.
+	recordAppend recordMode = iota
+	// recordReplace writes over the most recent entry: `reroll`.
+	recordReplace
+)
+
+func (a app) runPick(cfg selection) error { return a.drawAndRecord(cfg, recordAppend) }
+
+// drawAndRecord is the body of both `pick` and `reroll`. They differ in
+// exactly two places -- whether the last history entry is dropped before the
+// draw, and which writer records the result -- so they share one path rather
+// than two that drift apart.
+func (a app) drawAndRecord(cfg selection, mode recordMode) error {
 	albums, err := a.selectAlbums(cfg)
 	if err != nil {
 		return err
@@ -147,12 +167,25 @@ func (a app) runPick(cfg selection) error {
 		return errors.New("No albums match the specified filters")
 	}
 
-	// History is read for the decision and then read again by disc.AddToHistory,
+	// History is read for the decision and then read again by the writer,
 	// which takes its own lock. Deciding from a marginally stale history is
-	// harmless, and it means no lock is held across the decision.
+	// harmless for an append; a replace cannot be so relaxed, which is what
+	// ReplaceLastHistory's expected argument guards.
 	entries, err := disc.LoadHistory(a.historyPath())
 	if err != nil {
 		return fmt.Errorf("Error loading history: %v", err)
+	}
+
+	// The drop happens before --unheard and before the draw, and that
+	// ordering is the whole of `reroll`: the declined record stops counting
+	// as recently played, and becomes unheard again -- because it is.
+	var dropped disc.HistoryEntry
+	if mode == recordReplace {
+		if len(entries) == 0 {
+			return errNothingToReroll
+		}
+		dropped = entries[len(entries)-1]
+		entries = entries[:len(entries)-1]
 	}
 
 	if cfg.unheard {
@@ -165,8 +198,10 @@ func (a app) runPick(cfg selection) error {
 
 	album := pick.Draw(albums, entries, cfg.draw, pick.NewRNG())
 
-	if err := disc.AddToHistory(a.historyPath(), album); err != nil {
-		return fmt.Errorf("Error saving history: %v", err)
+	// Recorded before it is printed: a failed write must never report an
+	// album the tool did not save.
+	if err := a.record(mode, dropped, album); err != nil {
+		return err
 	}
 
 	if cfg.json {
@@ -177,9 +212,36 @@ func (a app) runPick(cfg selection) error {
 		fmt.Fprintln(a.stdout, formatAlbum(album, a.stdoutColor(cfg.color)))
 	}
 
+	// A receipt for a destructive action, so -- unlike the advisory notice
+	// below -- it is printed whether or not stderr is a terminal. Someone
+	// redirecting stderr to a log is exactly who should still get it.
+	if mode == recordReplace {
+		fmt.Fprintf(a.stderr, "Replaced: %s (%s)\n",
+			dropped.Album.Key(), disc.FormatTimestamp(dropped.Timestamp))
+	}
+
 	// Advisory, and therefore on stderr and only for a human at a terminal:
 	// stdout is the data channel and must stay parseable.
 	fmt.Fprint(a.stderr, disc.SyncNotice(a.metaPath(), time.Now(), term.IsTTY(os.Stderr)))
+	return nil
+}
+
+// record writes the drawn album to history, appending or replacing per mode.
+// dropped is meaningful only for recordReplace.
+func (a app) record(mode recordMode, dropped disc.HistoryEntry, album disc.Album) error {
+	if mode == recordAppend {
+		if err := disc.AddToHistory(a.historyPath(), album); err != nil {
+			return fmt.Errorf("Error saving history: %v", err)
+		}
+		return nil
+	}
+	err := disc.ReplaceLastHistory(a.historyPath(), dropped, album)
+	switch {
+	case errors.Is(err, disc.ErrHistoryChanged):
+		return errRerollRaced
+	case err != nil:
+		return fmt.Errorf("Error saving history: %v", err)
+	}
 	return nil
 }
 

@@ -100,3 +100,27 @@ func writeTestCollection(t *testing.T, path string) {
 		t.Fatalf("writing fixture: %v", err)
 	}
 }
+
+// TestRunPickAppendsToHistory pins the behaviour reroll must not disturb:
+// every pick adds an entry, it never overwrites one.
+func TestRunPickAppendsToHistory(t *testing.T) {
+	dir := t.TempDir()
+	writeTestCollection(t, filepath.Join(dir, "collection.json"))
+
+	var out, errOut bytes.Buffer
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
+
+	for i := 0; i < 3; i++ {
+		if err := a.runPick(selection{color: term.Never}); err != nil {
+			t.Fatalf("runPick %d: %v", i, err)
+		}
+	}
+
+	entries, err := disc.LoadHistory(filepath.Join(dir, "history.json"))
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Errorf("got %d history entries after 3 picks, want 3", len(entries))
+	}
+}
