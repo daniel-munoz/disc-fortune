@@ -154,6 +154,8 @@ const (
 
 func (a app) runPick(cfg selection) error { return a.drawAndRecord(cfg, recordAppend) }
 
+func (a app) runReroll(cfg selection) error { return a.drawAndRecord(cfg, recordReplace) }
+
 // drawAndRecord is the body of both `pick` and `reroll`. They differ in
 // exactly two places -- whether the last history entry is dropped before the
 // draw, and which writer records the result -- so they share one path rather

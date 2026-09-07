@@ -25,7 +25,7 @@ func TestCompletionOffersOnlyFlagsTheCommandAccepts(t *testing.T) {
 
 			var err error
 			switch c.name {
-			case "pick", "list":
+			case "pick", "reroll", "list":
 				_, err = parseSelection(c.name, args)
 			case "history":
 				_, err = parseHistory(args)
@@ -346,6 +346,7 @@ func TestEveryCommandHasACompletionDecision(t *testing.T) {
 	// true when the command registers flags of its own beyond the globals.
 	hasOwnFlags := map[string]bool{
 		"pick":       true,
+		"reroll":     true,
 		"list":       true,
 		"history":    true,
 		"stats":      true,

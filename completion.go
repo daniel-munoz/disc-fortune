@@ -42,7 +42,7 @@ func commandFlagSet(name string) *flag.FlagSet {
 	// even when the switch below adds nothing.
 	fs, _ := newFlagSet(name)
 	switch name {
-	case "pick", "list":
+	case "pick", "reroll", "list":
 		addSelectionFlags(name, fs)
 	case "history":
 		addHistoryFlags(fs)

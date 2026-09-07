@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,5 +124,131 @@ func TestRunPickAppendsToHistory(t *testing.T) {
 	}
 	if len(entries) != 3 {
 		t.Errorf("got %d history entries after 3 picks, want 3", len(entries))
+	}
+}
+
+// TestRunRerollReplacesRatherThanAppends is the headline behaviour: the
+// history entry count does not grow.
+func TestRunRerollReplacesRatherThanAppends(t *testing.T) {
+	dir := t.TempDir()
+	writeTestCollection(t, filepath.Join(dir, "collection.json"))
+
+	var out, errOut bytes.Buffer
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
+
+	if err := a.runPick(selection{color: term.Never}); err != nil {
+		t.Fatalf("runPick: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := a.runReroll(selection{color: term.Never}); err != nil {
+			t.Fatalf("runReroll %d: %v", i, err)
+		}
+	}
+
+	entries, err := disc.LoadHistory(filepath.Join(dir, "history.json"))
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("got %d history entries after 1 pick and 3 rerolls, want 1", len(entries))
+	}
+}
+
+// The proof that the drop precedes the --unheard filter. With a one-album
+// collection, a reroll can only succeed if dropping the entry has made that
+// album unheard again. If the order were reversed the pool would be empty and
+// the command would fail.
+func TestRunRerollDropsTheEntryBeforeFiltering(t *testing.T) {
+	dir := t.TempDir()
+	writeTestCollection(t, filepath.Join(dir, "collection.json"))
+
+	var out, errOut bytes.Buffer
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
+
+	if err := a.runPick(selection{color: term.Never, unheard: true}); err != nil {
+		t.Fatalf("runPick --unheard: %v", err)
+	}
+	if err := a.runReroll(selection{color: term.Never, unheard: true}); err != nil {
+		t.Fatalf("runReroll --unheard: %v -- the dropped entry should have made "+
+			"the album unheard again", err)
+	}
+	if !strings.Contains(out.String(), "Kind of Blue") {
+		t.Errorf("stdout missing the album, got:\n%s", out.String())
+	}
+}
+
+func TestRunRerollOnEmptyHistoryFailsAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	writeTestCollection(t, filepath.Join(dir, "collection.json"))
+
+	var out, errOut bytes.Buffer
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
+
+	err := a.runReroll(selection{color: term.Never})
+	if !errors.Is(err, errNothingToReroll) {
+		t.Fatalf("got %v, want errNothingToReroll", err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("stdout must stay empty on failure, got: %q", out.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "history.json")); !os.IsNotExist(statErr) {
+		t.Errorf("a failed reroll must not create history.json (stat: %v)", statErr)
+	}
+}
+
+// The receipt goes to stderr and never to stdout, so a script reading stdout
+// sees only the pick.
+func TestRunRerollReportsTheReplacementOnStderr(t *testing.T) {
+	dir := t.TempDir()
+	writeTestCollection(t, filepath.Join(dir, "collection.json"))
+
+	var out, errOut bytes.Buffer
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
+
+	if err := a.runPick(selection{color: term.Never}); err != nil {
+		t.Fatalf("runPick: %v", err)
+	}
+	out.Reset()
+	errOut.Reset()
+
+	if err := a.runReroll(selection{color: term.Never}); err != nil {
+		t.Fatalf("runReroll: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "Replaced: Miles Davis - Kind of Blue") {
+		t.Errorf("stderr missing the replacement receipt, got: %q", errOut.String())
+	}
+	if strings.Contains(out.String(), "Replaced:") {
+		t.Errorf("the receipt leaked into stdout: %q", out.String())
+	}
+}
+
+// --json changes the format and nothing else: the payload is pick's, with no
+// reroll-specific keys.
+func TestRunRerollJSONEmitsThePickPayload(t *testing.T) {
+	dir := t.TempDir()
+	writeTestCollection(t, filepath.Join(dir, "collection.json"))
+
+	var out, errOut bytes.Buffer
+	a := app{loc: disc.Location{Dir: dir}, stdout: &out, stderr: &errOut}
+
+	if err := a.runPick(selection{color: term.Never}); err != nil {
+		t.Fatalf("runPick: %v", err)
+	}
+	out.Reset()
+
+	if err := a.runReroll(selection{color: term.Never, json: true}); err != nil {
+		t.Fatalf("runReroll --json: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshaling stdout %q: %v", out.String(), err)
+	}
+	if len(payload) != 1 {
+		t.Errorf("payload has %d keys (%v), want exactly 1 -- reroll emits pick's payload",
+			len(payload), payload)
+	}
+	if _, ok := payload["album"]; !ok {
+		t.Errorf("payload has no \"album\" key: %v", payload)
 	}
 }

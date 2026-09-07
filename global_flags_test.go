@@ -56,6 +56,7 @@ func TestFavoriteAcceptsColorFlag(t *testing.T) {
 func TestEveryCommandAcceptsColorFlag(t *testing.T) {
 	parsers := map[string]func([]string) error{
 		"pick":       func(a []string) error { _, err := parseSelection("pick", a); return err },
+		"reroll":     func(a []string) error { _, err := parseSelection("reroll", a); return err },
 		"list":       func(a []string) error { _, err := parseSelection("list", a); return err },
 		"favorite":   func(a []string) error { _, err := parseFavorite("favorite", a); return err },
 		"unfavorite": func(a []string) error { _, err := parseFavorite("unfavorite", a); return err },
@@ -239,7 +240,7 @@ func TestUsageBlocksHaveNoDoubleBlankLines(t *testing.T) {
 // not must not claim to. Same guard as TestFilterFlagsAreDocumented, for a
 // flag that is registered per-command rather than centrally.
 func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
-	accepts := []string{"pick", "list"}
+	accepts := []string{"pick", "reroll", "list"}
 	rejects := []string{
 		"favorite", "unfavorite", "stats", "open", "history", "sync",
 		"folders", "migrate", "version", "help", "completion",
@@ -275,9 +276,13 @@ func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
 	}
 }
 
-func TestDrawFlagIsDocumentedOnPickOnly(t *testing.T) {
-	if c := lookup("pick"); !strings.Contains(c.usage, "--draw") {
-		t.Error("pick usage does not mention --draw")
+func TestDrawFlagIsDocumentedWhereAccepted(t *testing.T) {
+	// addSelectionFlags registers --draw for every selection command except
+	// list, so the commands that draw document it and list must not.
+	for _, name := range []string{"pick", "reroll"} {
+		if c := lookup(name); !strings.Contains(c.usage, "--draw") {
+			t.Errorf("%s usage does not mention --draw", name)
+		}
 	}
 	if c := lookup("list"); strings.Contains(c.usage, "--draw") {
 		t.Error("list documents --draw but does not accept it")
@@ -287,7 +292,7 @@ func TestDrawFlagIsDocumentedOnPickOnly(t *testing.T) {
 // The commands that accept --json must document it, and the ones that do not
 // must not claim to. Same guard as TestUnheardFlagIsDocumentedWhereAccepted.
 func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
-	accepts := []string{"pick", "list", "history", "stats"}
+	accepts := []string{"pick", "reroll", "list", "history", "stats"}
 	rejects := []string{
 		"favorite", "unfavorite", "sync", "folders", "migrate", "version",
 		"help", "open", "completion",
