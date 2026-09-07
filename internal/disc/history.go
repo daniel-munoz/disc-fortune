@@ -2,6 +2,7 @@ package disc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,6 +60,39 @@ func AddToHistory(path string, album Album) error {
 			Album:     album,
 			Timestamp: time.Now(),
 		})
+		return SaveHistory(path, entries)
+	})
+}
+
+// ErrHistoryChanged reports that the entry ReplaceLastHistory was asked to
+// replace is no longer the most recent one. Nothing was written.
+var ErrHistoryChanged = errors.New("history changed while rerolling")
+
+// ReplaceLastHistory swaps the most recent entry for album, provided the most
+// recent entry is still the one the caller saw.
+//
+// The whole load-check-save runs under the file lock, for the reason
+// AddToHistory gives. Unlike AddToHistory it cannot act on whatever it happens
+// to find: `reroll` decides from a history it read *without* the lock, so an
+// entry appended in between would be the one deleted -- the wrong record, and
+// one the user was never shown.
+//
+// expected.Timestamp is the guard because it is the exact identity of an
+// entry. SameAlbum is not: an entry with no release ID is a wildcard for its
+// name, so it would accept a different pressing as "the one we saw".
+func ReplaceLastHistory(path string, expected HistoryEntry, album Album) error {
+	return withFileLock(path, func() error {
+		entries, err := LoadHistory(path)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 || !entries[len(entries)-1].Timestamp.Equal(expected.Timestamp) {
+			return ErrHistoryChanged
+		}
+		entries[len(entries)-1] = HistoryEntry{
+			Album:     album,
+			Timestamp: time.Now(),
+		}
 		return SaveHistory(path, entries)
 	})
 }
