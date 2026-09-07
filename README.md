@@ -211,6 +211,7 @@ on a file that a `sync` may be rewriting.
 | Command | What it does |
 |---|---|
 | `pick` | Print a random album. Runs by default when you give no command. |
+| `reroll` | Replace the last pick with a new one, instead of adding to history. |
 | `list` | List every matching album, with a count. |
 | `sync` | Fetch your collection from Discogs. |
 | `folders` | List your Discogs folder names. |
@@ -310,6 +311,32 @@ disc-fortune list --unheard --genre jazz
 
 If everything matching your other filters has already been played,
 `pick --unheard` exits 1 and says so rather than picking a repeat.
+
+`reroll` draws a replacement for your last pick and writes it *over* that
+pick's history entry, instead of adding another one:
+
+```sh
+disc-fortune reroll
+disc-fortune reroll --genre jazz   # ...and narrow while you are at it
+```
+
+Use it when what you were handed is not what you want to hear. It matters
+because history is not just a log — it is what `--draw fresh`, `--draw stale`,
+`--unheard` and `stats` all read. A pick you declined to play would otherwise
+be avoided for your next several picks and drop off `--unheard` for good,
+which is precisely backwards: you still have not heard it.
+
+`reroll` takes every flag `pick` takes. The record you turned down goes back
+into the pool, so a reroll can occasionally hand it straight back — reroll
+again. It prints what it replaced on stderr:
+
+```
+Replaced: Miles Davis - Kind of Blue (2 minutes ago)
+```
+
+That line is a receipt, not advice, so it is printed even when stderr is
+redirected. With `--json`, stdout carries exactly the payload `pick --json`
+emits.
 
 ### Statistics
 

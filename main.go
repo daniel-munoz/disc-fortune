@@ -15,7 +15,7 @@ import (
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
-const version = "2.5.0"
+const version = "2.6.0"
 
 // discogsUserAgent is the single place the version reaches the API client.
 func discogsUserAgent() string { return "disc-fortune/" + version }

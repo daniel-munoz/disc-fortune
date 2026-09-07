@@ -72,13 +72,30 @@ Nothing is added and nothing is withheld. `--draw` in particular comes free:
 `addSelectionFlags` gates it on `name != "list"`, so a command that draws gets
 it without touching that function.
 
-**Registration is three places, not one.** A `commands` table entry, a
-`commandFlagSet` case in `completion.go`, and a `"reroll": true` row in
-`TestEveryCommandHasACompletionDecision`'s `hasOwnFlags` map. Phase 5 recorded
-this as the standing cost of a new command; the `FlagSet` automates flags, not
-commands. The `hasOwnFlags` length check fails loudly if the row is forgotten,
-and `TestFilterFlagsAreDocumented` fails if the usage block omits
-`filterFlagHelp`.
+**Registration is five places, not one.** Phase 5 recorded this as three, and
+that was already wrong when it was written -- implementing `reroll` found the
+other two. The full set:
+
+1. A `commands` table entry in `cli.go`.
+2. A `commandFlagSet` case in `completion.go`.
+3. A row in `TestEveryCommandHasACompletionDecision`'s `hasOwnFlags` map.
+4. A case in `TestCompletionOffersOnlyFlagsTheCommandAccepts`'s own
+   name-to-parser switch (`completion_test.go`).
+5. An entry in `TestEveryCommandAcceptsColorFlag`'s own `parsers` map
+   (`global_flags_test.go`).
+
+The last two exist because those tests must reach the *real* parse function,
+and neither can get there from the `commands` table: `command.run` consumes its
+parse error rather than returning it. A command missing from either falls
+through to `parseNoArgs` and appears to reject every flag it actually accepts.
+
+Every one of the five fails loudly when forgotten -- three on a count mismatch,
+two on the flags themselves -- so the cost of missing one is a red test, never
+a silent gap. Two further tables take a *stance* rather than a registration and
+must also gain a row: `TestUnheardFlagIsDocumentedWhereAccepted` and
+`TestJSONFlagIsDocumentedWhereAccepted`, each of which needs the new command in
+its accepts or rejects list. `TestFilterFlagsAreDocumented` fails if the usage
+block omits `filterFlagHelp`.
 
 ---
 
