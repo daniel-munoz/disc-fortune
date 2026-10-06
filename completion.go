@@ -6,6 +6,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
 )
 
 // completionShells are the shells `completion` can generate for.
@@ -38,9 +40,9 @@ type completionFlag struct {
 // silently offer only the globals. TestEveryCommandHasACompletionDecision is
 // the forcing function for that, because no other test would fail.
 func commandFlagSet(name string) *flag.FlagSet {
-	// newFlagSet registers the global flags, so every command gets those
+	// cli.NewFlagSet registers the global flags, so every command gets those
 	// even when the switch below adds nothing.
-	fs, _ := newFlagSet(name)
+	fs, _ := cli.NewFlagSet(name)
 	switch name {
 	case "pick", "reroll", "list":
 		addSelectionFlags(name, fs)
@@ -84,8 +86,8 @@ func isBoolFlag(f *flag.Flag) bool {
 
 // parseCompletion validates completion's single argument, the shell name.
 func parseCompletion(args []string) (string, error) {
-	fs, gf := newFlagSet("completion")
-	rest, err := parseInterspersed(fs, args)
+	fs, gf := cli.NewFlagSet("completion")
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return "", fmt.Errorf("completion: %w", err)
 	}
@@ -97,7 +99,7 @@ func parseCompletion(args []string) (string, error) {
 	}
 	// completion colorizes nothing, but it still accepts --color, so it must
 	// still reject a bad value for it -- as every other command does.
-	if _, err := gf.mode(); err != nil {
+	if _, err := gf.Mode(); err != nil {
 		return "", fmt.Errorf("completion: %v", err)
 	}
 	return rest[0], nil

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 )
@@ -35,88 +36,10 @@ func years(t *testing.T, vals ...string) disc.YearFilter {
 	return yf
 }
 
-func TestParseInterspersedFlagsAfterPositional(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
-	year := fs.String("year", "", "")
-
-	rest, err := parseInterspersed(fs, []string{"miles", "--year", "1959"})
-	if err != nil {
-		t.Fatalf("parseInterspersed: %v", err)
-	}
-	if len(rest) != 1 || rest[0] != "miles" {
-		t.Errorf("positional = %v, want [miles]", rest)
-	}
-	if *year != "1959" {
-		t.Errorf("year = %q, want 1959 (flag after positional was dropped)", *year)
-	}
-}
-
-func TestParseInterspersedFlagsBeforePositional(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
-	year := fs.String("year", "", "")
-
-	rest, err := parseInterspersed(fs, []string{"--year", "1959", "miles"})
-	if err != nil {
-		t.Fatalf("parseInterspersed: %v", err)
-	}
-	if len(rest) != 1 || rest[0] != "miles" {
-		t.Errorf("positional = %v, want [miles]", rest)
-	}
-	if *year != "1959" {
-		t.Errorf("year = %q, want 1959", *year)
-	}
-}
-
-func TestParseInterspersedFlagsSurroundingPositional(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
-	year := fs.String("year", "", "")
-	genre := fs.String("genre", "", "")
-
-	rest, err := parseInterspersed(fs, []string{"--genre", "jazz", "miles", "--year", "1959"})
-	if err != nil {
-		t.Fatalf("parseInterspersed: %v", err)
-	}
-	if len(rest) != 1 || rest[0] != "miles" {
-		t.Errorf("positional = %v, want [miles]", rest)
-	}
-	if *genre != "jazz" || *year != "1959" {
-		t.Errorf("genre = %q, year = %q, want jazz/1959", *genre, *year)
-	}
-}
-
-func TestParseInterspersedMultiplePositionals(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
-	rest, err := parseInterspersed(fs, []string{"kind", "of", "blue"})
-	if err != nil {
-		t.Fatalf("parseInterspersed: %v", err)
-	}
-	if len(rest) != 3 {
-		t.Errorf("positional = %v, want 3 items", rest)
-	}
-}
-
-func TestParseInterspersedDashTerminator(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
-	rest, err := parseInterspersed(fs, []string{"--", "-live-"})
-	if err != nil {
-		t.Fatalf("parseInterspersed: %v", err)
-	}
-	if len(rest) != 1 || rest[0] != "-live-" {
-		t.Errorf("positional = %v, want [-live-]", rest)
-	}
-}
-
-func TestParseInterspersedUnknownFlag(t *testing.T) {
-	fs, _ := newFlagSet("pick")
-	if _, err := parseInterspersed(fs, []string{"--nope"}); err == nil {
-		t.Fatal("expected error for unknown flag")
-	}
-}
-
 func TestFilterFlagsBuildsFilter(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--year", "1970-1980", "--genre", "jazz"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--year", "1970-1980", "--genre", "jazz"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -132,9 +55,9 @@ func TestFilterFlagsBuildsFilter(t *testing.T) {
 }
 
 func TestFilterFlagsRejectsBadYear(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--year", "nineteen"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--year", "nineteen"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	if _, err := ff.Filter(); err == nil {
@@ -143,9 +66,9 @@ func TestFilterFlagsRejectsBadYear(t *testing.T) {
 }
 
 func TestFilterFlagsNoneSetWhenUnset(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, nil); err != nil {
+	if _, err := cli.ParseInterspersed(fs, nil); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	if ff.anyNarrowing() {
@@ -159,9 +82,9 @@ func TestFilterFlagsNoneSetWhenUnset(t *testing.T) {
 // TestFilterFlagsReleaseIDIsNotNarrowing pins the distinction the query rule
 // depends on: --release-id identifies, it does not narrow.
 func TestFilterFlagsReleaseIDIsNotNarrowing(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--release-id", "1839278"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--release-id", "1839278"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	if ff.anyNarrowing() {
@@ -769,10 +692,10 @@ func TestParseFavoriteRejectsUnheardFlag(t *testing.T) {
 }
 
 func TestFilterFlagsRepeatAndOR(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
 	args := []string{"--genre", "jazz", "--genre", "funk"}
-	if _, err := parseInterspersed(fs, args); err != nil {
+	if _, err := cli.ParseInterspersed(fs, args); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -786,7 +709,7 @@ func TestFilterFlagsRepeatAndOR(t *testing.T) {
 }
 
 func TestFilterFlagsExcludeTwins(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
 	args := []string{
 		"--exclude-query", "bootleg",
@@ -796,7 +719,7 @@ func TestFilterFlagsExcludeTwins(t *testing.T) {
 		"--exclude-label", "columbia",
 		"--exclude-format", "cd",
 	}
-	if _, err := parseInterspersed(fs, args); err != nil {
+	if _, err := cli.ParseInterspersed(fs, args); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -876,10 +799,10 @@ func TestAllFilterTakingCommandsRegisterFilterFlags(t *testing.T) {
 }
 
 func TestFilterFlagsNewNarrowingFields(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
 	args := []string{"--query", "kind of", "--artist", "miles", "--title", "blue"}
-	if _, err := parseInterspersed(fs, args); err != nil {
+	if _, err := cli.ParseInterspersed(fs, args); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -901,9 +824,9 @@ func TestFilterFlagsNewNarrowingFields(t *testing.T) {
 // AND. The naive reading -- two separate fields intersected -- would make
 // this combination return nothing at all.
 func TestYearAndDecadeFeedOneConstraint(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--year", "1959", "--decade", "70s"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--year", "1959", "--decade", "70s"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -924,10 +847,10 @@ func TestYearAndDecadeFeedOneConstraint(t *testing.T) {
 }
 
 func TestExcludeYearAndDecadeFeedOneExclusion(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
 	args := []string{"--exclude-year", "1959", "--exclude-decade", "70s"}
-	if _, err := parseInterspersed(fs, args); err != nil {
+	if _, err := cli.ParseInterspersed(fs, args); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -943,9 +866,9 @@ func TestExcludeYearAndDecadeFeedOneExclusion(t *testing.T) {
 }
 
 func TestFilterFlagsRejectsAmbiguousDecade(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--decade", "20s"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--decade", "20s"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	_, err := ff.Filter()
@@ -962,10 +885,10 @@ func TestFilterFlagsRejectsAmbiguousDecade(t *testing.T) {
 // string contains "", so an empty exclusion reaching the matcher would
 // exclude the whole collection.
 func TestEmptyFilterValuesAreDropped(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	ff := addFilterFlags(fs)
 	args := []string{"--genre", "", "--exclude-genre", "", "--year", "", "--decade", ""}
-	if _, err := parseInterspersed(fs, args); err != nil {
+	if _, err := cli.ParseInterspersed(fs, args); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	filter, err := ff.Filter()
@@ -983,9 +906,9 @@ func TestEmptyFilterValuesAreDropped(t *testing.T) {
 }
 
 func TestHasQueryIgnoresExclusions(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
+	fs, _ := cli.NewFlagSet("favorite")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--exclude-query", "bootleg"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--exclude-query", "bootleg"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	if ff.hasQuery() {
@@ -997,9 +920,9 @@ func TestHasQueryIgnoresExclusions(t *testing.T) {
 }
 
 func TestHasQueryAndNarrowing(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
+	fs, _ := cli.NewFlagSet("favorite")
 	ff := addFilterFlags(fs)
-	if _, err := parseInterspersed(fs, []string{"--query", "miles"}); err != nil {
+	if _, err := cli.ParseInterspersed(fs, []string{"--query", "miles"}); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	if !ff.hasQuery() {
@@ -1055,10 +978,10 @@ func TestEveryNarrowingFlagCountsAsNarrowing(t *testing.T) {
 		{"--exclude-year", "1959"},
 		{"--exclude-decade", "70s"},
 	} {
-		fs, _ := newFlagSet("favorite")
+		fs, _ := cli.NewFlagSet("favorite")
 		ff := addFilterFlags(fs)
-		if _, err := parseInterspersed(fs, args); err != nil {
-			t.Fatalf("parseInterspersed(%v): %v", args, err)
+		if _, err := cli.ParseInterspersed(fs, args); err != nil {
+			t.Fatalf("cli.ParseInterspersed(%v): %v", args, err)
 		}
 		if !ff.anyNarrowing() {
 			t.Errorf("anyNarrowing() = false for %v, want true", args)
@@ -1071,7 +994,7 @@ func TestEveryNarrowingFlagCountsAsNarrowing(t *testing.T) {
 // a narrowing filter that then demands a query. Filter() already routed its
 // slices through nonEmpty; this pins that anyNarrowing does too.
 func TestAnyNarrowingIgnoresEmptyValues(t *testing.T) {
-	fs, _ := newFlagSet("favorite")
+	fs, _ := cli.NewFlagSet("favorite")
 	ff := addFilterFlags(fs)
 	args := []string{
 		"--exclude-genre", "",
@@ -1082,7 +1005,7 @@ func TestAnyNarrowingIgnoresEmptyValues(t *testing.T) {
 		"--artist", "",
 		"--exclude-artist", "",
 	}
-	if _, err := parseInterspersed(fs, args); err != nil {
+	if _, err := cli.ParseInterspersed(fs, args); err != nil {
 		t.Fatalf("parseInterspersed: %v", err)
 	}
 	if ff.anyNarrowing() {

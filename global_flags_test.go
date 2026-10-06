@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -51,7 +52,7 @@ func TestFavoriteAcceptsColorFlag(t *testing.T) {
 	}
 }
 
-// The point of registering global flags in newFlagSet: no command can miss
+// The point of registering global flags in cli.NewFlagSet: no command can miss
 // them. This is the test that keeps a future command honest.
 func TestEveryCommandAcceptsColorFlag(t *testing.T) {
 	parsers := map[string]func([]string) error{
@@ -150,11 +151,11 @@ func TestEveryCommandRejectsInvalidColor(t *testing.T) {
 // convention once instead of listing sixteen near-identical lines, so the
 // sentence introducing it is required too.
 func TestFilterFlagsAreDocumented(t *testing.T) {
-	base, _ := newFlagSet("pick")
+	base, _ := cli.NewFlagSet("pick")
 	global := map[string]bool{}
 	base.VisitAll(func(f *flag.Flag) { global[f.Name] = true })
 
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	addFilterFlags(fs)
 	var names []string
 	fs.VisitAll(func(f *flag.Flag) {
@@ -202,7 +203,7 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 // property directly: each of the three flags outside disc.Fields is
 // registered with, and documented with, the very same string.
 func TestNonTableFilterFlagsHaveOneHelpSource(t *testing.T) {
-	fs, _ := newFlagSet("pick")
+	fs, _ := cli.NewFlagSet("pick")
 	addFilterFlags(fs)
 	for _, f := range nonSubstringFilterFlags {
 		flg := fs.Lookup(f.name)
@@ -225,7 +226,7 @@ func TestNonTableFilterFlagsHaveOneHelpSource(t *testing.T) {
 // buildFilterFlagHelp generates filterFlagHelp from disc.Fields, and every
 // usage block appends it straight after a line already ending in "\n". A
 // trailing newline left on the generated block would double up with that
-// "\n" (and with globalFlagHelp's own leading "\n\n"), adding a stray blank
+// "\n" (and with cli.GlobalFlagHelp's own leading "\n\n"), adding a stray blank
 // line to every help and usage-error screen. Three consecutive newlines
 // anywhere in a usage block is that regression.
 func TestUsageBlocksHaveNoDoubleBlankLines(t *testing.T) {

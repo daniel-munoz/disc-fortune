@@ -4,60 +4,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
-
-// globalFlags holds the flags every command accepts. They are registered in
-// newFlagSet rather than per-command, so a command physically cannot ship
-// without them and their help text cannot drift. Later global flags belong
-// here too.
-type globalFlags struct {
-	color *string
-}
-
-// mode resolves the global flags into the values commands actually use.
-func (g *globalFlags) mode() (term.Mode, error) {
-	return term.ParseMode(*g.color)
-}
-
-// newFlagSet builds a FlagSet that never prints or exits on its own, so the
-// caller controls the message and the exit code. Every command's flags start
-// here, which is what makes the global flags universal.
-func newFlagSet(name string) (*flag.FlagSet, *globalFlags) {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.Usage = func() {}
-	g := &globalFlags{
-		color: fs.String("color", "auto", "When to colorize output: auto, always, or never"),
-	}
-	return fs, g
-}
-
-// parseInterspersed parses args allowing flags to appear before, after, or
-// around positional arguments. Go's flag package stops at the first non-flag
-// argument, which would silently drop trailing flags such as the --year in
-// `favorite "miles" --year 1959`.
-func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
-	var positional []string
-	for {
-		if err := fs.Parse(args); err != nil {
-			return nil, err
-		}
-		rest := fs.Args()
-		if len(rest) == 0 {
-			return positional, nil
-		}
-		positional = append(positional, rest[0])
-		args = rest[1:]
-	}
-}
 
 // filterFlags holds the filter flags shared by pick, list, favorite and
 // unfavorite. Registering them in one place keeps their names and help text
@@ -335,11 +290,11 @@ func addSelectionFlags(name string, fs *flag.FlagSet) *selectionFlags {
 }
 
 func parseSelection(name string, args []string) (selection, error) {
-	fs, gf := newFlagSet(name)
+	fs, gf := cli.NewFlagSet(name)
 	sf := addSelectionFlags(name, fs)
 	favoritesOnly, unheard, asJSON, draw, ff := sf.favoritesOnly, sf.unheard, sf.asJSON, sf.draw, sf.filters
 
-	rest, err := parseInterspersed(fs, args)
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return selection{}, fmt.Errorf("%s: %w", name, err)
 	}
@@ -350,7 +305,7 @@ func parseSelection(name string, args []string) (selection, error) {
 	if err != nil {
 		return selection{}, fmt.Errorf("%s: %v", name, err)
 	}
-	color, err := gf.mode()
+	color, err := gf.Mode()
 	if err != nil {
 		return selection{}, fmt.Errorf("%s: %v", name, err)
 	}
@@ -382,8 +337,8 @@ func parseSelection(name string, args []string) (selection, error) {
 // It exists so a third command with this grammar cannot drift from the first
 // two. Copying forty lines to get one is how a CLI ends up with three
 // slightly different answers to "what does a bare filter mean?".
-func parseQueryCommand(name string, fs *flag.FlagSet, gf *globalFlags, ff *filterFlags, args []string) (favoriteConfig, error) {
-	rest, err := parseInterspersed(fs, args)
+func parseQueryCommand(name string, fs *flag.FlagSet, gf *cli.Globals, ff *filterFlags, args []string) (favoriteConfig, error) {
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return favoriteConfig{}, fmt.Errorf("%s: %w", name, err)
 	}
@@ -396,7 +351,7 @@ func parseQueryCommand(name string, fs *flag.FlagSet, gf *globalFlags, ff *filte
 	if err != nil {
 		return favoriteConfig{}, fmt.Errorf("%s: %v", name, err)
 	}
-	color, err := gf.mode()
+	color, err := gf.Mode()
 	if err != nil {
 		return favoriteConfig{}, fmt.Errorf("%s: %v", name, err)
 	}
@@ -434,7 +389,7 @@ func parseQueryCommand(name string, fs *flag.FlagSet, gf *globalFlags, ff *filte
 }
 
 func parseFavorite(name string, args []string) (favoriteConfig, error) {
-	fs, gf := newFlagSet(name)
+	fs, gf := cli.NewFlagSet(name)
 	ff := addFilterFlags(fs)
 	return parseQueryCommand(name, fs, gf, ff, args)
 }
@@ -456,7 +411,7 @@ func addOpenFlags(fs *flag.FlagSet) (*bool, *filterFlags) {
 }
 
 func parseOpen(args []string) (openConfig, error) {
-	fs, gf := newFlagSet("open")
+	fs, gf := cli.NewFlagSet("open")
 	printOnly, ff := addOpenFlags(fs)
 
 	cfg, err := parseQueryCommand("open", fs, gf, ff, args)
@@ -478,9 +433,9 @@ func addHistoryFlags(fs *flag.FlagSet) *bool {
 }
 
 func parseHistory(args []string) (historyConfig, error) {
-	fs, gf := newFlagSet("history")
+	fs, gf := cli.NewFlagSet("history")
 	asJSON := addHistoryFlags(fs)
-	rest, err := parseInterspersed(fs, args)
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return historyConfig{}, fmt.Errorf("history: %w", err)
 	}
@@ -498,7 +453,7 @@ func parseHistory(args []string) (historyConfig, error) {
 		}
 		limit = n
 	}
-	color, err := gf.mode()
+	color, err := gf.Mode()
 	if err != nil {
 		return historyConfig{}, fmt.Errorf("history: %v", err)
 	}
@@ -533,10 +488,10 @@ func addStatsFlags(fs *flag.FlagSet) *statsFlags {
 // and a filter alone does not say which; stats is set-oriented like list and
 // pick, so `stats --genre jazz` is a complete request.
 func parseStats(args []string) (statsConfig, error) {
-	fs, gf := newFlagSet("stats")
+	fs, gf := cli.NewFlagSet("stats")
 	sf := addStatsFlags(fs)
 
-	rest, err := parseInterspersed(fs, args)
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return statsConfig{}, fmt.Errorf("stats: %w", err)
 	}
@@ -547,7 +502,7 @@ func parseStats(args []string) (statsConfig, error) {
 	if err != nil {
 		return statsConfig{}, fmt.Errorf("stats: %v", err)
 	}
-	color, err := gf.mode()
+	color, err := gf.Mode()
 	if err != nil {
 		return statsConfig{}, fmt.Errorf("stats: %v", err)
 	}
@@ -561,12 +516,12 @@ func parseStats(args []string) (statsConfig, error) {
 }
 
 // parseHelp validates help's arguments (an optional topic). Routing it
-// through newFlagSet/parseInterspersed, like every other command, means
+// through cli.NewFlagSet/cli.ParseInterspersed, like every other command, means
 // -h/-help/--help on help itself hits the flag package's built-in ErrHelp
 // case instead of being mistaken for a topic named "--help".
 func parseHelp(args []string) (string, error) {
-	fs, _ := newFlagSet("help")
-	rest, err := parseInterspersed(fs, args)
+	fs, _ := cli.NewFlagSet("help")
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return "", fmt.Errorf("help: %w", err)
 	}
@@ -588,10 +543,10 @@ func addSyncFlags(fs *flag.FlagSet) *arrayFlags {
 }
 
 func parseSync(args []string) (syncConfig, error) {
-	fs, gf := newFlagSet("sync")
+	fs, gf := cli.NewFlagSet("sync")
 	folders := addSyncFlags(fs)
 
-	rest, err := parseInterspersed(fs, args)
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return syncConfig{}, fmt.Errorf("sync: %w", err)
 	}
@@ -600,7 +555,7 @@ func parseSync(args []string) (syncConfig, error) {
 	}
 	// sync colorizes nothing, but a bad --color value is still a typo and
 	// must be reported rather than ignored.
-	if _, err := gf.mode(); err != nil {
+	if _, err := gf.Mode(); err != nil {
 		return syncConfig{}, fmt.Errorf("sync: %v", err)
 	}
 	return syncConfig{folders: *folders}, nil
@@ -608,8 +563,8 @@ func parseSync(args []string) (syncConfig, error) {
 
 // parseNoArgs validates that a command was invoked with no flags and no arguments.
 func parseNoArgs(name string, args []string) error {
-	fs, gf := newFlagSet(name)
-	rest, err := parseInterspersed(fs, args)
+	fs, gf := cli.NewFlagSet(name)
+	rest, err := cli.ParseInterspersed(fs, args)
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
@@ -618,7 +573,7 @@ func parseNoArgs(name string, args []string) error {
 	}
 	// These commands produce no colorized output, but they still accept the
 	// flag, so they must still reject a bad value for it.
-	if _, err := gf.mode(); err != nil {
+	if _, err := gf.Mode(); err != nil {
 		return fmt.Errorf("%s: %v", name, err)
 	}
 	return nil
@@ -728,16 +683,6 @@ func helpText(topic string) (string, error) {
 	return sb.String(), nil
 }
 
-// globalFlagHelp documents the flags newFlagSet registers on every command.
-// It is appended to each usage block programmatically, for the same reason
-// the flags themselves are registered centrally: a command must not be able
-// to ship without them.
-const globalFlagHelp = `
-
-Global flags (accepted by every command):
-  --color WHEN     Colorize output: auto (default), always, or never.
-                   auto colorizes only a terminal, and honors NO_COLOR.`
-
 // filterFlagHelp is the shared help block for the filter flags, generated
 // from disc.Fields and nonSubstringFilterFlags so a new filter cannot ship
 // undocumented. The --exclude-NAME twins are named once by the heading
@@ -758,7 +703,7 @@ func buildFilterFlagHelp() string {
 	// The old hand-written constant ended without a trailing newline, and
 	// every usage block appends filterFlagHelp straight after its own line
 	// ending in "\n" -- so a trailing newline here would double up with
-	// globalFlagHelp's leading "\n\n" and add a stray blank line.
+	// cli.GlobalFlagHelp's leading "\n\n" and add a stray blank line.
 	return strings.TrimRight(sb.String(), "\n")
 }
 
@@ -1106,7 +1051,7 @@ that a sync may be rewriting.`,
 		if commands[i].name == "help" {
 			continue
 		}
-		commands[i].usage += globalFlagHelp
+		commands[i].usage += cli.GlobalFlagHelp
 	}
 }
 
