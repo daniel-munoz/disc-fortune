@@ -42,13 +42,6 @@ type openConfig struct {
 	printOnly bool
 }
 
-// addOpenFlags registers open's flags. See addSelectionFlags for why
-// registration is factored out of the parse function.
-func addOpenFlags(fs *flag.FlagSet) (*bool, *filterFlags) {
-	printOnly := fs.Bool("print", false, "Print the URL instead of opening a browser")
-	return printOnly, addFilterFlags(fs)
-}
-
 // openCmd shares favorite's query grammar and adds --print.
 type openCmd struct {
 	printOnly *bool
@@ -58,7 +51,8 @@ type openCmd struct {
 }
 
 func (c *openCmd) Flags(fs *flag.FlagSet, g *cli.Globals) {
-	c.printOnly, c.ff = addOpenFlags(fs)
+	c.printOnly = fs.Bool("print", false, "Print the URL instead of opening a browser")
+	c.ff = addFilterFlags(fs)
 	c.g = g
 }
 
@@ -140,7 +134,7 @@ func (a app) runOpen(cfg openConfig) error {
 		// A launcher that exists but will not start is a real failure, not a
 		// degradation -- but print the URL anyway so the user is not left
 		// with nothing. The "disc-fortune: " prefix is part of this message's
-		// own text: dispatch's printer adds none.
+		// own text: Execute's printer adds none.
 		fmt.Fprintln(a.stdout, url)
 		return fmt.Errorf("disc-fortune: could not launch %s: %v", plan.Launch[0], err)
 	}

@@ -36,8 +36,7 @@ type statsConfig struct {
 	json          bool
 }
 
-// statsFlags holds the flags stats registers. See addSelectionFlags for why
-// registration is factored out of the parse function.
+// statsFlags holds the flags stats registers.
 //
 // No --unheard: that flag is defined by history, and "share ever picked" over
 // an unheard-only set is 0% by construction, so its only effect would be to
@@ -49,14 +48,6 @@ type statsFlags struct {
 	filters       *filterFlags
 }
 
-func addStatsFlags(fs *flag.FlagSet) *statsFlags {
-	return &statsFlags{
-		favoritesOnly: fs.Bool("favorites", false, "Describe favorites only"),
-		asJSON:        fs.Bool("json", false, "Emit machine-readable JSON instead of text"),
-		filters:       addFilterFlags(fs),
-	}
-}
-
 type statsCmd struct {
 	sf  *statsFlags
 	g   *cli.Globals
@@ -64,7 +55,12 @@ type statsCmd struct {
 }
 
 func (c *statsCmd) Flags(fs *flag.FlagSet, g *cli.Globals) {
-	c.sf, c.g = addStatsFlags(fs), g
+	c.sf = &statsFlags{
+		favoritesOnly: fs.Bool("favorites", false, "Describe favorites only"),
+		asJSON:        fs.Bool("json", false, "Emit machine-readable JSON instead of text"),
+		filters:       addFilterFlags(fs),
+	}
+	c.g = g
 }
 
 // Parse validates stats's arguments.

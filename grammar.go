@@ -228,10 +228,9 @@ type selection struct {
 	json bool
 }
 
-// selectionFlags holds the flags pick and list register. Registration lives in
-// a function rather than inline so `completion` can enumerate a command's flags
-// from the same FlagSet the command parses with -- a flag cannot be accepted
-// without also being completable.
+// selectionFlags holds the flags pick, reroll and list register. Registration
+// lives in a function because the three share it; completion reaches it the
+// same way parsing does, through selectionCmd.Flags.
 type selectionFlags struct {
 	favoritesOnly *bool
 	unheard       *bool

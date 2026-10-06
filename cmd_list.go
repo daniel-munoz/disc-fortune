@@ -59,7 +59,7 @@ func (a app) runList(cfg selection) error {
 		return nil
 	}
 
-	// formatList ends in a newline; the error printer in dispatch adds one of
+	// formatList ends in a newline; the error printer in Execute adds one of
 	// its own, so it is trimmed off here to keep stderr byte-identical.
 	out := formatList(albums, a.stdoutColor(cfg.color), false)
 	if len(albums) == 0 {

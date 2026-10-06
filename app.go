@@ -13,7 +13,7 @@ import (
 
 // app carries what every command needs but no command's flags describe:
 // where the data lives, and where its output goes. Constructed once in
-// dispatch and passed to each command, replacing the package-level
+// run and passed to each command, replacing the package-level
 // activeConfig that used to back the path helpers.
 //
 // stdout and stderr are injected rather than hard-coded so a command can be
@@ -44,7 +44,7 @@ func (a app) metaPath() string       { return filepath.Join(a.loc.Dir, "meta.jso
 
 // The guidance these carry used to be printed by loadCollectionOrExit and
 // loadFavoritesOrExit immediately before os.Exit(1). It is now attached to
-// the error so dispatch can print it at the one remaining exit point. The
+// the error so Execute can print it on the way to the one exit point. The
 // wording is asserted by tests and must not drift.
 var (
 	errNoCollectionGuidance    = errors.New("No collection found. Run `disc-fortune sync` to fetch your Discogs collection.")
@@ -114,7 +114,7 @@ func (a app) selectAlbums(cfg selection) ([]disc.Album, error) {
 // The candidate list stays on stdout, where it has always been: it is the
 // answer to the query, and only the trailing advice belongs on stderr. So the
 // list is printed here and just the advice is carried by the error, which
-// dispatch prints to stderr before exiting 1.
+// Execute prints to stderr before run returns 1.
 func (a app) reportAmbiguous(matches []disc.Album, color term.Mode) error {
 	fmt.Fprint(a.stdout, formatList(matches, a.stdoutColor(color), true))
 	return errors.New("Be more specific, add filters, or use --release-id.")

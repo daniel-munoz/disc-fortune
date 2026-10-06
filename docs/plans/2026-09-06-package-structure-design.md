@@ -218,6 +218,10 @@ of `cli.go`'s unexported flag-registration functions; `sync.go` depends on both
 `cli.go` (`syncConfig`) and `main.go` (`fatal`). Untangling that is a separate
 job with its own risks, and Part 1 makes it easier rather than harder.
 
+**Update (2026-10-05):** done in #54. See
+`2026-10-05-cli-untangle-design.md`. `cli.go` and the root `completion.go`
+no longer exist; the framework is `internal/cli`.
+
 ---
 
 ## Part 3 — Sequencing

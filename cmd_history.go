@@ -34,12 +34,6 @@ type historyConfig struct {
 	json  bool
 }
 
-// addHistoryFlags registers history's flags. See addSelectionFlags for why
-// registration is factored out of the parse function.
-func addHistoryFlags(fs *flag.FlagSet) *bool {
-	return fs.Bool("json", false, "Emit machine-readable JSON instead of text")
-}
-
 type historyCmd struct {
 	asJSON *bool
 	g      *cli.Globals
@@ -47,7 +41,8 @@ type historyCmd struct {
 }
 
 func (c *historyCmd) Flags(fs *flag.FlagSet, g *cli.Globals) {
-	c.asJSON, c.g = addHistoryFlags(fs), g
+	c.asJSON = fs.Bool("json", false, "Emit machine-readable JSON instead of text")
+	c.g = g
 }
 
 func (c *historyCmd) Parse(rest []string) error {

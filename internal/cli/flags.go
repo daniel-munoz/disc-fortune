@@ -27,7 +27,8 @@ func (g *Globals) Mode() (term.Mode, error) {
 
 // NewFlagSet builds a FlagSet that never prints or exits on its own, so the
 // caller controls the message and the exit code. Every command's flags start
-// here, which is what makes the global flags universal.
+// here, which is what makes the global flags universal. It is exported for
+// main's tests, which build ad-hoc flag sets to test shared registration.
 func NewFlagSet(name string) (*flag.FlagSet, *Globals) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -41,7 +42,8 @@ func NewFlagSet(name string) (*flag.FlagSet, *Globals) {
 // ParseInterspersed parses args allowing flags to appear before, after, or
 // around positional arguments. Go's flag package stops at the first non-flag
 // argument, which would silently drop trailing flags such as the --year in
-// `favorite "miles" --year 1959`.
+// `favorite "miles" --year 1959`. Parse uses it; it is exported for the same
+// tests NewFlagSet is.
 func ParseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	var positional []string
 	for {
@@ -60,7 +62,8 @@ func ParseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 // GlobalFlagHelp documents the flags NewFlagSet registers on every command.
 // It is appended to each usage block programmatically, for the same reason
 // the flags themselves are registered centrally: a command must not be able
-// to ship without them.
+// to ship without them. NewProgram appends it; it is exported so main's
+// tests can check a usage block ends with it.
 const GlobalFlagHelp = `
 
 Global flags (accepted by every command):

@@ -33,14 +33,6 @@ type syncConfig struct {
 	folders []string
 }
 
-// addSyncFlags registers sync's flags. See addSelectionFlags for why
-// registration is factored out of the parse function.
-func addSyncFlags(fs *flag.FlagSet) *arrayFlags {
-	folders := new(arrayFlags)
-	fs.Var(folders, "folder", "Sync only specific folder(s) by name (repeatable)")
-	return folders
-}
-
 type syncCmd struct {
 	folders *arrayFlags
 	g       *cli.Globals
@@ -48,7 +40,9 @@ type syncCmd struct {
 }
 
 func (c *syncCmd) Flags(fs *flag.FlagSet, g *cli.Globals) {
-	c.folders, c.g = addSyncFlags(fs), g
+	c.folders = new(arrayFlags)
+	fs.Var(c.folders, "folder", "Sync only specific folder(s) by name (repeatable)")
+	c.g = g
 }
 
 func (c *syncCmd) Parse(rest []string) error {
