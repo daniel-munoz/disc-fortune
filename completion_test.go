@@ -6,21 +6,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/pick"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 // The guard that makes "completion is generated, not hardcoded" true rather
-// than aspirational. Enumeration and parsing share one FlagSet builder, so
-// they cannot diverge by construction -- but construction is not proof that
-// the enumeration reaches the real parser. This drives every completed flag
-// through the actual parse function and fails if any is rejected as unknown.
+// than aspirational. Enumeration calls each command's own Flags, the same
+// call parsing makes, so they cannot diverge by construction -- but
+// construction is not proof that the enumeration reaches the real parser.
+// This drives every completed flag through the actual parse function and
+// fails if any is rejected as unknown.
 func TestCompletionOffersOnlyFlagsTheCommandAccepts(t *testing.T) {
 	for _, c := range program.Commands {
-		for _, f := range commandFlags(c.Name) {
-			args := []string{"--" + f.name}
-			if !f.isBool {
-				args = append(args, sampleValue(f.name))
+		for _, f := range program.Flags(c.Name) {
+			args := []string{"--" + f.Name}
+			if !f.IsBool {
+				args = append(args, sampleValue(f.Name))
 			}
 
 			var err error
@@ -43,7 +45,7 @@ func TestCompletionOffersOnlyFlagsTheCommandAccepts(t *testing.T) {
 				err = parseNoArgs(c.Name, args)
 			}
 			if err != nil && strings.Contains(err.Error(), "not defined") {
-				t.Errorf("%s completes --%s but the command rejects it: %v", c.Name, f.name, err)
+				t.Errorf("%s completes --%s but the command rejects it: %v", c.Name, f.Name, err)
 			}
 		}
 	}
@@ -69,10 +71,10 @@ func sampleValue(name string) string {
 }
 
 func TestCompletionKnowsEveryCommand(t *testing.T) {
-	for _, shell := range completionShells {
-		script, err := completionScript(shell)
+	for _, shell := range cli.CompletionShells {
+		script, err := program.CompletionScript(shell)
 		if err != nil {
-			t.Fatalf("completionScript(%q): %v", shell, err)
+			t.Fatalf("program.CompletionScript(%q): %v", shell, err)
 		}
 		for _, c := range program.Commands {
 			if !strings.Contains(script, c.Name) {
@@ -85,36 +87,36 @@ func TestCompletionKnowsEveryCommand(t *testing.T) {
 // pick draws, list does not. The scripts must reflect that, or completion
 // would suggest a flag the command rejects.
 func TestCompletionScopesFlagsPerCommand(t *testing.T) {
-	if !hasFlag(commandFlags("pick"), "draw") {
+	if !hasFlag(program.Flags("pick"), "draw") {
 		t.Error("pick should complete --draw")
 	}
-	if hasFlag(commandFlags("list"), "draw") {
+	if hasFlag(program.Flags("list"), "draw") {
 		t.Error("list should not complete --draw: it draws nothing")
 	}
 	for _, name := range []string{"pick", "list", "history", "stats"} {
-		if !hasFlag(commandFlags(name), "json") {
+		if !hasFlag(program.Flags(name), "json") {
 			t.Errorf("%s should complete --json", name)
 		}
 	}
 	for _, name := range []string{"sync", "folders", "migrate", "open"} {
-		if hasFlag(commandFlags(name), "json") {
+		if hasFlag(program.Flags(name), "json") {
 			t.Errorf("%s should not complete --json: it does not accept it", name)
 		}
 	}
-	if !hasFlag(commandFlags("sync"), "folder") {
+	if !hasFlag(program.Flags("sync"), "folder") {
 		t.Error("sync should complete --folder")
 	}
 	// --color is global, so every command gets it.
 	for _, c := range program.Commands {
-		if !hasFlag(commandFlags(c.Name), "color") {
+		if !hasFlag(program.Flags(c.Name), "color") {
 			t.Errorf("%s should complete the global --color", c.Name)
 		}
 	}
 }
 
-func hasFlag(flags []completionFlag, name string) bool {
+func hasFlag(flags []cli.FlagInfo, name string) bool {
 	for _, f := range flags {
-		if f.name == name {
+		if f.Name == name {
 			return true
 		}
 	}
@@ -124,12 +126,12 @@ func hasFlag(flags []completionFlag, name string) bool {
 // The enum values are compiled in, so completing them costs nothing. This
 // pins them to what the parsers actually accept rather than to a comment.
 func TestCompletionEnumValuesAreAccepted(t *testing.T) {
-	for _, v := range flagValues["draw"] {
+	for _, v := range program.FlagValues["draw"] {
 		if _, err := pick.ParseMode(v); err != nil {
 			t.Errorf("completion offers --draw %q but pick.ParseMode rejects it: %v", v, err)
 		}
 	}
-	for _, v := range flagValues["color"] {
+	for _, v := range program.FlagValues["color"] {
 		if _, err := term.ParseMode(v); err != nil {
 			t.Errorf("completion offers --color %q but term.ParseMode rejects it: %v", v, err)
 		}
@@ -143,12 +145,12 @@ func TestCompletionEnumValuesAreAccepted(t *testing.T) {
 }
 
 func TestCompletionEnumValuesReachTheScripts(t *testing.T) {
-	for _, shell := range completionShells {
-		script, err := completionScript(shell)
+	for _, shell := range cli.CompletionShells {
+		script, err := program.CompletionScript(shell)
 		if err != nil {
-			t.Fatalf("completionScript(%q): %v", shell, err)
+			t.Fatalf("program.CompletionScript(%q): %v", shell, err)
 		}
-		for _, v := range append(flagValues["draw"], flagValues["color"]...) {
+		for _, v := range append(program.FlagValues["draw"], program.FlagValues["color"]...) {
 			if !strings.Contains(script, v) {
 				t.Errorf("%s script is missing the enum value %q", shell, v)
 			}
@@ -158,25 +160,9 @@ func TestCompletionEnumValuesReachTheScripts(t *testing.T) {
 
 func TestCompletionRejectsUnknownShell(t *testing.T) {
 	for _, shell := range []string{"", "tcsh", "powershell", "BASH"} {
-		if _, err := completionScript(shell); err == nil {
-			t.Errorf("completionScript(%q) succeeded, want an error", shell)
+		if _, err := program.CompletionScript(shell); err == nil {
+			t.Errorf("program.CompletionScript(%q) succeeded, want an error", shell)
 		}
-	}
-}
-
-func TestParseCompletionRequiresAShell(t *testing.T) {
-	if _, err := parseCompletion(nil); err == nil {
-		t.Error("completion with no argument should fail")
-	}
-	if _, err := parseCompletion([]string{"bash", "zsh"}); err == nil {
-		t.Error("completion with two arguments should fail")
-	}
-	shell, err := parseCompletion([]string{"fish"})
-	if err != nil {
-		t.Fatalf("parseCompletion([fish]): %v", err)
-	}
-	if shell != "fish" {
-		t.Errorf("shell = %q, want fish", shell)
 	}
 }
 
@@ -190,9 +176,9 @@ func TestGeneratedScriptsAreSyntacticallyValid(t *testing.T) {
 		"fish": {"fish", "--no-execute"},
 	}
 
-	if len(checks) != len(completionShells) {
+	if len(checks) != len(cli.CompletionShells) {
 		t.Fatalf("%d shells are generated but %d are syntax-checked; add the new one",
-			len(completionShells), len(checks))
+			len(cli.CompletionShells), len(checks))
 	}
 
 	for shell, check := range checks {
@@ -201,9 +187,9 @@ func TestGeneratedScriptsAreSyntacticallyValid(t *testing.T) {
 			if err != nil {
 				t.Skipf("%s not installed", check[0])
 			}
-			script, err := completionScript(shell)
+			script, err := program.CompletionScript(shell)
 			if err != nil {
-				t.Fatalf("completionScript(%q): %v", shell, err)
+				t.Fatalf("program.CompletionScript(%q): %v", shell, err)
 			}
 
 			path := t.TempDir() + "/completion." + shell
@@ -337,49 +323,6 @@ func buildForCompletion(t *testing.T) string {
 	return bin
 }
 
-// commandFlagSet's switch is a second place that has to learn about a new
-// command. Nothing else forces that: a command registering flags without a
-// case there would offer only the global flags, and every other test would
-// still pass. This map is the forcing function -- adding a command fails it
-// until someone decides what completion should offer for it.
-func TestEveryCommandHasACompletionDecision(t *testing.T) {
-	// true when the command registers flags of its own beyond the globals.
-	hasOwnFlags := map[string]bool{
-		"pick":       true,
-		"reroll":     true,
-		"list":       true,
-		"history":    true,
-		"stats":      true,
-		"favorite":   true,
-		"unfavorite": true,
-		"open":       true,
-		"sync":       true,
-		"folders":    false,
-		"migrate":    false,
-		"version":    false,
-		"help":       false,
-		"completion": false,
-	}
-	if len(hasOwnFlags) != len(program.Commands) {
-		t.Fatalf("this test covers %d commands but there are %d; decide what "+
-			"completion offers for the new one, then add it here",
-			len(hasOwnFlags), len(program.Commands))
-	}
-
-	// A name no command has, so commandFlagSet's switch adds nothing.
-	globals := len(commandFlags("\x00none"))
-	for name, own := range hasOwnFlags {
-		got := len(commandFlags(name))
-		switch {
-		case own && got <= globals:
-			t.Errorf("%s registers flags of its own, but completion offers only "+
-				"the %d global ones -- missing from commandFlagSet's switch?", name, globals)
-		case !own && got != globals:
-			t.Errorf("%s should offer only the %d global flags, got %d", name, globals, got)
-		}
-	}
-}
-
 // bash and zsh fall through to the subcommand list when a flag's value cannot
 // be completed, so `disc-fortune --genre <TAB>` offered command names as the
 // value of --genre. fish gets this right for free via -x; the other two need
@@ -408,14 +351,36 @@ func TestCompletionOffersNothingForAFreeFormValue(t *testing.T) {
 	}
 }
 
-// completion colorizes nothing, but it accepts --color like every command, so
-// it must reject a bad value like every command. TestEveryCommandAcceptsColorFlag
-// covers the accepting half; this covers the rejecting half.
-func TestCompletionRejectsInvalidColor(t *testing.T) {
-	if _, err := parseCompletion([]string{"--color", "sometimes", "bash"}); err == nil {
-		t.Error("completion accepted --color=sometimes, want an error")
+// Review Focus 5 (#54): the built-ins build their usage from the program
+// name. For disc-fortune it must equal what was written out by hand before.
+func TestBuiltinUsageMatchesTheOldText(t *testing.T) {
+	if got, want := program.Lookup("help").Usage,
+		"Usage: disc-fortune help [COMMAND]\n\nShows general help, or detailed help for one command."; got != want {
+		t.Errorf("help usage = %q, want %q", got, want)
 	}
-	if _, err := parseCompletion([]string{"--color", "never", "bash"}); err != nil {
-		t.Errorf("completion rejected a valid --color: %v", err)
+	if got := program.Lookup("completion").Usage; got != oldCompletionUsage+cli.GlobalFlagHelp {
+		t.Errorf("completion usage drifted:\n%q", got)
 	}
 }
+
+// oldCompletionUsage is completion's usage exactly as main defined it before
+// completion became a cli built-in (#54).
+const oldCompletionUsage = `Usage: disc-fortune completion SHELL
+
+Prints a completion script for bash, zsh or fish on stdout. The script is
+generated from the commands and flags this binary actually accepts, so it
+cannot drift from them.
+
+Load it for the current shell:
+
+  bash    eval "$(disc-fortune completion bash)"
+  zsh     eval "$(disc-fortune completion zsh)"
+  fish    disc-fortune completion fish | source
+
+To make it permanent, add that line to your shell's startup file, or write the
+script into the directory your shell reads completions from.
+
+Command and flag names are completed, as are the fixed values of --draw and
+--color. Values that would have to be read from your collection, such as those
+of --genre and --label, are not: a completion should never depend on a file
+that a sync may be rewriting.`

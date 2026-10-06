@@ -58,11 +58,3 @@ func parseSync(args []string) (syncConfig, error) {
 func parseNoArgs(name string, args []string) error {
 	return cli.Parse(&noArgsCmd{name: name}, name, args)
 }
-
-func parseCompletion(args []string) (string, error) {
-	c := &completionCmd{}
-	if err := cli.Parse(c, "completion", args); err != nil {
-		return "", err
-	}
-	return c.shell, nil
-}

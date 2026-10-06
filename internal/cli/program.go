@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -38,6 +39,11 @@ type Program[E any] struct {
 	// Commands is in help-listing order. The built-ins are listed wherever
 	// Help() and Completion() are placed.
 	Commands []Spec[E]
+	// FlagValues holds the flags whose accepted values are compiled into the
+	// binary, for completion to offer. Completing them costs nothing -- no
+	// file is read and no process is forked -- which is why they are here and
+	// collection-derived values such as --genre are not.
+	FlagValues map[string][]string
 }
 
 // NewProgram finishes a Program for use: built-ins get their usage from the
@@ -144,4 +150,38 @@ func (p *Program[E]) Execute(s *Spec[E], args []string, env E, stdout, stderr io
 		return 1
 	}
 	return 0
+}
+
+// FlagInfo is one flag as completion needs to see it.
+type FlagInfo struct {
+	Name   string
+	IsBool bool     // a bool flag takes no value, so nothing follows it
+	Values []string // compiled-in values, if any
+}
+
+// Flags returns the flags the named command accepts, sorted by name so
+// generated scripts are byte-stable. It calls the command's own Flags on a
+// scratch FlagSet -- the call real parsing makes -- so a flag cannot be
+// accepted without also being completable. An unknown name yields the
+// global flags alone.
+func (p *Program[E]) Flags(name string) []FlagInfo {
+	fs, g := NewFlagSet(name)
+	if s := p.Lookup(name); s != nil {
+		s.New().Flags(fs, g)
+	}
+	var out []FlagInfo
+	fs.VisitAll(func(f *flag.Flag) {
+		out = append(out, FlagInfo{Name: f.Name, IsBool: isBoolFlag(f), Values: p.FlagValues[f.Name]})
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// isBoolFlag reports whether a flag is satisfied by its presence alone. The
+// flag package marks these with an unexported interface that its own parser
+// uses; asking the same question here keeps completion from suggesting a
+// value where none is taken.
+func isBoolFlag(f *flag.Flag) bool {
+	bf, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && bf.IsBoolFlag()
 }

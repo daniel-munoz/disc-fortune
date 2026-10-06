@@ -34,9 +34,16 @@ var program = cli.NewProgram(cli.Program[app]{
 		unfavoriteSpec,
 		openSpec,
 		migrateSpec,
-		completionSpec,
+		cli.Completion[app](),
 		versionSpec,
 		cli.Help[app](),
+	},
+	// FlagValues are the flags whose accepted values are compiled in, so
+	// completion can offer them. TestCompletionEnumValuesAreAccepted pins
+	// each value to what the parser actually takes.
+	FlagValues: map[string][]string{
+		"draw":  {"fresh", "any", "stale"},
+		"color": {"auto", "always", "never"},
 	},
 })
 
