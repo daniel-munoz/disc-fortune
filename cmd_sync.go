@@ -3,8 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/discogs"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
 var syncSpec = cli.Spec[app]{
@@ -60,3 +65,65 @@ func (c *syncCmd) Parse(rest []string) error {
 }
 
 func (c *syncCmd) Run(a app) error { return a.runSync(c.cfg) }
+
+// runSync fetches the collection from Discogs and caches it locally.
+func (a app) runSync(cfg syncConfig) error {
+	client, err := discogs.New(discogsUserAgent())
+	if err != nil {
+		return fmt.Errorf("Error: %v", err)
+	}
+	client.Progress = syncProgress(a.stderr, term.IsTTY(os.Stderr))
+
+	username, err := client.Username()
+	if err != nil {
+		return fmt.Errorf("Error: %v", err)
+	}
+
+	folderIDs, err := resolveFolderIDs(client, username, cfg.folders)
+	if err != nil {
+		return fmt.Errorf("Error: %v", err)
+	}
+
+	albums, err := collectAlbums(client, username, folderIDs)
+	if err != nil {
+		return fmt.Errorf("Error: %v", err)
+	}
+
+	// Read before the write below overwrites it: comparing the two is what
+	// tells us whether this is the first sync after the identity change.
+	// Failing to read it is not an error -- it just means no notice.
+	previous, _ := disc.LoadCollectionFrom(a.collectionPath())
+
+	if err := disc.SaveCollectionTo(a.collectionPath(), albums); err != nil {
+		return fmt.Errorf("Error saving collection: %v", err)
+	}
+
+	// Recorded after the collection lands, so a stale timestamp never claims
+	// a sync that did not actually persist.
+	if err := disc.RecordSync(a.metaPath(), time.Now()); err != nil {
+		return fmt.Errorf("Error saving sync metadata: %v", err)
+	}
+
+	// Also after the collection lands, so IDs are never stamped from a
+	// collection that then failed to save. A failure here does not fail the
+	// sync: the sync itself succeeded, the pass is idempotent, and the next
+	// sync retries it. The report is kept and printed below either way --
+	// a partial pass may have already rewritten favorites, and the user has
+	// to be told what changed, not just that something went wrong.
+	backfillReport, err := disc.RunBackfill(a.favoritesPath(), a.historyPath(), albums)
+	if err != nil {
+		fmt.Fprintf(a.stderr, "Warning: could not fill in release IDs: %v\n", err)
+	}
+
+	withMetadata := 0
+	for _, album := range albums {
+		if album.Year != 0 || album.Label != "" || len(album.Genres) > 0 {
+			withMetadata++
+		}
+	}
+
+	fmt.Fprintf(a.stdout, "Synced %d albums (%d with full metadata)\n", len(albums), withMetadata)
+	fmt.Fprint(a.stdout, unmergeNotice(previous, albums))
+	fmt.Fprint(a.stdout, backfillReport)
+	return nil
+}

@@ -31,3 +31,5 @@ Flags:
 type rerollCmd struct{ selectionCmd }
 
 func (c *rerollCmd) Run(a app) error { return a.runReroll(c.cfg) }
+
+func (a app) runReroll(cfg selection) error { return a.drawAndRecord(cfg, recordReplace) }

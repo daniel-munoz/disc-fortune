@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/stats"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -93,3 +95,55 @@ func (c *statsCmd) Parse(rest []string) error {
 }
 
 func (c *statsCmd) Run(a app) error { return a.runStats(c.cfg) }
+
+func (a app) runStats(cfg statsConfig) error {
+	var (
+		source []disc.Album
+		err    error
+	)
+	if cfg.favoritesOnly {
+		source, err = a.favorites()
+	} else {
+		source, err = a.collection()
+	}
+	if err != nil {
+		return err
+	}
+	pool := cfg.filter.Apply(source)
+	if len(pool) == 0 {
+		// Same as list: an empty match has always been a failure, on stderr
+		// with exit 1, and --json changes the format rather than that.
+		return errors.New("No albums match the specified filters")
+	}
+
+	// Metadata is advisory and never sinks the run. History is the
+	// exception: it feeds a headline figure, so an unreadable history fails
+	// loudly.
+	entries, err := disc.LoadHistory(a.historyPath())
+	if err != nil {
+		return fmt.Errorf("Error loading history: %v", err)
+	}
+
+	// Favorites are counted, not required. Someone with none gets a zero,
+	// not an error.
+	favorites, err := disc.LoadFavorites(a.favoritesPath())
+	if err != nil {
+		return fmt.Errorf("Error loading favorites: %v", err)
+	}
+
+	m, err := disc.LoadMeta(a.metaPath())
+	if err != nil {
+		m = disc.Meta{}
+	}
+
+	s := stats.Compute(pool, favorites, entries, len(source), m, cfg.favoritesOnly)
+
+	if cfg.json {
+		if err := writeJSON(a.stdout, newStatsPayload(s)); err != nil {
+			return fmt.Errorf("Error writing JSON: %v", err)
+		}
+		return nil
+	}
+	fmt.Fprint(a.stdout, stats.Format(s, a.stdoutColor(cfg.color)))
+	return nil
+}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/daniel-munoz/disc-fortune/v2/internal/cli"
+	"github.com/daniel-munoz/disc-fortune/v2/internal/disc"
 	"github.com/daniel-munoz/disc-fortune/v2/internal/term"
 )
 
@@ -73,3 +74,25 @@ func (c *historyCmd) Parse(rest []string) error {
 }
 
 func (c *historyCmd) Run(a app) error { return a.runHistory(c.cfg) }
+
+func (a app) runHistory(cfg historyConfig) error {
+	entries, err := disc.LoadHistory(a.historyPath())
+	if err != nil {
+		return fmt.Errorf("Error loading history: %v", err)
+	}
+
+	limit := cfg.limit
+	if limit == 0 {
+		limit = len(entries) // 0 means show all
+	}
+
+	if cfg.json {
+		if err := writeJSON(a.stdout, newHistoryPayload(entries, limit)); err != nil {
+			return fmt.Errorf("Error writing JSON: %v", err)
+		}
+		return nil
+	}
+
+	fmt.Fprint(a.stdout, disc.FormatHistory(entries, limit, a.stdoutColor(cfg.color)))
+	return nil
+}
