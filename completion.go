@@ -84,26 +84,59 @@ func isBoolFlag(f *flag.Flag) bool {
 	return ok && bf.IsBoolFlag()
 }
 
-// parseCompletion validates completion's single argument, the shell name.
-func parseCompletion(args []string) (string, error) {
-	fs, gf := cli.NewFlagSet("completion")
-	rest, err := cli.ParseInterspersed(fs, args)
-	if err != nil {
-		return "", fmt.Errorf("completion: %w", err)
-	}
+// completionSpec stays NeedsConfig false: generating a script reads no data
+// files, so completion must keep working on a machine with no usable home
+// directory.
+var completionSpec = cli.Spec[app]{
+	Name:    "completion",
+	Summary: "Print a shell completion script",
+	Usage: `Usage: disc-fortune completion SHELL
+
+Prints a completion script for bash, zsh or fish on stdout. The script is
+generated from the commands and flags this binary actually accepts, so it
+cannot drift from them.
+
+Load it for the current shell:
+
+  bash    eval "$(disc-fortune completion bash)"
+  zsh     eval "$(disc-fortune completion zsh)"
+  fish    disc-fortune completion fish | source
+
+To make it permanent, add that line to your shell's startup file, or write the
+script into the directory your shell reads completions from.
+
+Command and flag names are completed, as are the fixed values of --draw and
+--color. Values that would have to be read from your collection, such as those
+of --genre and --label, are not: a completion should never depend on a file
+that a sync may be rewriting.`,
+	New: func() cli.Command[app] { return &completionCmd{} },
+}
+
+type completionCmd struct {
+	g     *cli.Globals
+	shell string
+}
+
+func (c *completionCmd) Flags(_ *flag.FlagSet, g *cli.Globals) { c.g = g }
+
+// Parse validates completion's single argument, the shell name.
+func (c *completionCmd) Parse(rest []string) error {
 	if len(rest) == 0 {
-		return "", fmt.Errorf("completion: requires a shell (%s)", strings.Join(completionShells, ", "))
+		return fmt.Errorf("completion: requires a shell (%s)", strings.Join(completionShells, ", "))
 	}
 	if len(rest) > 1 {
-		return "", fmt.Errorf("completion: too many arguments")
+		return fmt.Errorf("completion: too many arguments")
 	}
 	// completion colorizes nothing, but it still accepts --color, so it must
 	// still reject a bad value for it -- as every other command does.
-	if _, err := gf.Mode(); err != nil {
-		return "", fmt.Errorf("completion: %v", err)
+	if _, err := c.g.Mode(); err != nil {
+		return fmt.Errorf("completion: %v", err)
 	}
-	return rest[0], nil
+	c.shell = rest[0]
+	return nil
 }
+
+func (c *completionCmd) Run(a app) error { return runCompletion(a.stdout, c.shell) }
 
 // completionScript renders the completion script for one shell.
 func completionScript(shell string) (string, error) {

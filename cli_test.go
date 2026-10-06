@@ -1280,3 +1280,13 @@ func TestParseFavoriteUnchangedByExtraction(t *testing.T) {
 		t.Errorf("parseFavorite = %+v, %v", cfg, err)
 	}
 }
+
+// Review Focus 2 (#54): when a command gets two bad inputs, the one reported
+// is part of its observable behaviour. Today the positional check runs
+// before --color's; moving parsing into command types must keep that.
+func TestParseSelectionReportsPositionalBeforeColor(t *testing.T) {
+	_, err := parseSelection("list", []string{"extra", "--color", "sometimes"})
+	if err == nil || err.Error() != `list: unexpected argument "extra"` {
+		t.Errorf("err = %v, want the positional error first", err)
+	}
+}
