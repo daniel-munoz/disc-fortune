@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -265,8 +262,8 @@ func TestResolveEmptyArgsIsPick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cmd.name != "pick" {
-		t.Errorf("command = %q, want pick", cmd.name)
+	if cmd.Name != "pick" {
+		t.Errorf("command = %q, want pick", cmd.Name)
 	}
 	if len(rest) != 0 {
 		t.Errorf("rest = %v, want empty", rest)
@@ -278,8 +275,8 @@ func TestResolveLeadingFlagIsPick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cmd.name != "pick" {
-		t.Errorf("command = %q, want pick", cmd.name)
+	if cmd.Name != "pick" {
+		t.Errorf("command = %q, want pick", cmd.Name)
 	}
 	if len(rest) != 2 || rest[0] != "--year" {
 		t.Errorf("rest = %v, want [--year 1975]", rest)
@@ -291,8 +288,8 @@ func TestResolveNamedCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if cmd.name != "list" {
-		t.Errorf("command = %q, want list", cmd.name)
+	if cmd.Name != "list" {
+		t.Errorf("command = %q, want list", cmd.Name)
 	}
 	if len(rest) != 1 || rest[0] != "--favorites" {
 		t.Errorf("rest = %v, want [--favorites]", rest)
@@ -305,8 +302,8 @@ func TestResolveHelpFlags(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve(%q): %v", arg, err)
 		}
-		if cmd.name != "help" {
-			t.Errorf("resolve(%q) = %q, want help", arg, cmd.name)
+		if cmd.Name != "help" {
+			t.Errorf("resolve(%q) = %q, want help", arg, cmd.Name)
 		}
 	}
 }
@@ -363,8 +360,8 @@ func TestResolveFilterFlagsStillReachPick(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve(%v): unexpected error: %v", args, err)
 		}
-		if cmd.name != "pick" {
-			t.Errorf("resolve(%v) = %q, want pick", args, cmd.name)
+		if cmd.Name != "pick" {
+			t.Errorf("resolve(%v) = %q, want pick", args, cmd.Name)
 		}
 	}
 }
@@ -380,39 +377,39 @@ func TestResolveUnknownCommand(t *testing.T) {
 }
 
 func TestEveryCommandIsDocumented(t *testing.T) {
-	if len(commands) == 0 {
+	if len(program.Commands) == 0 {
 		t.Fatal("commands table is empty")
 	}
-	for _, c := range commands {
-		if c.name == "" {
+	for _, c := range program.Commands {
+		if c.Name == "" {
 			t.Error("a command has an empty name")
 		}
-		if c.summary == "" {
-			t.Errorf("command %q has no summary", c.name)
+		if c.Summary == "" {
+			t.Errorf("command %q has no summary", c.Name)
 		}
-		if c.usage == "" {
-			t.Errorf("command %q has no usage text", c.name)
+		if c.Usage == "" {
+			t.Errorf("command %q has no usage text", c.Name)
 		}
-		if c.run == nil {
-			t.Errorf("command %q has no run function", c.name)
+		if c.New == nil {
+			t.Errorf("command %q has no constructor", c.Name)
 		}
 	}
 }
 
 func TestHelpListsEveryCommand(t *testing.T) {
-	out, err := helpText("")
+	out, err := program.HelpText("")
 	if err != nil {
 		t.Fatalf("helpText: %v", err)
 	}
-	for _, c := range commands {
-		if !strings.Contains(out, c.name) {
-			t.Errorf("help output missing command %q", c.name)
+	for _, c := range program.Commands {
+		if !strings.Contains(out, c.Name) {
+			t.Errorf("help output missing command %q", c.Name)
 		}
 	}
 }
 
 func TestHelpForOneCommand(t *testing.T) {
-	out, err := helpText("sync")
+	out, err := program.HelpText("sync")
 	if err != nil {
 		t.Fatalf("helpText: %v", err)
 	}
@@ -422,16 +419,15 @@ func TestHelpForOneCommand(t *testing.T) {
 }
 
 func TestHelpUnknownTopic(t *testing.T) {
-	if _, err := helpText("frobnicate"); err == nil {
+	if _, err := program.HelpText("frobnicate"); err == nil {
 		t.Fatal("expected error for unknown help topic")
 	}
 }
 
 // The flag package treats -h/--help as flag.ErrHelp rather than an ordinary
-// parse failure. These confirm each parser's %w wrapping preserves that so
+// parse failure. These confirm cli.Parse's %w wrapping preserves that so
 // errors.Is(err, flag.ErrHelp) still works through the "<command>: " prefix,
-// which is what lets handleParseErr tell a help request apart from a usage
-// error.
+// which is what lets Execute tell a help request apart from a usage error.
 
 func TestParseSelectionHelpFlagIsErrHelp(t *testing.T) {
 	if _, err := parseSelection("pick", []string{"--help"}); !errors.Is(err, flag.ErrHelp) {
@@ -460,111 +456,6 @@ func TestParseSyncHelpFlagIsErrHelp(t *testing.T) {
 func TestParseNoArgsHelpFlagIsErrHelp(t *testing.T) {
 	if err := parseNoArgs("folders", []string{"--help"}); !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("parseNoArgs(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
-	}
-}
-
-func TestParseHelpHelpFlagIsErrHelp(t *testing.T) {
-	if _, err := parseHelp([]string{"--help"}); !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("parseHelp(--help) error = %v, want errors.Is(_, flag.ErrHelp)", err)
-	}
-	if _, err := parseHelp([]string{"-h"}); !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("parseHelp(-h) error = %v, want errors.Is(_, flag.ErrHelp)", err)
-	}
-}
-
-func TestParseHelpTopic(t *testing.T) {
-	topic, err := parseHelp([]string{"sync"})
-	if err != nil {
-		t.Fatalf("parseHelp(sync): %v", err)
-	}
-	if topic != "sync" {
-		t.Errorf("topic = %q, want sync", topic)
-	}
-}
-
-func TestParseHelpTooManyArguments(t *testing.T) {
-	if _, err := parseHelp([]string{"sync", "list"}); err == nil {
-		t.Fatal("expected error for too many arguments")
-	}
-}
-
-// TestHelpHelpFlagExitsZero reproduces `disc-fortune help --help`, which
-// previously fell through help's hand-rolled arg handling straight to
-// `help: unknown command "--help"` and exit 1. It must instead be treated
-// like -h/--help on any other command: print usage and hand back control
-// without exiting.
-func TestHelpHelpFlagExitsZero(t *testing.T) {
-	for _, arg := range []string{"-h", "--help", "-help"} {
-		topic, err := parseHelp([]string{arg})
-		var handled bool
-		out := captureStdout(t, func() {
-			handled = handleParseErr("help", err)
-		})
-		if !handled {
-			t.Errorf("handleParseErr(help, parseHelp(%q)) = false, want true (handled, exit 0)", arg)
-		}
-		if topic != "" {
-			t.Errorf("parseHelp(%q) topic = %q, want empty", arg, topic)
-		}
-		if !strings.Contains(out, "Usage: disc-fortune help") {
-			t.Errorf("output missing help usage text: %q", out)
-		}
-	}
-}
-
-// captureStdout runs fn with os.Stdout redirected and returns what it wrote.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	orig := os.Stdout
-	os.Stdout = w
-	fn()
-	w.Close()
-	os.Stdout = orig
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("io.Copy: %v", err)
-	}
-	return buf.String()
-}
-
-func TestHandleParseErrPrintsUsageOnHelpAndDoesNotExit(t *testing.T) {
-	var handled bool
-	out := captureStdout(t, func() {
-		handled = handleParseErr("sync", flag.ErrHelp)
-	})
-	if !handled {
-		t.Error("handleParseErr(flag.ErrHelp) = false, want true")
-	}
-	if !strings.Contains(out, "--folder") {
-		t.Errorf("output missing sync usage text: %q", out)
-	}
-}
-
-func TestHandleParseErrWrappedHelpFlag(t *testing.T) {
-	// Reproduces disc-fortune sync --help: parseSync wraps flag.ErrHelp with
-	// "sync: %w", and handleParseErr must still recognize it via errors.Is
-	// rather than a direct == comparison, and must not fall through to fatal.
-	_, err := parseSync([]string{"--help"})
-	var handled bool
-	out := captureStdout(t, func() {
-		handled = handleParseErr("sync", err)
-	})
-	if !handled {
-		t.Error("handleParseErr(wrapped flag.ErrHelp) = false, want true")
-	}
-	if !strings.Contains(out, "Usage: disc-fortune sync") {
-		t.Errorf("output missing sync usage text: %q", out)
-	}
-}
-
-func TestHandleParseErrNilIsNotHandled(t *testing.T) {
-	if handleParseErr("pick", nil) {
-		t.Error("handleParseErr(nil) = true, want false")
 	}
 }
 

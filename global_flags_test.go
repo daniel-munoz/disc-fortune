@@ -78,33 +78,33 @@ func TestEveryCommandAcceptsColorFlag(t *testing.T) {
 			t.Errorf("%s rejected --color: %v", name, err)
 		}
 	}
-	if len(parsers) != len(commands)-1 { // help takes a topic, not flags
+	if len(parsers) != len(program.Commands)-1 { // help takes a topic, not flags
 		t.Errorf("this test covers %d commands but there are %d; add the new one",
-			len(parsers), len(commands)-1)
+			len(parsers), len(program.Commands)-1)
 	}
 }
 
 // A flag that works but is undocumented may as well not exist.
 func TestColorFlagIsDocumentedEverywhere(t *testing.T) {
-	for _, c := range commands {
-		if c.name == "help" {
+	for _, c := range program.Commands {
+		if c.Name == "help" {
 			continue
 		}
-		if !strings.Contains(c.usage, "--color") {
-			t.Errorf("%s usage does not mention --color", c.name)
+		if !strings.Contains(c.Usage, "--color") {
+			t.Errorf("%s usage does not mention --color", c.Name)
 		}
 	}
 }
 
 func TestMigrateCommandExists(t *testing.T) {
-	c := lookup("migrate")
+	c := program.Lookup("migrate")
 	if c == nil {
 		t.Fatal("no migrate command registered")
 	}
-	if c.summary == "" {
+	if c.Summary == "" {
 		t.Error("migrate has no summary, so `help` would list it blank")
 	}
-	if !strings.Contains(c.usage, "XDG_CONFIG_HOME") {
+	if !strings.Contains(c.Usage, "XDG_CONFIG_HOME") {
 		t.Error("migrate usage should explain what it migrates and why")
 	}
 }
@@ -168,25 +168,25 @@ func TestFilterFlagsAreDocumented(t *testing.T) {
 	}
 
 	documented := 0
-	for _, c := range commands {
+	for _, c := range program.Commands {
 		// A command takes the filter flags if it documents any of them.
-		if !strings.Contains(c.usage, "--year") {
+		if !strings.Contains(c.Usage, "--year") {
 			continue
 		}
 		documented++
 
-		if !strings.Contains(c.usage, "--exclude-NAME twin") {
-			t.Errorf("%s usage does not explain the --exclude-NAME twins", c.name)
+		if !strings.Contains(c.Usage, "--exclude-NAME twin") {
+			t.Errorf("%s usage does not explain the --exclude-NAME twins", c.Name)
 		}
 		for _, name := range names {
-			if strings.Contains(c.usage, "--"+name) {
+			if strings.Contains(c.Usage, "--"+name) {
 				continue
 			}
 			twin, isTwin := strings.CutPrefix(name, "exclude-")
-			if isTwin && strings.Contains(c.usage, "--"+twin) {
+			if isTwin && strings.Contains(c.Usage, "--"+twin) {
 				continue
 			}
-			t.Errorf("%s usage does not mention --%s", c.name, name)
+			t.Errorf("%s usage does not mention --%s", c.Name, name)
 		}
 	}
 	if documented == 0 {
@@ -230,9 +230,9 @@ func TestNonTableFilterFlagsHaveOneHelpSource(t *testing.T) {
 // line to every help and usage-error screen. Three consecutive newlines
 // anywhere in a usage block is that regression.
 func TestUsageBlocksHaveNoDoubleBlankLines(t *testing.T) {
-	for _, c := range commands {
-		if strings.Contains(c.usage, "\n\n\n") {
-			t.Errorf("%s usage contains a doubled blank line", c.name)
+	for _, c := range program.Commands {
+		if strings.Contains(c.Usage, "\n\n\n") {
+			t.Errorf("%s usage contains a doubled blank line", c.Name)
 		}
 	}
 }
@@ -247,20 +247,20 @@ func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
 		"folders", "migrate", "version", "help", "completion",
 	}
 	for _, name := range accepts {
-		c := lookup(name)
+		c := program.Lookup(name)
 		if c == nil {
 			t.Fatalf("command %q not found", name)
 		}
-		if !strings.Contains(c.usage, "--unheard") {
+		if !strings.Contains(c.Usage, "--unheard") {
 			t.Errorf("%s usage does not mention --unheard", name)
 		}
 	}
 	for _, name := range rejects {
-		c := lookup(name)
+		c := program.Lookup(name)
 		if c == nil {
 			t.Fatalf("command %q not found", name)
 		}
-		if strings.Contains(c.usage, "--unheard") {
+		if strings.Contains(c.Usage, "--unheard") {
 			t.Errorf("%s documents --unheard but does not accept it", name)
 		}
 	}
@@ -271,9 +271,9 @@ func TestUnheardFlagIsDocumentedWhereAccepted(t *testing.T) {
 	// TestEveryCommandHasACompletionDecision in completion_test.go: decide
 	// what the new command does with --unheard, then add it to one of the
 	// two lists above.
-	if got := len(accepts) + len(rejects); got != len(commands) {
+	if got := len(accepts) + len(rejects); got != len(program.Commands) {
 		t.Fatalf("this test covers %d commands but there are %d; decide whether "+
-			"the new command accepts --unheard, then add it here", got, len(commands))
+			"the new command accepts --unheard, then add it here", got, len(program.Commands))
 	}
 }
 
@@ -281,11 +281,11 @@ func TestDrawFlagIsDocumentedWhereAccepted(t *testing.T) {
 	// addSelectionFlags registers --draw for every selection command except
 	// list, so the commands that draw document it and list must not.
 	for _, name := range []string{"pick", "reroll"} {
-		if c := lookup(name); !strings.Contains(c.usage, "--draw") {
+		if c := program.Lookup(name); !strings.Contains(c.Usage, "--draw") {
 			t.Errorf("%s usage does not mention --draw", name)
 		}
 	}
-	if c := lookup("list"); strings.Contains(c.usage, "--draw") {
+	if c := program.Lookup("list"); strings.Contains(c.Usage, "--draw") {
 		t.Error("list documents --draw but does not accept it")
 	}
 }
@@ -299,20 +299,20 @@ func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
 		"help", "open", "completion",
 	}
 	for _, name := range accepts {
-		c := lookup(name)
+		c := program.Lookup(name)
 		if c == nil {
 			t.Fatalf("command %q not found", name)
 		}
-		if !strings.Contains(c.usage, "--json") {
+		if !strings.Contains(c.Usage, "--json") {
 			t.Errorf("%s usage does not mention --json", name)
 		}
 	}
 	for _, name := range rejects {
-		c := lookup(name)
+		c := program.Lookup(name)
 		if c == nil {
 			continue
 		}
-		if strings.Contains(c.usage, "--json") {
+		if strings.Contains(c.Usage, "--json") {
 			t.Errorf("%s documents --json but does not accept it", name)
 		}
 	}
@@ -320,8 +320,8 @@ func TestJSONFlagIsDocumentedWhereAccepted(t *testing.T) {
 	// Same guard as TestUnheardFlagIsDocumentedWhereAccepted, for --json:
 	// the two lists above must together cover every command, or a new one
 	// could slip past with no stance on --json recorded here at all.
-	if got := len(accepts) + len(rejects); got != len(commands) {
+	if got := len(accepts) + len(rejects); got != len(program.Commands) {
 		t.Fatalf("this test covers %d commands but there are %d; decide whether "+
-			"the new command accepts --json, then add it here", got, len(commands))
+			"the new command accepts --json, then add it here", got, len(program.Commands))
 	}
 }

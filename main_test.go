@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -61,18 +62,15 @@ func TestRunListSingular(t *testing.T) {
 
 // --- Exit-code coverage -----------------------------------------------
 //
-// Command functions return errors rather than exiting; dispatch turns a
-// non-nil error, or a resolve/config failure, into os.Exit(1). The
-// exception is handleParseErr, called from inside every command's run
-// closure: it still exits directly for a usage error, or prints usage to
-// stdout and returns for flag.ErrHelp (a success, exit 0). Either way the
-// exit code is only observable by letting a real process actually exit,
-// since calling dispatch in-process would kill the test binary itself. The
-// standard fix is the Go self-exec helper pattern (as used by package
-// os/exec's own tests): re-run this same test binary as a subprocess
-// restricted to TestHelperProcess, which calls dispatch and lets any
-// os.Exit take down that subprocess instead of us, then inspect the
-// subprocess's real exit code.
+// Commands return errors rather than exiting, and run turns a non-nil error,
+// or a resolve/config failure, into exit code 1; main() is the one place that
+// calls os.Exit. Most of these tests still drive a real process rather than
+// calling run in-process, because they assert on what a real process writes
+// to its own stdout and stderr and on its real exit status. The pattern is
+// the Go self-exec helper (as used by package os/exec's own tests): re-run
+// this same test binary as a subprocess restricted to TestHelperProcess,
+// which hands argv to run and exits with its result, then inspect the
+// subprocess's streams and exit code.
 
 // TestHelperProcess is not a real test. It stays inert under a normal `go
 // test` run because DISC_FORTUNE_HELPER is unset; runHelper (below) sets it
@@ -88,14 +86,7 @@ func TestHelperProcess(t *testing.T) {
 			break
 		}
 	}
-	dispatch(args)
-
-	// A success falls off the end of dispatch rather than calling os.Exit, so
-	// without this the test binary's own "PASS" would land on the
-	// subprocess's stdout right after the command's real output -- harmless
-	// for the Contains checks elsewhere, but fatal to a caller that parses
-	// stdout as a single JSON value.
-	os.Exit(0)
+	os.Exit(run(args, os.Stdout, os.Stderr))
 }
 
 // helperEnv builds the subprocess environment: HOME pinned at home, and the
@@ -1266,5 +1257,41 @@ func TestOpenWithNoHistoryExitsOne(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "No history") {
 		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+// Review Focus 1 (#54): --help on every command, built-ins included, is a
+// success that prints usage to stdout and nothing to stderr.
+func TestEveryCommandHelpFlagPrintsUsageToStdout(t *testing.T) {
+	home := t.TempDir()
+	for _, c := range program.Commands {
+		code, stdout, stderr := runHelperSplit(t, home, c.Name, "--help")
+		if code != 0 {
+			t.Errorf("%s --help: exit %d, want 0", c.Name, code)
+		}
+		if stdout != c.Usage+"\n" {
+			t.Errorf("%s --help: stdout = %q, want its usage", c.Name, stdout)
+		}
+		if stderr != "" {
+			t.Errorf("%s --help: stderr = %q, want empty", c.Name, stderr)
+		}
+	}
+}
+
+// Ported from TestHandleParseErrPrintsUsageOnHelpAndDoesNotExit and
+// TestHandleParseErrWrappedHelpFlag. Those differed only in whether
+// flag.ErrHelp arrived bare or wrapped; cli.Parse always wraps it now, so
+// the two collapse into one test with both of their expectations.
+func TestExecutePrintsUsageOnHelpFlag(t *testing.T) {
+	var out, errOut bytes.Buffer
+	a := app{stdout: &out, stderr: &errOut}
+	if code := program.Execute(program.Lookup("sync"), []string{"--help"}, a, &out, &errOut); code != 0 {
+		t.Errorf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "--folder") {
+		t.Errorf("output missing sync usage text: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Usage: disc-fortune sync") {
+		t.Errorf("output missing sync usage text: %q", out.String())
 	}
 }

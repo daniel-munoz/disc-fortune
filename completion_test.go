@@ -16,34 +16,34 @@ import (
 // the enumeration reaches the real parser. This drives every completed flag
 // through the actual parse function and fails if any is rejected as unknown.
 func TestCompletionOffersOnlyFlagsTheCommandAccepts(t *testing.T) {
-	for _, c := range commands {
-		for _, f := range commandFlags(c.name) {
+	for _, c := range program.Commands {
+		for _, f := range commandFlags(c.Name) {
 			args := []string{"--" + f.name}
 			if !f.isBool {
 				args = append(args, sampleValue(f.name))
 			}
 
 			var err error
-			switch c.name {
+			switch c.Name {
 			case "pick", "reroll", "list":
-				_, err = parseSelection(c.name, args)
+				_, err = parseSelection(c.Name, args)
 			case "history":
 				_, err = parseHistory(args)
 			case "stats":
 				_, err = parseStats(args)
 			case "favorite", "unfavorite":
 				// These need a query beside a narrowing filter.
-				_, err = parseFavorite(c.name, append([]string{"miles"}, args...))
+				_, err = parseFavorite(c.Name, append([]string{"miles"}, args...))
 			case "open":
 				// Shares favorite's query grammar, so it needs one too.
 				_, err = parseOpen(append([]string{"miles"}, args...))
 			case "sync":
 				_, err = parseSync(args)
 			default:
-				err = parseNoArgs(c.name, args)
+				err = parseNoArgs(c.Name, args)
 			}
 			if err != nil && strings.Contains(err.Error(), "not defined") {
-				t.Errorf("%s completes --%s but the command rejects it: %v", c.name, f.name, err)
+				t.Errorf("%s completes --%s but the command rejects it: %v", c.Name, f.name, err)
 			}
 		}
 	}
@@ -74,9 +74,9 @@ func TestCompletionKnowsEveryCommand(t *testing.T) {
 		if err != nil {
 			t.Fatalf("completionScript(%q): %v", shell, err)
 		}
-		for _, c := range commands {
-			if !strings.Contains(script, c.name) {
-				t.Errorf("%s script does not mention the %q command", shell, c.name)
+		for _, c := range program.Commands {
+			if !strings.Contains(script, c.Name) {
+				t.Errorf("%s script does not mention the %q command", shell, c.Name)
 			}
 		}
 	}
@@ -105,9 +105,9 @@ func TestCompletionScopesFlagsPerCommand(t *testing.T) {
 		t.Error("sync should complete --folder")
 	}
 	// --color is global, so every command gets it.
-	for _, c := range commands {
-		if !hasFlag(commandFlags(c.name), "color") {
-			t.Errorf("%s should complete the global --color", c.name)
+	for _, c := range program.Commands {
+		if !hasFlag(commandFlags(c.Name), "color") {
+			t.Errorf("%s should complete the global --color", c.Name)
 		}
 	}
 }
@@ -360,10 +360,10 @@ func TestEveryCommandHasACompletionDecision(t *testing.T) {
 		"help":       false,
 		"completion": false,
 	}
-	if len(hasOwnFlags) != len(commands) {
+	if len(hasOwnFlags) != len(program.Commands) {
 		t.Fatalf("this test covers %d commands but there are %d; decide what "+
 			"completion offers for the new one, then add it here",
-			len(hasOwnFlags), len(commands))
+			len(hasOwnFlags), len(program.Commands))
 	}
 
 	// A name no command has, so commandFlagSet's switch adds nothing.

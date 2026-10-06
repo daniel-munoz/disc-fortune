@@ -170,9 +170,9 @@ func flagNames(name string) string {
 }
 
 func commandNames() []string {
-	names := make([]string, len(commands))
-	for i, c := range commands {
-		names[i] = c.name
+	names := make([]string, len(program.Commands))
+	for i, c := range program.Commands {
+		names[i] = c.Name
 	}
 	return names
 }
@@ -216,9 +216,9 @@ _disc_fortune() {
     if [[ "$cur" == -* ]]; then
         case "$cmd" in
 `, strings.Join(freeValueFlags("pick"), "|"))
-	for _, c := range commands {
+	for _, c := range program.Commands {
 		fmt.Fprintf(&sb, "            %s)\n                COMPREPLY=( $(compgen -W %s -- \"$cur\") )\n                ;;\n",
-			c.name, shellQuote(flagNames(c.name)))
+			c.Name, shellQuote(flagNames(c.Name)))
 	}
 	fmt.Fprintf(&sb, `            *)
                 COMPREPLY=( $(compgen -W %s -- "$cur") )
@@ -248,11 +248,11 @@ _disc_fortune() {
     local -a subcommands
     subcommands=(
 `)
-	for _, c := range commands {
+	for _, c := range program.Commands {
 		// _describe takes name:description pairs, so a colon inside a
 		// description would split it in the wrong place.
-		desc := strings.ReplaceAll(c.summary, ":", `\:`)
-		fmt.Fprintf(&sb, "        %s\n", shellQuote(c.name+":"+desc))
+		desc := strings.ReplaceAll(c.Summary, ":", `\:`)
+		fmt.Fprintf(&sb, "        %s\n", shellQuote(c.Name+":"+desc))
 	}
 	sb.WriteString(`    )
 
@@ -280,8 +280,8 @@ _disc_fortune() {
         local -a flags
         case $cmd in
 `, strings.Join(freeValueFlags("pick"), "|"))
-	for _, c := range commands {
-		fmt.Fprintf(&sb, "            %s) flags=(%s) ;;\n", c.name, flagNames(c.name))
+	for _, c := range program.Commands {
+		fmt.Fprintf(&sb, "            %s) flags=(%s) ;;\n", c.Name, flagNames(c.Name))
 	}
 	fmt.Fprintf(&sb, `            *) flags=(%s) ;;
         esac
@@ -347,16 +347,16 @@ func fishCompletion() string {
 	sb.WriteString("# No argument of any command is a path.\ncomplete -c disc-fortune -f\n\n")
 
 	sb.WriteString("# Subcommands, offered only in the first position.\n")
-	for _, c := range commands {
+	for _, c := range program.Commands {
 		fmt.Fprintf(&sb, "complete -c disc-fortune -n __fish_use_subcommand -a %s -d %s\n",
-			shellQuote(c.name), shellQuote(c.summary))
+			shellQuote(c.Name), shellQuote(c.Summary))
 	}
 
 	sb.WriteString("\n# Flags, scoped to the commands that accept them.\n")
-	for _, c := range commands {
-		for _, f := range commandFlags(c.name) {
+	for _, c := range program.Commands {
+		for _, f := range commandFlags(c.Name) {
 			fmt.Fprintf(&sb, "complete -c disc-fortune -n %s -l %s%s\n",
-				shellQuote("__fish_seen_subcommand_from "+c.name), f.name, fishValueSpec(f))
+				shellQuote("__fish_seen_subcommand_from "+c.Name), f.name, fishValueSpec(f))
 		}
 	}
 

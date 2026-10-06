@@ -162,7 +162,7 @@ func TestBinaryRejectsBadColorValue(t *testing.T) {
 
 // help and version touch no data files, so they must keep working even when
 // the config directory cannot be resolved at all. Resolving config eagerly in
-// dispatch must not make them dependent on it.
+// run must not make them dependent on it.
 func TestBinaryHelpAndVersionWorkWithoutAHomeDirectory(t *testing.T) {
 	home := t.TempDir()
 	noHomeEnv := []string{"HOME="}
@@ -210,5 +210,21 @@ func TestBinarySurvivesAnEmptyXDGDirectory(t *testing.T) {
 	code, stdout, stderr = runHelperEnv(t, home, env, "migrate")
 	if code != 0 || strings.Contains(stdout, "Nothing to migrate") {
 		t.Errorf("migrate should still have work to do: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+// Review Focus 3 (#54): config is resolved before arguments are parsed, so
+// with no usable home directory a data command reports that, not the flag
+// it was given. run() must keep that order.
+func TestBinaryConfigFailureBeatsUsageError(t *testing.T) {
+	code, stdout, stderr := runHelperEnv(t, t.TempDir(), []string{"HOME="}, "list", "--bogus-flag")
+	if code != 1 {
+		t.Errorf("exit = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	if !strings.HasPrefix(stderr, "disc-fortune: ") || strings.Contains(stderr, "bogus-flag") {
+		t.Errorf("stderr = %q, want the config error and not the flag error", stderr)
 	}
 }
