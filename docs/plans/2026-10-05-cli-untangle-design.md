@@ -65,6 +65,8 @@ One item listed on #54 is already done: `sync.go` no longer calls `fatal`.
   serves exactly this program. It is generic over the env type only to avoid
   importing `main`. No features are added for hypothetical callers.
 - **No new dependencies.** `go.mod` stays dependency-free.
+- **No version bump.** Nothing user-visible changes, so this ships with the
+  next user-visible release, as the September refactor did with v2.6.0.
 - **No assertion edited to accommodate the refactor.** Call sites may change
   where a function moved package; expected strings and codes do not.
 - **Not converting `runHelper` subprocess tests to in-process tests.** This
@@ -324,6 +326,41 @@ Done when:
   of removing one.
 - **`cli` validates `--color` itself.** Simpler commands, but it changes which
   error is reported first when two inputs are bad.
+
+## Amendments from planning
+
+Found while writing `2026-10-05-cli-untangle.md`. Each one supersedes the
+text above where they differ.
+
+1. **`Parser` is split out of `Command`.** `cli.Parse` takes a
+   `Parser` (`Flags` + `Parse`), and `Command[E]` embeds it and adds `Run`.
+   This lets the shared grammar types (`selectionCmd`, `queryCmd`,
+   `noArgsCmd`) be parsed, and tested, without a `Run`. It also makes
+   `cli.Parse` non-generic.
+2. **`run*` methods stay on `app`** and move into their command's file.
+   `Run` delegates (`return a.runPick(c.cfg)`). `app_test.go` calls these
+   methods directly 14 times. Keeping them means those tests keep testing
+   the work without parsing, and `Run` is just the link between the two.
+3. **The shared-grammar file is `grammar.go`, not `filters.go`.** It also
+   holds `selectionCmd`, `queryCmd` and `noArgsCmd`, which are not filters.
+4. **Seven commits, not five.** Commit 2 is split into "command types,
+   bridged into the old table" and "move each `run*` method beside its
+   command" (a pure move). The framework is built and tested on its own
+   before anything uses it.
+5. **Tests ported rather than kept.** Besides
+   `TestEveryCommandHasACompletionDecision`, these root tests go away
+   because what they test moves into `cli`. Each gets an equivalent
+   `internal/cli` test with the same expectations:
+   `TestParseHelpHelpFlagIsErrHelp`, `TestParseHelpTopic`,
+   `TestParseHelpTooManyArguments`, `TestHelpHelpFlagExitsZero`,
+   `TestParseCompletionRequiresAShell`, `TestCompletionRejectsInvalidColor`,
+   and the six `TestParseInterspersed*`. The two `handleParseErr` help-flag
+   tests become one root `Execute` test against the real program, keeping
+   both tests' expectations. They differed only in whether `flag.ErrHelp`
+   arrived wrapped, and `cli.Parse` now always wraps it.
+   `TestHandleParseErrNilIsNotHandled` is dropped. The path it guarded ("no
+   error means run the command") becomes `Execute`'s ordinary success
+   path, which `TestExecuteRunsTheCommand` covers.
 
 ## Follow-ups (not this work)
 
